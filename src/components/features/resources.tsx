@@ -14,7 +14,18 @@ import {
   Sword
 } from 'lucide-react';
 
-const resourceConfig = {
+interface ResourceConfig {
+  name: string;
+  icon: any;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  clickable: boolean;
+  description: string;
+  requiresTech?: string;
+}
+
+const resourceConfig: Record<string, ResourceConfig> = {
   food: {
     name: '食物',
     icon: Apple,
@@ -156,14 +167,18 @@ const ResourceCard = ({ resourceType, value, rate }: ResourceCardProps) => {
           <span className="text-xs text-gray-500 ml-auto">可点击</span>
         )}
       </div>
-      <div className={`text-2xl font-bold ${config.color}`}>
-        {formatNumber(value)}
+      <div className="flex flex-col min-h-[60px]">
+        <div className={`text-2xl font-bold ${config.color} leading-tight`}>
+          {formatNumber(value)}
+        </div>
+        <div className="text-sm text-gray-600 mt-1 h-5 flex items-center">
+          {rate !== undefined && rate > 0 ? (
+            <span>+{formatNumber(rate)}/秒</span>
+          ) : (
+            <span>&nbsp;</span>
+          )}
+        </div>
       </div>
-      {rate !== undefined && rate > 0 && (
-        <p className="text-sm text-gray-600 mt-1">
-          +{formatNumber(rate)}/秒
-        </p>
-      )}
       <p className="text-xs text-gray-500 mt-1">{config.description}</p>
     </div>
   );

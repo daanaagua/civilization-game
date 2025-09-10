@@ -129,6 +129,7 @@ export interface GameState {
   civilizationName: string;
   currentAge: GameAge;
   gameTime: number; // 游戏时间（秒）
+  isPaused: boolean; // 游戏是否暂停
   
   // 资源
   resources: Resources;

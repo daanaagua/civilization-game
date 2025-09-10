@@ -9,6 +9,7 @@ const initialGameState: GameState = {
   civilizationName: '原始部落',
   currentAge: 'stone',
   gameTime: 0,
+  isPaused: false,
   
   resources: {
     food: 10,
@@ -24,7 +25,7 @@ const initialGameState: GameState = {
     wood: 0,
     stone: 0,
     tools: 0,
-    population: 0,
+    population: 1,
   },
   
   resourceLimits: {
@@ -82,11 +83,12 @@ interface GameStore {
   // 游戏控制
   isRunning: boolean;
   lastUpdateTime: number;
+  isPaused: boolean;
   
   // 游戏控制
-  initializeGame: () => void;
   startGame: () => void;
   pauseGame: () => void;
+  togglePause: () => void;
   resetGame: () => void;
   updateGameTime: (deltaTime: number) => void;
   
@@ -202,63 +204,44 @@ export const useGameStore = create<GameStore>()(persist(
     lastUpdateTime: Date.now(),
     army: {},
     
-    initializeGame: () => {
-      // 清除可能损坏的存储数据
-      if (typeof window !== 'undefined') {
-        try {
-          const stored = localStorage.getItem('civilization-game-storage');
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            // 验证存储数据的完整性
-            if (!parsed.state || !parsed.state.gameState) {
-              localStorage.removeItem('civilization-game-storage');
-              // 只有在清除损坏数据后才重置状态
-              set({ 
-                gameState: { ...initialGameState },
-                uiState: { ...initialUIState },
-                isRunning: false,
-                lastUpdateTime: Date.now()
-              });
-            }
-            // 如果数据完整，不做任何操作，保持现有状态
-            return;
-          } else {
-            // 没有存储数据时才初始化
-            set({ 
-              gameState: { ...initialGameState },
-              uiState: { ...initialUIState },
-              isRunning: false,
-              lastUpdateTime: Date.now()
-            });
-          }
-        } catch (error) {
-          console.warn('清除损坏的存储数据:', error);
-          localStorage.removeItem('civilization-game-storage');
-          // 只有在出错时才重置状态
-          set({ 
-            gameState: { ...initialGameState },
-            uiState: { ...initialUIState },
-            isRunning: false,
-            lastUpdateTime: Date.now()
-          });
-        }
-      } else {
-        // 服务端渲染时的初始化
-        set({ 
-          gameState: { ...initialGameState },
-          uiState: { ...initialUIState },
-          isRunning: false,
-          lastUpdateTime: Date.now()
-        });
-      }
+    get isPaused() {
+      return get().gameState.isPaused;
     },
+    
+
 
     startGame: () => {
-      set({ isRunning: true, lastUpdateTime: Date.now() });
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          isPaused: false
+        },
+        isRunning: true,
+        lastUpdateTime: Date.now()
+      }));
     },
     
     pauseGame: () => {
-      set({ isRunning: false });
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          isPaused: true
+        },
+        isRunning: false
+      }));
+    },
+    
+    togglePause: () => {
+      set((state) => {
+        const newPausedState = !state.gameState.isPaused;
+        return {
+          gameState: {
+            ...state.gameState,
+            isPaused: newPausedState
+          },
+          isRunning: newPausedState ? false : true
+        };
+      });
     },
     
     resetGame: () => {
@@ -2026,11 +2009,7 @@ export const useGameStore = create<GameStore>()(persist(
       // 如果有暂停事件，不允许手动恢复
       if (state.gameState.activeEvents.length > 0) return;
       
-      if (state.isRunning) {
-        get().pauseGame();
-      } else {
-        get().startGame();
-      }
+      get().togglePause();
     },
 
     // 事件处理函数
@@ -2183,26 +2162,23 @@ export const useGameStore = create<GameStore>()(persist(
       if (typeof window !== 'undefined') {
         localStorage.removeItem('civilization-game-storage');
         localStorage.removeItem('civilization-achievements-storage');
-        // 重新初始化游戏
-        get().initializeGame();
-        get().addNotification({
-          type: 'info',
-          title: '存储已清除',
-          message: '游戏数据已重置，请重新开始',
-          duration: 5000,
-        });
+        // 清除存储后，页面刷新时会自动重新初始化为默认状态
+        window.location.reload();
       }
     },
   }),
   {
     name: 'civilization-game-storage',
     version: 1,
-    partialize: (state) => ({ 
-      gameState: state.gameState,
+    partialize: (state) => ({
+      gameState: {
+        ...state.gameState,
+        isPaused: state.gameState.isPaused // 保持原有的暂停状态
+      },
       uiState: state.uiState,
       army: state.army,
-      isRunning: false, // 刷新后不自动开始游戏
-      lastUpdateTime: Date.now()
+      isRunning: state.isRunning, // 保持原有的运行状态
+      lastUpdateTime: state.lastUpdateTime
     }),
     migrate: (persistedState: any, version: number) => {
       // 处理版本迁移

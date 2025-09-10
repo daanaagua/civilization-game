@@ -8,6 +8,7 @@ import { useGameStore } from '@/lib/game-store';
 export const useGameLoop = () => {
   const { 
     isRunning, 
+    isPaused,
     updateGameTime, 
     lastUpdateTime,
     calculatePopulationGrowth,
@@ -23,7 +24,7 @@ export const useGameLoop = () => {
       const currentTime = Date.now();
       const deltaTime = (currentTime - lastTimeRef.current) / 1000; // 转换为秒
       
-      if (isRunning && deltaTime > 0) {
+      if (isRunning && !isPaused && deltaTime > 0) {
         updateGameTime(deltaTime);
         
         // 人口和稳定度管理（每10秒检查一次）
@@ -37,6 +38,8 @@ export const useGameLoop = () => {
         if (Math.floor(currentGameTime / 5000) > Math.floor((currentGameTime - deltaTime) / 5000)) {
           checkGameEvents();
         }
+        
+        // Zustand persist中间件会自动处理状态保存，无需手动保存
       }
       
       lastTimeRef.current = currentTime;
@@ -50,7 +53,7 @@ export const useGameLoop = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isRunning, updateGameTime]);
+  }, [isRunning, isPaused, updateGameTime]);
   
   // 空格键快捷键监听
   useEffect(() => {

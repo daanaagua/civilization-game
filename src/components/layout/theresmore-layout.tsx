@@ -3,11 +3,31 @@
 import React, { useState } from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { formatNumber, formatTime } from '@/lib/utils';
+import { RebirthConfirmation } from '@/components/ui/rebirth-confirmation';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   Users, Clock, Trophy, Zap, Shield, Beaker, Sword, Map,
   Settings, BarChart3, TrendingUp, Star, Gift, AlertTriangle,
   ChevronRight, X, Info
 } from 'lucide-react';
+
+// 稳定度效果计算
+const getStabilityEffect = (stability: number): string => {
+  if (stability >= 80) return '人口增长 +20%，资源产出 +10%';
+  if (stability >= 60) return '人口增长 +10%，资源产出 +5%';
+  if (stability >= 40) return '正常状态';
+  if (stability >= 20) return '人口增长 -10%，资源产出 -5%';
+  return '人口增长 -20%，资源产出 -10%';
+};
+
+// 腐败度效果计算
+const getCorruptionEffect = (corruption: number): string => {
+  if (corruption >= 80) return '资源产出 -30%，建筑成本 +50%';
+  if (corruption >= 60) return '资源产出 -20%，建筑成本 +30%';
+  if (corruption >= 40) return '资源产出 -10%，建筑成本 +15%';
+  if (corruption >= 20) return '资源产出 -5%，建筑成本 +10%';
+  return '无负面影响';
+};
 
 // 资源面板
 const ResourcesPanel = () => {
@@ -66,6 +86,91 @@ const BuildingsPanel = () => {
           <p>建筑系统开发中...</p>
         </div>
       </div>
+      
+      {/* 详细效果弹窗 */}
+      {showDetailedEffects && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-100">详细效果</h2>
+              <button
+                onClick={() => setShowDetailedEffects(false)}
+                className="text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* 稳定度详细信息 */}
+              <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                <h3 className="text-lg font-semibold text-green-400 mb-3 flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  稳定度效果 ({gameState.stability}%)
+                </h3>
+                <p className="text-gray-300 mb-2">{getStabilityEffect(gameState.stability)}</p>
+                <div className="text-sm text-gray-400">
+                  <p>• 高稳定度(80%+): 人口增长和资源产出获得显著加成</p>
+                  <p>• 中等稳定度(40-79%): 轻微加成或正常状态</p>
+                  <p>• 低稳定度(0-39%): 人口增长和资源产出受到负面影响</p>
+                </div>
+              </div>
+              
+              {/* 腐败度详细信息 */}
+              {gameState.technologies['legal_code']?.researched && (
+                <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                  <h3 className="text-lg font-semibold text-red-400 mb-3 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    腐败度效果 ({gameState.corruption}%)
+                  </h3>
+                  <p className="text-gray-300 mb-2">{getCorruptionEffect(gameState.corruption)}</p>
+                  <div className="text-sm text-gray-400">
+                    <p>• 低腐败度(0-19%): 无负面影响</p>
+                    <p>• 轻度腐败(20-39%): 轻微的资源产出和建筑成本影响</p>
+                    <p>• 中度腐败(40-59%): 明显的负面影响</p>
+                    <p>• 高度腐败(60%+): 严重影响经济发展</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* 所有Buff详细信息 */}
+              {buffSummary.sources.length > 0 && (
+                <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                  <h3 className="text-lg font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                    <Zap className="h-5 w-5" />
+                    所有活跃效果
+                  </h3>
+                  <div className="space-y-3">
+                    {buffSummary.sources.map((source, index) => (
+                      <div key={index} className="bg-gray-800 p-3 rounded-lg border border-gray-600">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-gray-200 font-medium">{source.name}</span>
+                          <span className="text-xs text-gray-400 px-2 py-1 bg-gray-700 rounded">
+                            {source.type === 'technology' ? '科技' : 
+                             source.type === 'building' ? '建筑' : 
+                             source.type === 'character' ? '人物' : 
+                             source.type === 'inheritance' ? '继承' : '其他'}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {source.buffs.map((buff, buffIndex) => (
+                            <div key={buffIndex} className="text-sm text-gray-300 bg-purple-900/20 px-2 py-1 rounded border border-purple-500/20">
+                              <span className="font-medium text-purple-300">{buff.name}</span>
+                              {buff.description && (
+                                <span className="text-gray-400 ml-2">- {buff.description}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -122,6 +227,7 @@ const OverviewPanel = () => {
   const [showAchievements, setShowAchievements] = useState(false);
   const [showBuffDetails, setShowBuffDetails] = useState(false);
   const [showEventHistory, setShowEventHistory] = useState(false);
+  const [showDetailedEffects, setShowDetailedEffects] = useState(false);
 
   const buffSummary = getBuffSummary();
 
@@ -149,24 +255,10 @@ const OverviewPanel = () => {
       color: 'text-yellow-400',
       bgColor: 'bg-yellow-900/20',
       borderColor: 'border-yellow-500/50'
-    },
-    {
-      name: '活跃效果',
-      value: Object.values(buffSummary.totalEffects).filter(v => v !== 0).length.toString(),
-      icon: Zap,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-900/20',
-      borderColor: 'border-purple-500/50'
     }
   ];
 
   const resourceStats = [
-    {
-      name: '建筑进度',
-      current: Object.values(gameState.buildings).reduce((sum, building) => sum + building.count, 0),
-      total: Object.keys(gameState.buildings).length * 10,
-      color: 'text-amber-400'
-    },
     {
       name: '科技进度',
       current: Object.values(gameState.technologies).filter(t => t.researched).length,
@@ -229,7 +321,69 @@ const OverviewPanel = () => {
               </div>
             </div>
           );
-        })}
+        })}      </div>
+
+      {/* 当前效果栏 */}
+      <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
+            <Zap className="h-5 w-5 text-purple-400" />
+            当前效果
+          </h3>
+          <button
+            onClick={() => setShowDetailedEffects(true)}
+            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
+          >
+            <Info className="h-4 w-4" />
+            详细效果
+          </button>
+        </div>
+        
+        {/* 稳定度和腐败度标签 */}
+        <div className="flex gap-4 mb-4">
+          <Tooltip content={`稳定度: ${gameState.stability}% - ${getStabilityEffect(gameState.stability)}`}>
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-900/30 border border-green-500/30 rounded-lg cursor-help">
+              <Shield className="h-4 w-4 text-green-400" />
+              <span className="text-green-300 text-sm font-medium">稳定度</span>
+              <span className="text-green-200 text-sm">{gameState.stability}%</span>
+            </div>
+          </Tooltip>
+          
+          {gameState.technologies['legal_code']?.researched && (
+            <Tooltip content={`腐败度: ${gameState.corruption}% - ${getCorruptionEffect(gameState.corruption)}`}>
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-900/30 border border-red-500/30 rounded-lg cursor-help">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <span className="text-red-300 text-sm font-medium">腐败度</span>
+                <span className="text-red-200 text-sm">{gameState.corruption}%</span>
+              </div>
+            </Tooltip>
+          )}
+        </div>
+        
+        {buffSummary.sources.length > 0 && (
+          <div className="space-y-3">
+            {buffSummary.sources.map((source, index) => (
+              <div key={index} className="bg-gray-900 p-3 rounded-lg border border-gray-700">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-gray-300 font-medium">{source.name}</span>
+                  <span className="text-xs text-gray-400 px-2 py-1 bg-gray-700 rounded">
+                    {source.type === 'technology' ? '科技' : 
+                     source.type === 'building' ? '建筑' : 
+                     source.type === 'character' ? '人物' : 
+                     source.type === 'inheritance' ? '继承' : '其他'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {source.buffs.map((buff, buffIndex) => (
+                    <div key={buffIndex} className="text-xs bg-purple-900/30 text-purple-300 px-2 py-1 rounded border border-purple-500/30">
+                      {buff.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 事件栏 */}
@@ -510,13 +664,158 @@ const MainContent = () => {
   );
 };
 
+// 侧边栏组件
+const Sidebar = () => {
+  const { gameState, isRunning, togglePause, startGame, isPaused, clickResource, showRebirthConfirmation } = useGameStore();
+  const { resources } = gameState;
+
+  return (
+    <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+      {/* 文明发展标题 */}
+      <div className="p-4 border-b border-gray-700">
+        <h1 className="text-lg font-bold text-gray-100">文明发展</h1>
+        <div className="flex items-center gap-2 mt-2 text-sm text-gray-400">
+          <Clock className="h-4 w-4" />
+          <span>{formatTime(gameState.gameTime)}</span>
+        </div>
+      </div>
+
+      {/* 游戏控制 */}
+      <div className="p-4 border-b border-gray-700">
+        <div className="flex gap-2">
+          <button
+            onClick={!isRunning ? startGame : togglePause}
+            className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${
+              !isRunning || isPaused
+                ? 'bg-green-600 hover:bg-green-700 text-white'
+                : 'bg-red-600 hover:bg-red-700 text-white'
+            }`}
+          >
+            {!isRunning ? '开始' : isPaused ? '继续' : '暂停'}
+          </button>
+          <button 
+            onClick={showRebirthConfirmation}
+            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm font-medium"
+          >
+            转生
+          </button>
+        </div>
+      </div>
+
+      {/* 资源面板 */}
+      <div className="p-4 border-b border-gray-700">
+        <h2 className="text-sm font-semibold text-gray-300 mb-3">资源</h2>
+        <div className="space-y-2">
+          <Tooltip content={`食物产出详情：\n• 基础产出: +0.1/s\n• 人口消耗: -${(resources.population * 0.1).toFixed(1)}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.05, 0)).toFixed(1)}/s\n\n点击可手动收集食物`}>
+            <div className="flex justify-between items-center cursor-pointer hover:bg-gray-700 p-1 rounded" onClick={() => clickResource('food')}>
+              <div className="flex flex-col">
+                <span className="text-sm text-gray-400">食物</span>
+                <span className="text-xs text-gray-500">
+                  {gameState.resourceRates.food >= 0 ? '+' : ''}{gameState.resourceRates.food.toFixed(1)}/s
+                </span>
+              </div>
+              <span className="text-sm text-yellow-400 font-medium">
+                {formatNumber(resources.food)}/{formatNumber(gameState.resourceLimits.food)}
+              </span>
+            </div>
+          </Tooltip>
+          <Tooltip content={`木材产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${(gameState.workerAllocations?.woodcutter || 0) * 0.2}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集木材`}>
+            <div className="flex justify-between items-center cursor-pointer hover:bg-gray-700 p-1 rounded" onClick={() => clickResource('wood')}>
+              <div className="flex flex-col">
+                <span className="text-sm text-gray-400">木材</span>
+                <span className="text-xs text-gray-500">
+                  {gameState.resourceRates.wood >= 0 ? '+' : ''}{gameState.resourceRates.wood.toFixed(1)}/s
+                </span>
+              </div>
+              <span className="text-sm text-yellow-400 font-medium">
+                {formatNumber(resources.wood)}/{formatNumber(gameState.resourceLimits.wood)}
+              </span>
+            </div>
+          </Tooltip>
+          <Tooltip content={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${(gameState.workerAllocations?.miner || 0) * 0.15}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料`}>
+            <div className="flex justify-between items-center cursor-pointer hover:bg-gray-700 p-1 rounded" onClick={() => clickResource('stone')}>
+              <div className="flex flex-col">
+                <span className="text-sm text-gray-400">石料</span>
+                <span className="text-xs text-gray-500">
+                  {gameState.resourceRates.stone >= 0 ? '+' : ''}{gameState.resourceRates.stone.toFixed(1)}/s
+                </span>
+              </div>
+              <span className="text-sm text-yellow-400 font-medium">
+                {formatNumber(resources.stone)}/{formatNumber(gameState.resourceLimits.stone)}
+              </span>
+            </div>
+          </Tooltip>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-400">人口</span>
+            <span className="text-sm text-yellow-400 font-medium">
+              {formatNumber(resources.population)}/{formatNumber(resources.housing)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 人口分配 */}
+      <div className="p-4 border-b border-gray-700">
+        <h2 className="text-sm font-semibold text-gray-300 mb-3">人口分配</h2>
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-400">总人口</span>
+            <span className="text-sm text-white">{formatNumber(resources.population)}/{formatNumber(resources.housing)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-400">可用人口</span>
+            <span className="text-sm text-green-400">{formatNumber(gameState.availableWorkers || resources.population)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-400">已分配人口</span>
+            <span className="text-sm text-red-400">{formatNumber(resources.population - (gameState.availableWorkers || resources.population))}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 状态 */}
+      <div className="p-4 flex-1">
+        <h2 className="text-sm font-semibold text-gray-300 mb-3">状态</h2>
+        <div className="space-y-3">
+          <Tooltip content={`稳定度影响因素：\n• 基础稳定度: +50\n• 人口增长: ${gameState.resources.population > 5 ? '-' + Math.floor((gameState.resources.population - 5) * 0.5) : '0'}\n• 建筑加成: +${Object.values(gameState.buildings).reduce((sum, count) => sum + count * 2, 0)}\n\n稳定度过低会导致负面事件`}>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-sm text-gray-400">稳定度</span>
+                <span className="text-sm text-blue-400">{Math.round(gameState.stability)}</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="bg-blue-400 h-2 rounded-full" style={{ width: `${Math.min(100, Math.max(0, gameState.stability))}%` }}></div>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">{Math.round(gameState.stability)}%</div>
+            </div>
+          </Tooltip>
+          <Tooltip content={`腐败度影响因素：\n• 基础腐败度: 0\n• 人口规模: ${gameState.resources.population > 10 ? '+' + Math.floor((gameState.resources.population - 10) * 0.3) : '0'}\n• 建筑减少: -${Object.values(gameState.buildings).reduce((sum, count) => sum + count * 1, 0)}\n\n腐败度过高会增加建筑成本`}>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-sm text-gray-400">腐败度</span>
+                <span className="text-sm text-red-400">{Math.round(gameState.corruption || 0)}</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="bg-red-400 h-2 rounded-full" style={{ width: `${Math.min(100, Math.max(0, gameState.corruption || 0))}%` }}></div>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">{Math.round(gameState.corruption || 0)}%</div>
+            </div>
+          </Tooltip>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // 主布局组件
 const TheresMoreLayout = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
       <div className="flex h-screen">
+        <Sidebar />
         <MainContent />
       </div>
+      <RebirthConfirmation />
     </div>
   );
 };

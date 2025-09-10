@@ -5,17 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatNumber(num: number | undefined | null): string {
+export function formatNumber(num: number | undefined | null, decimals: number = 1): string {
   if (num == null || num === undefined) {
     return '0';
   }
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
+  
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  
+  if (absNum >= 1000000000) {
+    return sign + (absNum / 1000000000).toFixed(decimals) + 'B';
+  } else if (absNum >= 1000000) {
+    return sign + (absNum / 1000000).toFixed(decimals) + 'M';
+  } else if (absNum >= 1000) {
+    return sign + (absNum / 1000).toFixed(decimals) + 'K';
+  } else {
+    return sign + absNum.toFixed(decimals);
   }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return num.toString();
 }
 
 export function formatTime(seconds: number): string {

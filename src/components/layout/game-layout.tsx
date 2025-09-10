@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useGameStore } from '@/lib/game-store';
+import { BUILDINGS } from '@/lib/game-data';
 import { ResourcePanel } from '@/components/ui/resource-display';
 import { BuildingsPanel } from '@/components/features/buildings';
 import { TechnologyPanel } from '@/components/features/technology';
@@ -120,7 +121,7 @@ const OverviewPanel = () => {
             <h3 className="font-semibold text-amber-900">成就点</h3>
           </div>
           <div className="text-2xl font-bold text-amber-900">
-            {formatNumber(gameState.achievementPoints)}
+            {formatNumber(gameState.achievements.length)}
           </div>
           <p className="text-sm text-amber-700 mt-1">累计获得</p>
         </div>
@@ -138,12 +139,15 @@ const OverviewPanel = () => {
               <span className="text-stone-600">总建筑数量</span>
               <span className="font-semibold">{totalBuildings}</span>
             </div>
-            {Object.entries(gameState.buildings).filter(([_, building]) => building.count > 0).map(([id, building]) => (
-              <div key={id} className="flex justify-between items-center text-sm">
-                <span className="text-stone-500">{building.name}</span>
-                <span className="text-stone-700">{building.count}</span>
-              </div>
-            ))}
+            {Object.entries(gameState.buildings).filter(([_, building]) => building.count > 0).map(([id, building]) => {
+              const buildingData = BUILDINGS[id];
+              return (
+                <div key={id} className="flex justify-between items-center text-sm">
+                  <span className="text-stone-500">{buildingData?.name || id}</span>
+                  <span className="text-stone-700">{building.count}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
         
@@ -218,7 +222,7 @@ const OverviewPanel = () => {
 };
 
 const SettingsPanel = () => {
-  const { gameState, togglePause, resetGame, saveGame } = useGameStore();
+  const { gameState, isRunning, togglePause, startGame, resetGame, saveGame } = useGameStore();
   const [showInheritanceShop, setShowInheritanceShop] = useState(false);
   
   return (
@@ -255,12 +259,17 @@ const SettingsPanel = () => {
         <h3 className="font-semibold text-stone-900 mb-4">游戏控制</h3>
         <div className="space-y-4">
           <button
-            onClick={togglePause}
+            onClick={!isRunning ? startGame : togglePause}
             className={`w-full btn flex items-center justify-center gap-2 ${
-              gameState.isPaused ? 'btn-primary' : 'bg-amber-600 text-white hover:bg-amber-700'
+              !isRunning || gameState.isPaused ? 'btn-primary' : 'bg-amber-600 text-white hover:bg-amber-700'
             }`}
           >
-            {gameState.isPaused ? (
+            {!isRunning ? (
+              <>
+                <Play size={16} />
+                开始游戏
+              </>
+            ) : gameState.isPaused ? (
               <>
                 <Play size={16} />
                 继续游戏

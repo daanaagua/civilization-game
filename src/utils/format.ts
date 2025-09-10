@@ -4,9 +4,7 @@
  * @param decimals 小数位数
  * @returns 格式化后的字符串
  */
-export const formatNumber = (num: number, decimals: number = 1): string => {
-  if (num === 0) return '0';
-  
+export function formatNumber(num: number, decimals: number = 1): string {
   const absNum = Math.abs(num);
   const sign = num < 0 ? '-' : '';
   
