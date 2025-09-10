@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+
+  * {
+    @apply border-stone-200;
+  }
+  body {
+    @apply bg-slate-900 text-slate-100 font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-secondary-100 text-secondary-900 hover:bg-secondary-200 active:bg-secondary-300;
+  }
+  
+  .btn-outline {
+    @apply btn border border-slate-600 bg-slate-800 hover:bg-slate-700 active:bg-slate-600;
+  }
+  
+  .card {
+    @apply bg-slate-800 rounded-lg border border-slate-700 p-6 shadow-sm;
+  }
+  
+  .resource-card {
+    @apply card hover:shadow-md transition-shadow cursor-pointer;
+  }
+  
+  .progress-bar {
+    @apply w-full bg-slate-700 rounded-full h-2.5;
+  }
+  
+  .progress-fill {
+    @apply bg-primary-600 h-2.5 rounded-full transition-all duration-300 ease-out;
+  }
+  
+  .tooltip {
+    @apply absolute z-50 px-3 py-2 text-sm text-white bg-slate-700 rounded-md shadow-lg;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom animations */
+@keyframes resource-gain {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-10px) scale(1.1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-20px) scale(1);
+    opacity: 0;
+  }
+}
+
+.resource-gain-animation {
+  animation: resource-gain 1s ease-out forwards;
+}
+
+/* Game-specific styles */
+.civilization-bg {
+  background: linear-gradient(135deg, #fef7ee 0%, #fdedd6 50%, #fad7ac 100%);
+}
+
+.stone-texture {
+  background-image: 
+    radial-gradient(circle at 25% 25%, #d6d3d1 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, #a8a29e 0%, transparent 50%);
+}
+
+.wood-texture {
+  background: linear-gradient(90deg, #92400e 0%, #a16207 50%, #92400e 100%);
+}

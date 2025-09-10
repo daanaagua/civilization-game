@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏状态持久化测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        .container {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .danger {
+            background-color: #f44336;
+        }
+        .danger:hover {
+            background-color: #da190b;
+        }
+        .status {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .running {
+            color: #4CAF50;
+        }
+        .stopped {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <h1>游戏状态持久化测试</h1>
+    
+    <div class="container">
+        <h2>游戏状态</h2>
+        <div class="status" id="gameStatus">未初始化</div>
+        <button onclick="startGame()">开始游戏</button>
+        <button onclick="pauseGame()">暂停游戏</button>
+        <button onclick="resetGame()" class="danger">重置游戏</button>
+    </div>
+    
+    <div class="container">
+        <h2>资源状态</h2>
+        <div class="status" id="resourceStatus">无数据</div>
+    </div>
+    
+    <div class="container">
+        <h2>存储操作</h2>
+        <button onclick="saveToStorage()">保存到localStorage</button>
+        <button onclick="loadFromStorage()">从localStorage加载</button>
+        <button onclick="clearStorage()" class="danger">清除存储</button>
+    </div>
+    
+    <div class="container">
+        <h2>测试说明</h2>
+        <p>1. 点击"开始游戏"启动资源增长</p>
+        <p>2. 等待几秒让资源增长</p>
+        <p>3. 刷新页面，检查游戏是否自动恢复运行状态</p>
+        <p>4. 资源应该继续从刷新前的数值增长</p>
+    </div>
+
+    <script>
+        // 模拟游戏状态
+        let gameState = {
+            isRunning: false,
+            resources: {
+                food: 100,
+                wood: 50,
+                stone: 25
+            },
+            lastUpdateTime: Date.now(),
+            startTime: null
+        };
+        
+        let gameInterval = null;
+        
+        // 初始化
+        window.addEventListener('load', function() {
+            loadFromStorage();
+            updateDisplay();
+            
+            // 如果游戏之前在运行，自动恢复
+            if (gameState.isRunning) {
+                console.log('检测到游戏之前在运行，自动恢复...');
+                // 计算离线时间并补偿资源
+                const offlineTime = Date.now() - gameState.lastUpdateTime;
+                const offlineSeconds = Math.floor(offlineTime / 1000);
+                
+                if (offlineSeconds > 0) {
+                    gameState.resources.food += offlineSeconds * 2;
+                    gameState.resources.wood += offlineSeconds * 1;
+                    gameState.resources.stone += Math.floor(offlineSeconds * 0.5);
+                    console.log(`离线 ${offlineSeconds} 秒，补偿资源`);
+                }
+                
+                startGameLoop();
+            }
+        });
+        
+        // 页面卸载时保存状态
+        window.addEventListener('beforeunload', function() {
+            if (gameState.isRunning) {
+                gameState.lastUpdateTime = Date.now();
+                saveToStorage();
+            }
+        });
+        
+        function startGame() {
+            if (!gameState.isRunning) {
+                gameState.isRunning = true;
+                gameState.startTime = Date.now();
+                gameState.lastUpdateTime = Date.now();
+                startGameLoop();
+                saveToStorage();
+                updateDisplay();
+            }
+        }
+        
+        function pauseGame() {
+            if (gameState.isRunning) {
+                gameState.isRunning = false;
+                gameState.lastUpdateTime = Date.now();
+                stopGameLoop();
+                saveToStorage();
+                updateDisplay();
+            }
+        }
+        
+        function resetGame() {
+            gameState = {
+                isRunning: false,
+                resources: {
+                    food: 100,
+                    wood: 50,
+                    stone: 25
+                },
+                lastUpdateTime: Date.now(),
+                startTime: null
+            };
+            stopGameLoop();
+            saveToStorage();
+            updateDisplay();
+        }
+        
+        function startGameLoop() {
+            if (gameInterval) clearInterval(gameInterval);
+            
+            gameInterval = setInterval(() => {
+                if (gameState.isRunning) {
+                    // 每秒增加资源
+                    gameState.resources.food += 2;
+                    gameState.resources.wood += 1;
+                    gameState.resources.stone += 0.5;
+                    gameState.lastUpdateTime = Date.now();
+                    
+                    updateDisplay();
+                    
+                    // 定期保存
+                    if (Math.random() < 0.1) { // 10%概率保存
+                        saveToStorage();
+                    }
+                }
+            }, 1000);
+        }
+        
+        function stopGameLoop() {
+            if (gameInterval) {
+                clearInterval(gameInterval);
+                gameInterval = null;
+            }
+        }
+        
+        function saveToStorage() {
+            try {
+                const dataToSave = {
+                    ...gameState,
+                    version: 1,
+                    savedAt: Date.now()
+                };
+                localStorage.setItem('game-persistence-test', JSON.stringify(dataToSave));
+                console.log('游戏状态已保存', dataToSave);
+            } catch (error) {
+                console.error('保存失败:', error);
+            }
+        }
+        
+        function loadFromStorage() {
+            try {
+                const saved = localStorage.getItem('game-persistence-test');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    gameState = {
+                        isRunning: data.isRunning || false,
+                        resources: data.resources || gameState.resources,
+                        lastUpdateTime: data.lastUpdateTime || Date.now(),
+                        startTime: data.startTime || null
+                    };
+                    console.log('游戏状态已加载', gameState);
+                    return true;
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+            }
+            return false;
+        }
+        
+        function clearStorage() {
+            localStorage.removeItem('game-persistence-test');
+            console.log('存储已清除');
+        }
+        
+        function updateDisplay() {
+            const statusEl = document.getElementById('gameStatus');
+            const resourceEl = document.getElementById('resourceStatus');
+            
+            if (gameState.isRunning) {
+                const runTime = gameState.startTime ? Math.floor((Date.now() - gameState.startTime) / 1000) : 0;
+                statusEl.innerHTML = `<span class="running">运行中</span> (运行时间: ${runTime}秒)`;
+            } else {
+                statusEl.innerHTML = `<span class="stopped">已暂停</span>`;
+            }
+            
+            resourceEl.innerHTML = `
+                食物: ${Math.floor(gameState.resources.food)}<br>
+                木材: ${Math.floor(gameState.resources.wood)}<br>
+                石头: ${Math.floor(gameState.resources.stone)}<br>
+                最后更新: ${new Date(gameState.lastUpdateTime).toLocaleTimeString()}
+            `;
+        }
+        
+        // 每秒更新显示
+        setInterval(updateDisplay, 1000);
+    </script>
+</body>
+</html>
