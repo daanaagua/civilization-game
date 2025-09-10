@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { GameState, Resources, ResourceLimits, Technology, Building, Character, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent } from '@/types/game';
 import { BUILDINGS, TECHNOLOGIES, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
@@ -2170,6 +2170,7 @@ export const useGameStore = create<GameStore>()(persist(
   {
     name: 'civilization-game-storage',
     version: 1,
+    storage: createJSONStorage(() => localStorage),
     partialize: (state) => ({
       gameState: {
         ...state.gameState,
@@ -2229,5 +2230,6 @@ export const useAchievementStore = create<AchievementStore>()(persist(
   }),
   {
     name: 'civilization-achievements-storage',
+    storage: createJSONStorage(() => localStorage),
   }
 ));
