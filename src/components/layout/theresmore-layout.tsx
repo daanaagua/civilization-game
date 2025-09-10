@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore, useAchievementStore } from '@/lib/game-store';
 import { formatNumber, formatTime } from '@/lib/utils';
 import { RebirthConfirmation } from '@/components/ui/rebirth-confirmation';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -572,9 +572,118 @@ const SettingsPanel = () => {
     }
   };
 
+  const handleExportSave = () => {
+    try {
+      // 获取完整的游戏状态
+      const gameState = useGameStore.getState();
+      const achievementState = useAchievementStore.getState();
+      
+      const saveData = {
+        version: '1.0.0',
+        timestamp: Date.now(),
+        gameState: {
+          gameState: gameState.gameState,
+          uiState: gameState.uiState,
+          army: gameState.army,
+          isRunning: gameState.isRunning,
+          lastUpdateTime: gameState.lastUpdateTime
+        },
+        achievements: achievementState.achievements
+      };
+      
+      const jsonString = JSON.stringify(saveData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `civilization-save-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      alert('存档已导出成功！');
+    } catch (error) {
+      console.error('导出存档失败:', error);
+      alert('导出存档失败，请重试。');
+    }
+  };
+
+  const handleImportSave = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const saveData = JSON.parse(e.target?.result as string);
+          
+          // 验证存档格式
+          if (!saveData.gameState || !saveData.version) {
+            throw new Error('无效的存档格式');
+          }
+          
+          if (window.confirm('确定要导入此存档吗？这将覆盖当前游戏进度！')) {
+            // 恢复游戏状态
+            useGameStore.setState({
+              gameState: saveData.gameState.gameState,
+              uiState: saveData.gameState.uiState,
+              army: saveData.gameState.army || {},
+              isRunning: saveData.gameState.isRunning || false,
+              lastUpdateTime: saveData.gameState.lastUpdateTime || Date.now()
+            });
+            
+            // 恢复成就状态
+            if (saveData.achievements) {
+              useAchievementStore.setState({
+                achievements: saveData.achievements
+              });
+            }
+            
+            alert('存档导入成功！');
+          }
+        } catch (error) {
+          console.error('导入存档失败:', error);
+          alert('导入存档失败，请检查文件格式是否正确。');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-gray-100 mb-4">游戏设置</h2>
+      
+      {/* 存档管理 */}
+      <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-100 mb-2">存档管理</h3>
+          <p className="text-gray-400 text-sm mb-4">导出存档到本地文件，或从文件导入存档</p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleExportSave}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              导出存档
+            </button>
+            <button
+              onClick={handleImportSave}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            >
+              导入存档
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* 游戏控制 */}
       <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-100 mb-2">游戏控制</h3>
