@@ -3,10 +3,13 @@
 import { PopulationPanel } from './PopulationPanel';
 import { GameStatsPanel } from './GameStatsPanel';
 import { EffectsPanel } from './EffectsPanel';
+import { EventsPanel } from './EventsPanel';
 import { useEffects } from '@/hooks/use-effects';
+import { useEvents } from '@/hooks/use-events';
 
 export function OverviewPanel() {
   const { effects } = useEffects();
+  const { events, markAsRead, handleChoice } = useEvents();
   
   return (
     <div className="space-y-6">
@@ -18,6 +21,13 @@ export function OverviewPanel() {
 
       {/* 当前效果面板 */}
       <EffectsPanel effects={effects} />
+      
+      {/* 事件面板 */}
+      <EventsPanel 
+        events={events}
+        onMarkAsRead={markAsRead}
+        onChoiceSelect={handleChoice}
+      />
       
       {/* 主要信息面板 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
