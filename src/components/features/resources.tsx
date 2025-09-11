@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore } from '@/lib/store/gameStore';
 import { formatNumber } from '@/utils/format';
 import { 
   Apple, 
@@ -130,31 +130,31 @@ interface ResourceCardProps {
 }
 
 const ResourceCard = ({ resourceType, value, rate }: ResourceCardProps) => {
-  const { clickResource, isRunning } = useGameStore();
+  const { manualCollectResource, isPaused } = useGameStore();
   const config = resourceConfig[resourceType];
   const Icon = config.icon;
   
   const handleClick = () => {
     if (config.clickable) {
-      clickResource(resourceType as 'food' | 'wood' | 'stone');
+      manualCollectResource(resourceType);
     }
   };
   
-  const isClickable = config.clickable && isRunning;
+  const isClickable = config.clickable && !isPaused;
   
   return (
     <div 
       className={`card ${config.bgColor} ${config.borderColor} ${
         isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
       } ${
-        config.clickable && !isRunning ? 'opacity-60' : ''
+        config.clickable && isPaused ? 'opacity-60' : ''
       }`}
       onClick={handleClick}
       title={
         config.clickable 
-          ? isRunning 
+          ? !isPaused 
             ? `点击增加1个${config.name}` 
-            : `游戏未开始，无法收集${config.name}`
+            : `游戏已暂停，无法收集${config.name}`
           : config.description
       }
     >

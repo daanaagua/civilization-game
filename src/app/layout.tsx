@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   description: '从远古部落到现代科技，体验人类文明的完整发展历程',
   keywords: ['游戏', '文明', '策略', '挂机', '科技', '魔法', '演进'],
   authors: [{ name: '游戏开发者' }],
-  viewport: 'width=device-width, initial-scale=1',
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore } from '@/lib/store/gameStore';
 import { GameEventInstance } from '@/types/game';
 import { Clock, AlertTriangle, Compass, Zap } from 'lucide-react';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore } from '@/lib/store/gameStore';
 import { formatNumber } from '@/utils/format';
 import { 
   Swords, 
@@ -319,7 +319,7 @@ export const MilitaryPanel = () => {
                       <Target className="text-stone-600" size={16} />
                       <span className="font-medium">训练 {unit.name}</span>
                     </div>
-                    <span className="text-sm text-stone-500">
+                    <span className="text-sm text-stone-500" suppressHydrationWarning>
                       {Math.ceil(remainingTime / 1000)}秒
                     </span>
                   </div>

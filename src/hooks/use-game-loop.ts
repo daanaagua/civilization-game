@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore } from '@/lib/store/gameStore';
 
 /**
  * 游戏主循环Hook
@@ -7,15 +7,19 @@ import { useGameStore } from '@/lib/game-store';
  */
 export const useGameLoop = () => {
   const { 
-    isRunning, 
     isPaused,
-    updateGameTime, 
-    lastUpdateTime,
-    calculatePopulationGrowth,
-    checkPopulationLimits,
-    checkGameEvents,
-    toggleGamePause
+    updateGame,
+    pauseGame,
+    resumeGame
   } = useGameStore();
+  
+  const toggleGamePause = () => {
+    if (isPaused) {
+      resumeGame();
+    } else {
+      pauseGame();
+    }
+  };
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(Date.now());
   
@@ -24,22 +28,8 @@ export const useGameLoop = () => {
       const currentTime = Date.now();
       const deltaTime = (currentTime - lastTimeRef.current) / 1000; // 转换为秒
       
-      if (isRunning && !isPaused && deltaTime > 0) {
-        updateGameTime(deltaTime);
-        
-        // 人口和稳定度管理（每10秒检查一次）
-        const currentGameTime = useGameStore.getState().gameState.gameTime;
-        if (Math.floor(currentGameTime / 10000) > Math.floor((currentGameTime - deltaTime) / 10000)) {
-          calculatePopulationGrowth();
-          checkPopulationLimits();
-        }
-        
-        // 事件检查（每5秒检查一次）
-        if (Math.floor(currentGameTime / 5000) > Math.floor((currentGameTime - deltaTime) / 5000)) {
-          checkGameEvents();
-        }
-        
-        // Zustand persist中间件会自动处理状态保存，无需手动保存
+      if (!isPaused && deltaTime > 0) {
+        updateGame(deltaTime);
       }
       
       lastTimeRef.current = currentTime;
@@ -53,7 +43,7 @@ export const useGameLoop = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isRunning, isPaused, updateGameTime]);
+  }, [isPaused, updateGame]);
   
   // 空格键快捷键监听
   useEffect(() => {
@@ -69,7 +59,7 @@ export const useGameLoop = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [toggleGamePause]);
+  }, [isPaused, pauseGame, resumeGame]);
   
   // 页面可见性变化时暂停/恢复游戏
   useEffect(() => {

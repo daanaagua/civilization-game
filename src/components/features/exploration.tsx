@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useGameStore } from '@/lib/game-store';
+import { useGameStore } from '@/lib/store/gameStore';
 import { formatNumber, formatTime } from '@/utils/format';
 import { 
   Compass, 
@@ -237,7 +237,7 @@ export const ExplorationPanel = () => {
                       {mission.status === 'active' && (
                         <>
                           <Clock className="text-blue-600" size={16} />
-                          <span className="text-sm text-blue-600">
+                          <span className="text-sm text-blue-600" suppressHydrationWarning>
                             {formatTime(remainingTime / 1000)}
                           </span>
                         </>
