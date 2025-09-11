@@ -1,6 +1,6 @@
 /**
  * 游戏时间系统
- * 现实1秒 = 游戏5天
+ * 现实1秒 = 游戏2天
  * 开局：0年0月1日
  * 每月30天，每年12个月
  */
@@ -26,7 +26,7 @@ export enum Season {
 
 export class GameTimeSystem {
   private startTime: number;
-  private readonly DAYS_PER_SECOND = 5; // 现实1秒 = 游戏5天
+  private readonly DAYS_PER_SECOND = 2; // 现实1秒 = 游戏2天
   private readonly DAYS_PER_MONTH = 30;
   private readonly MONTHS_PER_YEAR = 12;
 

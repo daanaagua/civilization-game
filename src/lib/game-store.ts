@@ -453,7 +453,7 @@ export const useGameStore = create<GameStore>()(persist(
     updateTimeSystem: () => {
       set((state) => {
         const gameTime = state.gameState.gameTime;
-        const totalDays = Math.floor(gameTime / 86400);
+        const totalDays = Math.floor(gameTime * 2); // 1秒 = 2天
         
         // 计算年、月、日
         const year = Math.floor(totalDays / 360);
