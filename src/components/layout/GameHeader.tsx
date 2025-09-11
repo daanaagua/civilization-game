@@ -51,14 +51,7 @@ export function GameHeader() {
           
           <div className="flex items-center space-x-4 text-sm text-gray-300">
             {/* 游戏时间显示 */}
-            <CompactTimeDisplay className="text-gray-300" />
-            
-            <div className="h-4 w-px bg-gray-600"></div>
-            
-            <div className="flex items-center space-x-1">
-              <span>⏱️</span>
-              <span>{formatTime(playTime)}</span>
-            </div>
+            <CompactTimeDisplay className="text-white" />
             
             <div className="flex items-center space-x-1">
               <span>🏆</span>

@@ -103,7 +103,7 @@ export function CompactTimeDisplay({ className = '' }: { className?: string }) {
 
   return (
     <div className={`flex items-center space-x-2 ${className}`}>
-      <span className="text-sm font-mono text-gray-700">{formattedDate}</span>
+      <span className="text-sm font-mono">{formattedDate}</span>
       <span className="text-xs">{seasonStyle.icon}</span>
     </div>
   );

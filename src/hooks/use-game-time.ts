@@ -1,17 +1,22 @@
 import { useState, useEffect } from 'react';
 import { gameTimeSystem, GameTime, Season } from '@/lib/time-system';
+import { useGameStore } from '@/lib/game-store';
 
 /**
  * 游戏时间Hook
  * 提供实时更新的游戏时间和季节信息
  */
 export function useGameTime() {
+  const isPaused = useGameStore(state => state.isPaused);
   const [gameTime, setGameTime] = useState<GameTime>(() => gameTimeSystem.getCurrentTime());
   const [season, setSeason] = useState<Season>(() => 
     gameTimeSystem.getSeason(gameTimeSystem.getCurrentTime().currentDate)
   );
 
   useEffect(() => {
+    // 只在游戏未暂停时更新时间
+    if (isPaused) return;
+    
     // 每100ms更新一次时间，确保日期快速替换的视觉效果
     const interval = setInterval(() => {
       const currentTime = gameTimeSystem.getCurrentTime();
@@ -20,7 +25,7 @@ export function useGameTime() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [isPaused]);
 
   const formatDate = (date = gameTime.currentDate) => {
     return gameTimeSystem.formatDate(date);
