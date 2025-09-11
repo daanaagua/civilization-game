@@ -2,8 +2,12 @@
 
 import { PopulationPanel } from './PopulationPanel';
 import { GameStatsPanel } from './GameStatsPanel';
+import { EffectsPanel } from './EffectsPanel';
+import { useEffects } from '@/hooks/use-effects';
 
 export function OverviewPanel() {
+  const { effects } = useEffects();
+  
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
@@ -12,6 +16,9 @@ export function OverviewPanel() {
         <p className="text-gray-400">管理你的文明，从原始部落发展到强大帝国</p>
       </div>
 
+      {/* 当前效果面板 */}
+      <EffectsPanel effects={effects} />
+      
       {/* 主要信息面板 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 左列 */}
