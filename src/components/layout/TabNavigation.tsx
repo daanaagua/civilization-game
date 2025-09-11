@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, Building, Beaker, Sword, Users, Map, Settings, Search } from 'lucide-react';
+import { Home, Building, Beaker, Sword, Users, Map, Search } from 'lucide-react';
 
 interface TabNavigationProps {
   activeTab: string;
@@ -15,7 +15,6 @@ const menuItems = [
   { id: 'exploration', label: '探索', icon: Search, description: '探索未知领域' },
   { id: 'characters', label: '人物', icon: Users, description: '管理角色和人物' },
   { id: 'diplomacy', label: '外交', icon: Map, description: '与其他文明交往' },
-  { id: 'settings', label: '设置', icon: Settings, description: '游戏设置' },
 ];
 
 export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
