@@ -4,6 +4,7 @@ import { PopulationPanel } from './PopulationPanel';
 import { GameStatsPanel } from './GameStatsPanel';
 import { EffectsPanel } from './EffectsPanel';
 import { EventsPanel } from './EventsPanel';
+import { TimeDisplay } from './TimeDisplay';
 import { useEffects } from '@/hooks/use-effects';
 import { useEvents } from '@/hooks/use-events';
 
@@ -15,8 +16,13 @@ export function OverviewPanel() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white mb-2">文明概览</h1>
-        <p className="text-gray-400">管理你的文明，从原始部落发展到强大帝国</p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">文明概览</h1>
+            <p className="text-gray-400">管理你的文明，从原始部落发展到强大帝国</p>
+          </div>
+          <TimeDisplay className="bg-gray-800/50 p-3 rounded-lg border border-gray-700" />
+        </div>
       </div>
 
       {/* 当前效果面板 */}

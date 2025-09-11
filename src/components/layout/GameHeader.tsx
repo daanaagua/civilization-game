@@ -2,6 +2,7 @@
 
 import { Play, Pause, RotateCcw, Settings } from 'lucide-react';
 import { useGameStore } from '@/lib/store/gameStore';
+import { CompactTimeDisplay } from '../features/TimeDisplay';
 
 // 临时实现格式化函数
 const formatTime = (seconds: number): string => {
@@ -49,6 +50,11 @@ export function GameHeader() {
           <h1 className="text-2xl font-bold text-white">文明发展游戏</h1>
           
           <div className="flex items-center space-x-4 text-sm text-gray-300">
+            {/* 游戏时间显示 */}
+            <CompactTimeDisplay className="text-gray-300" />
+            
+            <div className="h-4 w-px bg-gray-600"></div>
+            
             <div className="flex items-center space-x-1">
               <span>⏱️</span>
               <span>{formatTime(playTime)}</span>
