@@ -102,90 +102,89 @@ export function useEvents() {
     return () => clearInterval(interval);
   }, [cleanupExpiredEvents]);
 
-  // 初始化示例事件
+  // 初始化示例事件（仅执行一次）
   useEffect(() => {
-    const initializeEvents = () => {
-      // 添加一些示例事件
-      const sampleEvents: Omit<GameEvent, 'id' | 'timestamp'>[] = [
-        {
-          title: '贸易商队到达',
-          description: '一支来自远方的贸易商队抵达了你的城市，他们带来了珍贵的货物和消息。',
-          type: EventType.CHOICE,
-          priority: EventPriority.MEDIUM,
-          icon: '🚛',
-          category: '贸易',
-          choices: [
-            {
-              id: 'trade',
-              text: '与他们进行贸易',
-              description: '用你的资源换取他们的货物',
-              consequences: ['获得稀有资源', '增加贸易关系', '消耗金币']
-            },
-            {
-              id: 'tax',
-              text: '征收过路税',
-              description: '要求商队缴纳税金才能通过',
-              consequences: ['获得金币', '降低贸易关系', '可能引发冲突']
-            },
-            {
-              id: 'ignore',
-              text: '让他们自由通过',
-              description: '不干涉商队的活动',
-              consequences: ['维持中立关系', '无直接收益']
-            }
-          ]
-        },
-        {
-          title: '丰收季节',
-          description: '今年的天气格外适宜农作物生长，你的农田获得了大丰收！',
-          type: EventType.NOTIFICATION,
-          priority: EventPriority.LOW,
-          icon: '🌾',
-          category: '农业',
-          consequences: ['食物产量 +50%', '人口增长速度 +25%', '稳定度 +10']
-        },
-        {
-          title: '神秘学者求见',
-          description: '一位神秘的学者来到你的宫廷，声称掌握着古老的知识，愿意为你效力。',
-          type: EventType.CHOICE,
-          priority: EventPriority.HIGH,
-          icon: '🧙‍♂️',
-          category: '科技',
-          choices: [
-            {
-              id: 'accept',
-              text: '接受他的效力',
-              description: '让学者加入你的顾问团',
-              consequences: ['获得科技加成', '解锁新研究', '增加维护成本']
-            },
-            {
-              id: 'test',
-              text: '先测试他的能力',
-              description: '要求学者证明自己的价值',
-              consequences: ['可能获得科技突破', '可能浪费时间', '学者可能离开']
-            },
-            {
-              id: 'refuse',
-              text: '礼貌地拒绝',
-              description: '感谢学者的好意但婉拒合作',
-              consequences: ['维持现状', '错失机会', '学者可能投靠敌人']
-            }
-          ]
-        }
-      ];
+    // 添加一些示例事件
+    const sampleEvents: Omit<GameEvent, 'id' | 'timestamp'>[] = [
+      {
+        title: '贸易商队到达',
+        description: '一支来自远方的贸易商队抵达了你的城市，他们带来了珍贵的货物和消息。',
+        type: EventType.CHOICE,
+        priority: EventPriority.MEDIUM,
+        icon: '🚛',
+        category: '贸易',
+        choices: [
+          {
+            id: 'trade',
+            text: '与他们进行贸易',
+            description: '用你的资源换取他们的货物',
+            consequences: ['获得稀有资源', '增加贸易关系', '消耗金币']
+          },
+          {
+            id: 'tax',
+            text: '征收过路税',
+            description: '要求商队缴纳税金才能通过',
+            consequences: ['获得金币', '降低贸易关系', '可能引发冲突']
+          },
+          {
+            id: 'ignore',
+            text: '让他们自由通过',
+            description: '不干涉商队的活动',
+            consequences: ['维持中立关系', '无直接收益']
+          }
+        ]
+      },
+      {
+        title: '丰收季节',
+        description: '今年的天气格外适宜农作物生长，你的农田获得了大丰收！',
+        type: EventType.NOTIFICATION,
+        priority: EventPriority.LOW,
+        icon: '🌾',
+        category: '农业',
+        consequences: ['食物产量 +50%', '人口增长速度 +25%', '稳定度 +10']
+      },
+      {
+        title: '神秘学者求见',
+        description: '一位神秘的学者来到你的宫廷，声称掌握着古老的知识，愿意为你效力。',
+        type: EventType.CHOICE,
+        priority: EventPriority.HIGH,
+        icon: '🧙‍♂️',
+        category: '科技',
+        choices: [
+          {
+            id: 'accept',
+            text: '接受他的效力',
+            description: '让学者加入你的顾问团',
+            consequences: ['获得科技加成', '解锁新研究', '增加维护成本']
+          },
+          {
+            id: 'test',
+            text: '先测试他的能力',
+            description: '要求学者证明自己的价值',
+            consequences: ['可能获得科技突破', '可能浪费时间', '学者可能离开']
+          },
+          {
+            id: 'refuse',
+            text: '礼貌地拒绝',
+            description: '感谢学者的好意但婉拒合作',
+            consequences: ['维持现状', '错失机会', '学者可能投靠敌人']
+          }
+        ]
+      }
+    ];
 
-      // 添加事件，但延迟一些时间以模拟真实游戏体验
-      sampleEvents.forEach((eventData, index) => {
-        setTimeout(() => {
-          addEvent(eventData);
-        }, index * 2000); // 每2秒添加一个事件
-      });
-    };
-
-    // 延迟初始化，避免在组件挂载时立即触发
-    const timer = setTimeout(initializeEvents, 1000);
-    return () => clearTimeout(timer);
-  }, [addEvent]);
+    // 直接添加初始事件，不使用定时器
+    sampleEvents.forEach((eventData) => {
+      const newEvent: GameEvent = {
+        ...eventData,
+        id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        isRead: false,
+        isResolved: eventData.type === EventType.NOTIFICATION
+      };
+      setEvents(prev => [newEvent, ...prev]);
+    });
+  }, []); // 空依赖数组，确保只执行一次
 
   return {
     events,
