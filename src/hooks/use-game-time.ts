@@ -1,57 +1,17 @@
-import { useState, useEffect } from 'react';
-import { gameTimeSystem, GameTime, Season } from '@/lib/time-system';
 import { useGameStore } from '@/lib/game-store';
+import { GameTimeSystem } from '@/lib/time-system';
 
-/**
- * 游戏时间Hook
- * 提供实时更新的游戏时间和季节信息
- */
+const timeSystem = new GameTimeSystem();
+
 export function useGameTime() {
-  const isPaused = useGameStore(state => state.isPaused);
-  const [gameTime, setGameTime] = useState<GameTime>(() => gameTimeSystem.getCurrentTime());
-  const [season, setSeason] = useState<Season>(() => 
-    gameTimeSystem.getSeason(gameTimeSystem.getCurrentTime().currentDate)
-  );
-
-  useEffect(() => {
-    // 只在游戏未暂停时更新时间
-    if (isPaused) return;
-    
-    // 每100ms更新一次时间，确保日期快速替换的视觉效果
-    const interval = setInterval(() => {
-      const currentTime = gameTimeSystem.getCurrentTime();
-      setGameTime(currentTime);
-      setSeason(gameTimeSystem.getSeason(currentTime.currentDate));
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isPaused]);
-
-  const formatDate = (date = gameTime.currentDate) => {
-    return gameTimeSystem.formatDate(date);
-  };
-
-  const getSeasonName = (currentSeason = season) => {
-    return gameTimeSystem.getSeasonName(currentSeason);
-  };
-
-  const resetTime = () => {
-    gameTimeSystem.reset();
-    const newTime = gameTimeSystem.getCurrentTime();
-    setGameTime(newTime);
-    setSeason(gameTimeSystem.getSeason(newTime.currentDate));
-  };
-
+  const { gameState } = useGameStore();
+  const currentDate = gameState.timeSystem.currentDate;
+  
   return {
-    gameTime,
-    season,
-    formatDate,
-    getSeasonName,
-    resetTime,
-    // 便捷访问
-    currentDate: gameTime.currentDate,
-    totalDays: gameTime.totalDays,
-    formattedDate: formatDate(),
-    seasonName: getSeasonName()
+    date: currentDate,
+    season: timeSystem.getSeason(currentDate),
+    formattedDate: timeSystem.formatDate(currentDate),
+    time: { hours: 12, minutes: 0, seconds: 0 }, // 固定时间
+    formattedTime: '12:00:00',
   };
 }

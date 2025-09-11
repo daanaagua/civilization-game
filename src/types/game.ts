@@ -125,11 +125,21 @@ export interface CharacterSkills {
 
 // 游戏状态
 export interface GameState {
-  // 基础信息
+  // 基本游戏信息
   civilizationName: string;
   currentAge: GameAge;
   gameTime: number; // 游戏时间（秒）
   isPaused: boolean; // 游戏是否暂停
+  
+  // 时间系统状态
+  timeSystem: {
+    startTime: number; // 游戏开始的真实时间戳
+    currentDate: {
+      year: number;
+      month: number; // 0-11
+      day: number;   // 1-30
+    };
+  };
   
   // 资源
   resources: Resources;
