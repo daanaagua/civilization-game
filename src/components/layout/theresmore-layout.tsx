@@ -24,10 +24,10 @@ const getStabilityEffect = (stability: number): string => {
 
 // 腐败度效果计算
 const getCorruptionEffect = (corruption: number): string => {
-  if (corruption >= 80) return '资源产出 -30%，建筑成本 +50%';
-  if (corruption >= 60) return '资源产出 -20%，建筑成本 +30%';
-  if (corruption >= 40) return '资源产出 -10%，建筑成本 +15%';
-  if (corruption >= 20) return '资源产出 -5%，建筑成本 +10%';
+  if (corruption > 90) return '资源产出 -60%，建筑成本 +100%';
+  if (corruption > 75) return '资源产出 -40%，建筑成本 +50%';
+  if (corruption > 50) return '资源产出 -25%，建筑成本 +20%';
+  if (corruption > 25) return '资源产出 -10%，无建筑成本影响';
   return '无负面影响';
 };
 
@@ -127,10 +127,11 @@ const BuildingsPanel = () => {
                   </h3>
                   <p className="text-gray-300 mb-2">{getCorruptionEffect(gameState.corruption)}</p>
                   <div className="text-sm text-gray-400">
-                    <p>• 低腐败度(0-19%): 无负面影响</p>
-                    <p>• 轻度腐败(20-39%): 轻微的资源产出和建筑成本影响</p>
-                    <p>• 中度腐败(40-59%): 明显的负面影响</p>
-                    <p>• 高度腐败(60%+): 严重影响经济发展</p>
+                    <p>• 低腐败度(0-25%): 无负面影响</p>
+                    <p>• 轻度腐败(26-50%): 资源产出 -10%</p>
+                    <p>• 中度腐败(51-75%): 资源产出 -25%，建筑成本 +20%</p>
+                    <p>• 高度腐败(76-90%): 资源产出 -40%，建筑成本 +50%</p>
+                    <p>• 极度腐败(91-100%): 资源产出 -60%，建筑成本 +100%</p>
                   </div>
                 </div>
               )}

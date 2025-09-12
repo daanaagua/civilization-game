@@ -228,6 +228,19 @@ export const BUILDINGS: Record<string, Building> = {
     unlocked: false,
     canAssignWorkers: false,
     maxWorkers: 0,
+  },
+
+  courthouse: {
+    id: 'courthouse',
+    name: '法院',
+    description: '建立司法体系和行政管理中心，可以安排官吏进行管理。',
+    type: 'administrative',
+    cost: { wood: 120, stone: 180, tools: 40 },
+    produces: { administrative_capacity: 3 },
+    requires: ['legal_code'],
+    unlocked: false,
+    canAssignWorkers: true,
+    maxWorkers: 3,
   }
 };
 

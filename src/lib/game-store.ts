@@ -1085,66 +1085,58 @@ export const useGameStore = create<GameStore>()(persist(
     calculateCorruptionIncrease: () => {
       const { gameState } = get();
       
-      // 基础增长率
-      let dailyIncrease = 0.1;
-      
-      // 人口因子：每100人口 +0.5%
-      const populationFactor = Math.floor(gameState.resources.population / 100) * 0.5;
-      
-      // 建筑因子：每10个建筑 +0.3%
-      const totalBuildings = Object.values(gameState.buildings).reduce((sum, building) => sum + building.count, 0);
-      const buildingFactor = Math.floor(totalBuildings / 10) * 0.3;
-      
-      // 特定建筑的腐败影响
-      let buildingCorruption = 0;
-      if (gameState.buildings.market) {
-        buildingCorruption += gameState.buildings.market.count * 0.2; // 市场增加腐败
-      }
-      if (gameState.buildings.warehouse) {
-        buildingCorruption += gameState.buildings.warehouse.count * 0.1; // 仓库增加腐败
-      }
-      if (gameState.buildings.barracks) {
-        buildingCorruption += gameState.buildings.barracks.count * 0.3; // 军营增加腐败
+      // 如果没有解锁法律法典，腐败度不增长
+      if (!gameState.technologies.legal_code?.researched) {
+        return 0;
       }
       
-      // 控制效果
-      let controlEffects = 0;
-      
-      // 反腐建筑效果
-      if (gameState.buildings.court) {
-        controlEffects += gameState.buildings.court.count * 1.5; // 法庭减少腐败
+      // 计算官吏人口（在法院工作的人口）
+      let administratorPopulation = 0;
+      if (gameState.buildings.courthouse) {
+        administratorPopulation = gameState.buildings.courthouse.workers || 0;
       }
+      
+      // 如果没有官吏，腐败度不增长
+      if (administratorPopulation === 0) {
+        return 0;
+      }
+      
+      // 基础腐败增长：官吏人口 × 0.5
+      let corruptionIncrease = administratorPopulation * 0.5;
+      
+      // 压制效果
+      let suppressionEffects = 0;
+      
+      // 法院建筑的压制效果（每个法院 -0.3）
+      if (gameState.buildings.courthouse) {
+        suppressionEffects += gameState.buildings.courthouse.count * 0.3;
+      }
+      
+      // 监察院的压制效果（每个监察院 -0.8）
       if (gameState.buildings.oversight_bureau) {
-        controlEffects += gameState.buildings.oversight_bureau.count * 2.5; // 监察院减少腐败
-      }
-      if (gameState.buildings.academy) {
-        controlEffects += gameState.buildings.academy.count * 1.0; // 学院减少腐败
+        suppressionEffects += gameState.buildings.oversight_bureau.count * 0.8;
       }
       
-      // 人物效果
+      // 官员角色的压制效果
       Object.values(gameState.characters).forEach(character => {
         if (character.isActive) {
-          if (character.type === 'judge') {
-            controlEffects += 2.0; // 法官减少腐败
+          if (character.type === 'administrator') {
+            suppressionEffects += 0.2; // 行政官减少腐败
+          } else if (character.type === 'judge') {
+            suppressionEffects += 0.4; // 法官减少腐败
           } else if (character.type === 'inspector') {
-            controlEffects += 3.0; // 监察使减少腐败
-          } else if (character.type === 'sage') {
-            controlEffects += 1.0; // 贤者减少腐败
+            suppressionEffects += 0.6; // 监察使减少腐败
           }
         }
       });
       
       // 科技效果
-      if (gameState.technologies.legal_code?.researched) {
-        dailyIncrease *= 0.8; // 法律法典减少20%基础增长
+      if (gameState.technologies.centralization?.researched) {
+        suppressionEffects += 0.2; // 集权制增加压制效果
       }
       
-      // 资源短缺惩罚
-      if (gameState.resources.food < gameState.resources.population) {
-        dailyIncrease += 2.0; // 食物不足增加腐败
-      }
-      
-      const totalIncrease = dailyIncrease + populationFactor + buildingFactor + buildingCorruption - controlEffects;
+      // 最终腐败增长 = 基础增长 - 压制效果
+      const totalIncrease = corruptionIncrease - suppressionEffects;
       
       return Math.max(0, totalIncrease);
     },

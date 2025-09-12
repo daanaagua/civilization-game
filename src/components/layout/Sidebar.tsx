@@ -12,8 +12,8 @@ export function Sidebar({}: SidebarProps) {
   const { gameState, population, maxPopulation, clickResource } = useGameStore();
   const { resources, stability } = gameState;
   
-  // 计算腐败度（暂时用100-稳定度作为腐败度）
-  const corruption = Math.max(0, 100 - stability);
+  // 使用游戏状态中的实际腐败度
+  const corruption = gameState.corruption;
   
   // 稳定度效果计算
   const getStabilityEffect = (stability: number): string => {
@@ -26,10 +26,10 @@ export function Sidebar({}: SidebarProps) {
   
   // 腐败度效果计算
   const getCorruptionEffect = (corruption: number): string => {
-    if (corruption >= 80) return '资源产出 -30%，建筑成本 +50%';
-    if (corruption >= 60) return '资源产出 -20%，建筑成本 +30%';
-    if (corruption >= 40) return '资源产出 -10%，建筑成本 +15%';
-    if (corruption >= 20) return '资源产出 -5%，建筑成本 +10%';
+    if (corruption > 90) return '资源产出 -60%，建筑成本 +100%';
+    if (corruption > 75) return '资源产出 -40%，建筑成本 +50%';
+    if (corruption > 50) return '资源产出 -25%，建筑成本 +20%';
+    if (corruption > 25) return '资源产出 -10%，无建筑成本影响';
     return '无负面影响';
   };
   
