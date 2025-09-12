@@ -4,6 +4,7 @@ import { useGameStore } from '@/lib/game-store';
 import { formatNumber } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/tooltip';
 import { StatusDetailsTooltip } from '@/components/ui/status-details-tooltip';
+import { ResourceDetailsTooltip } from '@/components/ui/resource-details-tooltip';
 
 interface SidebarProps {}
 
@@ -44,7 +45,7 @@ export function Sidebar({}: SidebarProps) {
           <h3 className="text-sm font-semibold text-gray-300 mb-3">资源</h3>
           <div className="space-y-3">
             {/* 食物 */}
-             <Tooltip content={`食物产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${(gameState.workerAllocations?.farmer || 0) * 0.2}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集食物`}>
+             <Tooltip content={<ResourceDetailsTooltip resource="food" />}>
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gray-800 border-gray-600"
                  onClick={() => clickResource('food')}
@@ -59,7 +60,7 @@ export function Sidebar({}: SidebarProps) {
              </Tooltip>
             
             {/* 木材 */}
-             <Tooltip content={`木材产出详情：\n• 基础产出: +0.04/s\n• 工人产出: +${(gameState.workerAllocations?.lumberjack || 0) * 0.18}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.025, 0)).toFixed(1)}/s\n\n点击可手动收集木材`}>
+             <Tooltip content={<ResourceDetailsTooltip resource="wood" />}>
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gray-800 border-gray-600"
                  onClick={() => clickResource('wood')}
@@ -74,7 +75,7 @@ export function Sidebar({}: SidebarProps) {
              </Tooltip>
             
             {/* 石料 */}
-             <Tooltip content={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${(gameState.workerAllocations?.miner || 0) * 0.15}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料`}>
+             <Tooltip content={<ResourceDetailsTooltip resource="stone" />}>
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gray-800 border-gray-600"
                  onClick={() => clickResource('stone')}
