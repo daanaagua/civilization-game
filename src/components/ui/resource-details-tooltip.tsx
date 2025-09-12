@@ -3,6 +3,7 @@
 import React from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { BUILDINGS } from '@/lib/game-data';
+import { formatNumber } from '@/lib/utils';
 
 interface ResourceDetailsTooltipProps {
   resource: 'food' | 'wood' | 'stone' | 'tools' | 'population' | 'housing';
@@ -136,10 +137,10 @@ export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps
 
   const formatRate = (rate: number) => {
     if (resource === 'population' || resource === 'housing') {
-      return rate.toString();
+      return formatNumber(rate, 0); // 人口和住房显示为整数
     }
     const sign = rate >= 0 ? '+' : '';
-    return `${sign}${rate.toFixed(2)}/s`;
+    return `${sign}${formatNumber(Math.abs(rate))}/s`; // 使用统一的格式化函数，保留两位小数
   };
 
   const getResourceName = () => {
@@ -171,7 +172,7 @@ export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps
       <div className="font-semibold mb-1">{getResourceName()}</div>
       <div className="text-xs mb-2">{getResourceDescription()}</div>
       <div className="text-xs space-y-1">
-        <div>当前数量: {resources[resource]}</div>
+        <div>当前数量: {resource === 'population' ? formatNumber(resources[resource], 0) : formatNumber(resources[resource])}</div>
         {resource !== 'housing' && resource !== 'population' && (
           <div>存储上限: {gameState.resourceLimits[resource]}</div>
         )}
