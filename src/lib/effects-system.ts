@@ -1,0 +1,248 @@
+'use client';
+
+import { GameState } from '@/types/game';
+
+// 效果类型枚举
+export enum EffectType {
+  STABILITY = 'stability',
+  CORRUPTION = 'corruption',
+  POPULATION_GROWTH = 'population_growth',
+  RESOURCE_PRODUCTION = 'resource_production',
+  RESEARCH_SPEED = 'research_speed',
+  BUILDING_COST = 'building_cost',
+  MILITARY_STRENGTH = 'military_strength',
+  INHERITANCE = 'inheritance'
+}
+
+// 效果来源类型
+export enum EffectSourceType {
+  BASE = 'base',
+  TECHNOLOGY = 'technology',
+  BUILDING = 'building',
+  CHARACTER = 'character',
+  ARTIFACT = 'artifact',
+  EVENT = 'event',
+  INHERITANCE = 'inheritance'
+}
+
+// 单个效果接口
+export interface Effect {
+  id: string;
+  name: string;
+  description: string;
+  type: EffectType;
+  value: number;
+  isPercentage: boolean;
+  source: EffectSource;
+  duration?: number; // -1 表示永久，undefined 表示永久，正数表示剩余回合
+  icon?: string;
+}
+
+// 效果来源接口
+export interface EffectSource {
+  type: EffectSourceType;
+  id: string;
+  name: string;
+}
+
+// 效果系统类
+export class EffectsSystem {
+  private effects: Effect[] = [];
+
+  // 添加效果
+  addEffect(effect: Effect): void {
+    // 检查是否已存在相同ID的效果
+    const existingIndex = this.effects.findIndex(e => e.id === effect.id);
+    if (existingIndex >= 0) {
+      // 更新现有效果
+      this.effects[existingIndex] = effect;
+    } else {
+      // 添加新效果
+      this.effects.push(effect);
+    }
+  }
+
+  // 移除效果
+  removeEffect(effectId: string): void {
+    this.effects = this.effects.filter(e => e.id !== effectId);
+  }
+
+  // 获取所有效果
+  getAllEffects(): Effect[] {
+    return [...this.effects];
+  }
+
+  // 按类型获取效果
+  getEffectsByType(type: EffectType): Effect[] {
+    return this.effects.filter(e => e.type === type);
+  }
+
+  // 按来源类型获取效果
+  getEffectsBySourceType(sourceType: EffectSourceType): Effect[] {
+    return this.effects.filter(e => e.source.type === sourceType);
+  }
+
+  // 计算特定类型效果的总值
+  calculateTotalEffect(type: EffectType): { absolute: number; percentage: number } {
+    const effects = this.getEffectsByType(type);
+    let absolute = 0;
+    let percentage = 0;
+
+    effects.forEach(effect => {
+      if (effect.isPercentage) {
+        percentage += effect.value;
+      } else {
+        absolute += effect.value;
+      }
+    });
+
+    return { absolute, percentage };
+  }
+
+  // 更新持续时间（每回合调用）
+  updateDurations(): void {
+    this.effects = this.effects.filter(effect => {
+      if (effect.duration === undefined || effect.duration === -1) {
+        return true; // 永久效果
+      }
+      effect.duration--;
+      return effect.duration > 0;
+    });
+  }
+
+  // 清空所有效果
+  clear(): void {
+    this.effects = [];
+  }
+
+  // 初始化基础效果
+  initializeBaseEffects(gameState: GameState): void {
+    // 清空现有效果
+    this.clear();
+
+    // 添加稳定度效果
+    this.addEffect({
+      id: 'base_stability',
+      name: '稳定度',
+      description: `当前文明的稳定程度：${gameState.stability}%`,
+      type: EffectType.STABILITY,
+      value: gameState.stability,
+      isPercentage: false,
+      source: {
+        type: EffectSourceType.BASE,
+        id: 'stability',
+        name: '基础稳定度'
+      },
+      duration: -1
+    });
+
+    // 添加腐败度效果
+    this.addEffect({
+      id: 'base_corruption',
+      name: '腐败度',
+      description: `文明内部的腐败程度：${gameState.corruption}%`,
+      type: EffectType.CORRUPTION,
+      value: gameState.corruption,
+      isPercentage: false,
+      source: {
+        type: EffectSourceType.BASE,
+        id: 'corruption',
+        name: '基础腐败度'
+      },
+      duration: -1
+    });
+  }
+
+  // 根据游戏状态更新科技效果
+  updateTechnologyEffects(gameState: GameState): void {
+    // 移除所有科技效果
+    this.effects = this.effects.filter(e => e.source.type !== EffectSourceType.TECHNOLOGY);
+
+    // 重新添加已研究科技的效果
+    Object.entries(gameState.technologies).forEach(([techId, tech]) => {
+      if (tech.researched && tech.buffs) {
+        tech.buffs.forEach(buff => {
+          buff.effects.forEach(effect => {
+            this.addEffect({
+              id: `tech_${techId}_${effect.type}`,
+              name: buff.name,
+              description: buff.description,
+              type: effect.type as EffectType,
+              value: effect.value,
+              isPercentage: effect.isPercentage,
+              source: {
+                type: EffectSourceType.TECHNOLOGY,
+                id: techId,
+                name: tech.name
+              }
+            });
+          });
+        });
+      }
+    });
+  }
+
+  // 根据游戏状态更新建筑效果
+  updateBuildingEffects(gameState: GameState): void {
+    // 移除所有建筑效果
+    this.effects = this.effects.filter(e => e.source.type !== EffectSourceType.BUILDING);
+
+    // 重新添加建筑效果
+    Object.entries(gameState.buildings).forEach(([buildingId, building]) => {
+      if (building.count > 0 && building.buffs) {
+        building.buffs.forEach(buff => {
+          buff.effects.forEach(effect => {
+            this.addEffect({
+              id: `building_${buildingId}_${effect.type}`,
+              name: `${buff.name} (${building.count}个)`,
+              description: buff.description,
+              type: effect.type as EffectType,
+              value: effect.value * building.count,
+              isPercentage: effect.isPercentage,
+              source: {
+                type: EffectSourceType.BUILDING,
+                id: buildingId,
+                name: building.name
+              }
+            });
+          });
+        });
+      }
+    });
+  }
+
+  // 获取效果的显示信息
+  getEffectDisplayInfo(effect: Effect): {
+    displayValue: string;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+  } {
+    const isPositive = effect.value > 0;
+    const displayValue = effect.isPercentage 
+      ? `${isPositive ? '+' : ''}${effect.value}%`
+      : `${isPositive ? '+' : ''}${effect.value}`;
+
+    let color: string;
+    let bgColor: string;
+    let borderColor: string;
+
+    // 根据效果类型和数值确定颜色
+    if (effect.type === EffectType.CORRUPTION) {
+      // 腐败度：值越高越坏
+      color = effect.value > 0 ? 'text-red-300' : 'text-green-300';
+      bgColor = effect.value > 0 ? 'bg-red-900/30' : 'bg-green-900/30';
+      borderColor = effect.value > 0 ? 'border-red-500/30' : 'border-green-500/30';
+    } else {
+      // 其他效果：正值好，负值坏
+      color = isPositive ? 'text-green-300' : 'text-red-300';
+      bgColor = isPositive ? 'bg-green-900/30' : 'bg-red-900/30';
+      borderColor = isPositive ? 'border-green-500/30' : 'border-red-500/30';
+    }
+
+    return { displayValue, color, bgColor, borderColor };
+  }
+}
+
+// 全局效果系统实例
+export const globalEffectsSystem = new EffectsSystem();

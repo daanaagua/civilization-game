@@ -6,6 +6,7 @@ import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
 import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced } from '@/lib/enhanced-persistence';
 import { ResourceManager, initializeResourceManager, getResourceManager } from './resource-manager';
+import { globalEffectsSystem, Effect, EffectType, EffectSourceType } from './effects-system';
 
 // 初始游戏状态
 const initialGameState: GameState = {
@@ -249,6 +250,17 @@ interface GameStore {
 
   // 游戏速度控制
   setGameSpeed: (speed: number) => void;
+
+  // 效果系统
+  getEffectsSystem: () => typeof globalEffectsSystem;
+  updateEffectsSystem: () => void;
+  getActiveEffects: () => Effect[];
+  getEffectsByType: (type: EffectType) => Effect[];
+  getEffectsBySource: (sourceType: EffectSourceType, sourceId?: string) => Effect[];
+  addEffect: (effect: Omit<Effect, 'id'>) => void;
+  removeEffect: (effectId: string) => void;
+  removeEffectsBySource: (sourceType: EffectSourceType, sourceId?: string) => void;
+  calculateEffectTotal: (type: EffectType) => number;
 }
 
 // 全局资源管理器实例
@@ -563,6 +575,9 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 更新buff状态（清理过期buff）
       get().updateBuffs();
+      
+      // 更新效果系统
+      get().updateEffectsSystem();
       
       // 更新时间系统
       get().updateTimeSystem();
@@ -2588,6 +2603,44 @@ export const useGameStore = create<GameStore>()(persist(
           gameSpeed: speed,
         },
       }));
+    },
+
+    // 效果系统实现
+    getEffectsSystem: () => {
+      return globalEffectsSystem;
+    },
+
+    updateEffectsSystem: () => {
+      const state = get().gameState;
+      globalEffectsSystem.updateFromGameState(state);
+    },
+
+    getActiveEffects: () => {
+      return globalEffectsSystem.getActiveEffects();
+    },
+
+    getEffectsByType: (type: EffectType) => {
+      return globalEffectsSystem.getEffectsByType(type);
+    },
+
+    getEffectsBySource: (sourceType: EffectSourceType, sourceId?: string) => {
+      return globalEffectsSystem.getEffectsBySource(sourceType, sourceId);
+    },
+
+    addEffect: (effect: Omit<Effect, 'id'>) => {
+      globalEffectsSystem.addEffect(effect);
+    },
+
+    removeEffect: (effectId: string) => {
+      globalEffectsSystem.removeEffect(effectId);
+    },
+
+    removeEffectsBySource: (sourceType: EffectSourceType, sourceId?: string) => {
+      globalEffectsSystem.removeEffectsBySource(sourceType, sourceId);
+    },
+
+    calculateEffectTotal: (type: EffectType) => {
+      return globalEffectsSystem.calculateEffectTotal(type);
     },
   }),
   {

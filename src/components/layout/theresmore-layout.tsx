@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useGameStore, useAchievementStore } from '@/lib/game-store';
+import { useEffects } from '@/hooks/use-effects';
 import { formatNumber, formatTime } from '@/lib/utils';
 import { RebirthConfirmation } from '@/components/ui/rebirth-confirmation';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -226,14 +227,12 @@ const ExplorationPanel = () => {
 
 // 概览面板
 const OverviewPanel = () => {
-  const { gameState, getBuffSummary, handlePauseEventChoice, clearRecentEvents } = useGameStore();
+  const { gameState, handlePauseEventChoice, clearRecentEvents } = useGameStore();
   const { resources, resourceRates } = gameState;
   const [showAchievements, setShowAchievements] = useState(false);
   const [showBuffDetails, setShowBuffDetails] = useState(false);
   const [showEventHistory, setShowEventHistory] = useState(false);
   const [showDetailedEffects, setShowDetailedEffects] = useState(false);
-
-  const buffSummary = getBuffSummary();
 
   const stats = [
     {
@@ -343,15 +342,19 @@ const OverviewPanel = () => {
           </button>
         </div>
         
-        {/* 稳定度和腐败度标签 */}
-        <div className="flex gap-4 mb-4">
-          <StatusDetailsTooltip statusType="stability">
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-900/30 border border-green-500/30 rounded-lg cursor-help">
-              <span className="text-green-300 text-sm font-medium">稳定度</span>
-            </div>
-          </StatusDetailsTooltip>
+        {/* 效果标签 */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {/* 稳定度效果 */}
+          {gameState.stability > 0 && (
+            <StatusDetailsTooltip statusType="stability">
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-900/30 border border-green-500/30 rounded-lg cursor-help">
+                <span className="text-green-300 text-sm font-medium">稳定度</span>
+              </div>
+            </StatusDetailsTooltip>
+          )}
           
-          {gameState.technologies['legal_code']?.researched && (
+          {/* 腐败度效果 - 只有在法律代码研究后且腐败度大于0时显示 */}
+          {gameState.technologies['legal_code']?.researched && gameState.corruption > 0 && (
             <StatusDetailsTooltip statusType="corruption">
               <div className="flex items-center gap-2 px-3 py-2 bg-red-900/30 border border-red-500/30 rounded-lg cursor-help">
                 <span className="text-red-300 text-sm font-medium">腐败度</span>
@@ -360,30 +363,43 @@ const OverviewPanel = () => {
           )}
         </div>
         
-        {buffSummary.sources.length > 0 && (
-          <div className="space-y-3">
-            {buffSummary.sources.map((source, index) => (
-              <div key={index} className="bg-gray-900 p-3 rounded-lg border border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-300 font-medium">{source.name}</span>
-                  <span className="text-xs text-gray-400 px-2 py-1 bg-gray-700 rounded">
-                    {source.type === 'technology' ? '科技' : 
-                     source.type === 'building' ? '建筑' : 
-                     source.type === 'character' ? '人物' : 
-                     source.type === 'inheritance' ? '继承' : '其他'}
-                  </span>
+        {/* 使用新的效果系统显示 */}
+        {(() => {
+          const { effectsBySource } = useEffects();
+          return effectsBySource.length > 0 && (
+            <div className="space-y-3">
+              {effectsBySource.map((source, index) => (
+                <div key={index} className="bg-gray-900 p-3 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-300 font-medium">{source.sourceName}</span>
+                    <span className="text-xs text-gray-400 px-2 py-1 bg-gray-700 rounded">
+                      {source.sourceType === 'technology' ? '科技' : 
+                       source.sourceType === 'building' ? '建筑' : 
+                       source.sourceType === 'character' ? '人物' : 
+                       source.sourceType === 'inheritance' ? '继承' : 
+                       source.sourceType === 'stability' ? '稳定度' :
+                       source.sourceType === 'corruption' ? '腐败度' : '其他'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {source.effects.map((effect, effectIndex) => (
+                      <div 
+                        key={effectIndex} 
+                        className={`text-xs px-2 py-1 rounded border ${
+                          effect.isPositive 
+                            ? 'bg-green-900/30 text-green-300 border-green-500/30'
+                            : 'bg-red-900/30 text-red-300 border-red-500/30'
+                        }`}
+                      >
+                        {effect.name} {effect.description}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {source.buffs.map((buff, buffIndex) => (
-                    <div key={buffIndex} className="text-xs bg-purple-900/30 text-purple-300 px-2 py-1 rounded border border-purple-500/30">
-                      {buff.name}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* 事件栏 */}
