@@ -347,18 +347,14 @@ const OverviewPanel = () => {
         <div className="flex gap-4 mb-4">
           <StatusDetailsTooltip statusType="stability">
             <div className="flex items-center gap-2 px-3 py-2 bg-green-900/30 border border-green-500/30 rounded-lg cursor-help">
-              <Shield className="h-4 w-4 text-green-400" />
               <span className="text-green-300 text-sm font-medium">稳定度</span>
-              <span className="text-green-200 text-sm">{gameState.stability}%</span>
             </div>
           </StatusDetailsTooltip>
           
           {gameState.technologies['legal_code']?.researched && (
             <StatusDetailsTooltip statusType="corruption">
               <div className="flex items-center gap-2 px-3 py-2 bg-red-900/30 border border-red-500/30 rounded-lg cursor-help">
-                <AlertTriangle className="h-4 w-4 text-red-400" />
                 <span className="text-red-300 text-sm font-medium">腐败度</span>
-                <span className="text-red-200 text-sm">{gameState.corruption}%</span>
               </div>
             </StatusDetailsTooltip>
           )}

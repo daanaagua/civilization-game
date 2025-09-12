@@ -208,14 +208,74 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
         )}
         
         {statusType === 'stability' && (
-          <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
-            稳定度影响人口增长和事件触发
+          <div className="mt-2 pt-2 border-t border-gray-600 text-xs">
+            <div className="text-gray-300 font-medium mb-1">当前效果:</div>
+            {currentValue >= 80 ? (
+              <div className="text-green-400">
+                <div>• 人口增长率：+20%</div>
+                <div>• 生产效率：+10%</div>
+                <div>• 科技研发速度：+15%</div>
+                <div>• 贸易收益：+20%</div>
+                <div>• 军队士气：+15%</div>
+              </div>
+            ) : currentValue >= 60 ? (
+              <div className="text-blue-400">
+                <div>• 人口增长率：+10%</div>
+                <div>• 生产效率：+5%</div>
+                <div>• 科技研发速度：+5%</div>
+                <div>• 贸易收益：+10%</div>
+                <div>• 军队士气：+5%</div>
+              </div>
+            ) : currentValue >= 40 ? (
+              <div className="text-gray-400">
+                <div>• 正常状态</div>
+              </div>
+            ) : currentValue >= 20 ? (
+              <div className="text-yellow-400">
+                <div>• 人口增长率：-25%</div>
+                <div>• 生产效率：-10%</div>
+                <div>• 科技研发速度：-15%</div>
+                <div>• 贸易收益：-20%</div>
+                <div>• 军队士气：-10%</div>
+              </div>
+            ) : (
+              <div className="text-red-400">
+                <div>• 人口增长率：-50%</div>
+                <div>• 生产效率：-25%</div>
+                <div>• 科技研发速度：-30%</div>
+                <div>• 贸易收益：-40%</div>
+                <div>• 军队士气：-25%</div>
+              </div>
+            )}
           </div>
         )}
         
         {statusType === 'corruption' && (
-          <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
-            腐败度影响资源产出和建筑成本
+          <div className="mt-2 pt-2 border-t border-gray-600 text-xs">
+            <div className="text-gray-300 font-medium mb-1">当前效果:</div>
+            {currentValue <= 25 ? (
+              <div className="text-gray-400">
+                <div>• 无负面影响</div>
+              </div>
+            ) : currentValue <= 50 ? (
+              <div className="text-yellow-400">
+                <div>• 资源产出：-10%</div>
+                <div>• 建筑成本：+10%</div>
+              </div>
+            ) : currentValue <= 75 ? (
+              <div className="text-orange-400">
+                <div>• 资源产出：-25%</div>
+                <div>• 建筑成本：+25%</div>
+                <div>• 税收效率：-15%</div>
+              </div>
+            ) : (
+              <div className="text-red-400">
+                <div>• 资源产出：-40%</div>
+                <div>• 建筑成本：+50%</div>
+                <div>• 税收效率：-30%</div>
+                <div>• 军队维护：+25%</div>
+              </div>
+            )}
           </div>
         )}
       </div>

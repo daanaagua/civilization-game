@@ -62,9 +62,10 @@ export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps
     else if (corruption > 50) corruptionMultiplier = 0.75;
     else if (corruption > 25) corruptionMultiplier = 0.9;
 
-    // 人口消耗（仅食物）- 每人每日消耗0.05食物
+    // 人口消耗（仅食物）- 每人每日消耗0.05食物，转换为每秒消耗
     if (resource === 'food' && resources.population > 0) {
-      const baseConsumption = resources.population * 0.05;
+      // 每人每日消耗0.05食物，转换为每秒消耗：0.05 / (24 * 60 * 60) * 2天/秒 = 0.05 / 43200
+      const baseConsumption = resources.population * (0.05 / 43200);
       const finalConsumption = baseConsumption * stabilityMultiplier;
       details.push({
         source: '人口消耗',
