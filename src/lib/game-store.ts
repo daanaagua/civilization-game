@@ -2370,6 +2370,15 @@ export const useGameStore = create<GameStore>()(persist(
       }
       return persistedState;
     },
+    onRehydrateStorage: () => {
+      return (state) => {
+        if (state) {
+          // 强制设置游戏为暂停状态，无论之前保存的状态如何
+          state.gameState.isPaused = true;
+          console.log('状态恢复完成 - 强制设置为暂停状态');
+        }
+      };
+    },
   }
 ));
 

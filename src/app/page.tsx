@@ -24,17 +24,16 @@ export default function Home() {
       // 等待一个tick确保persist中间件已经恢复状态
       const timer = setTimeout(() => {
         // Zustand persist 会自动恢复状态，无需手动调用loadGame
-        // 启动游戏
-        startGame();
+        // 不自动启动游戏，保持暂停状态让用户手动开始
         // 初始化持久化功能（自动保存等）
         initializePersistence();
         setIsInitialized(true);
-        console.log('游戏初始化完成 - Zustand persist 自动处理状态恢复');
+        console.log('游戏初始化完成 - 保持暂停状态等待用户操作');
       }, 100); // 稍微增加延迟确保persist完全恢复
       
       return () => clearTimeout(timer);
     }
-  }, [startGame, initializePersistence]);
+  }, [initializePersistence]);
   
   // 在状态恢复前显示加载状态
   if (!isInitialized) {
