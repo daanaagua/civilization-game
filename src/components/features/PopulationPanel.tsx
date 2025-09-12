@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 import { formatNumber } from '@/utils/format';
 
 export function PopulationPanel() {

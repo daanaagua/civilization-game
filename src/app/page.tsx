@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 import { useGameLoop } from '@/hooks/use-game-loop';
 import { GameHeader } from '@/components/layout/GameHeader';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -21,15 +21,11 @@ export default function Home() {
   useEffect(() => {
     // 等待一个tick确保persist中间件已经恢复状态
     const timer = setTimeout(() => {
-      // 如果没有保存的游戏时间，则启动新游戏
-      if (gameStartTime === 0) {
-        startGame();
-      }
       setIsInitialized(true);
     }, 0);
     
     return () => clearTimeout(timer);
-  }, [startGame, gameStartTime]);
+  }, []);
   
   // 在状态恢复前显示加载状态
   if (!isInitialized) {

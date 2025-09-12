@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 
 export default function TestPersistence() {
   const {

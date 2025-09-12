@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 import { formatNumber } from '@/utils/format';
 import { 
   Swords, 

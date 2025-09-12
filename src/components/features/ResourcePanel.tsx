@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 
 // 临时实现格式化函数
 const formatResource = (amount: number, maxStorage?: number): string => {

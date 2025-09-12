@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useGameStore, useAchievementStore } from '@/lib/store/gameStore';
+import { useGameStore, useAchievementStore } from '@/lib/game-store';
 import { formatNumber, formatTime } from '@/lib/utils';
 import { RebirthConfirmation } from '@/components/ui/rebirth-confirmation';
 import { Tooltip } from '@/components/ui/tooltip';

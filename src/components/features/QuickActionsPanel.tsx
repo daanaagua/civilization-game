@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 // 临时实现canAffordCost函数
 const canAffordCost = (
   costs: Array<{ resourceId: string; amount: number }>,

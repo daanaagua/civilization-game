@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 
 interface SidebarProps {}
 
@@ -16,7 +16,10 @@ const formatNumber = (num: number): string => {
 };
 
 export function Sidebar({}: SidebarProps) {
-  const { resources, stability, population, maxPopulation } = useGameStore();
+  const { gameState } = useGameStore();
+  const { resources, stability } = gameState;
+  const population = resources.population;
+  const maxPopulation = gameState.resourceLimits.population;
   
   // 计算腐败度（暂时用100-稳定度作为腐败度）
   const corruption = Math.max(0, 100 - stability);
@@ -33,19 +36,19 @@ export function Sidebar({}: SidebarProps) {
             <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
               <span className="text-sm text-gray-300">食物</span>
               <span className="text-sm font-medium text-white">
-                {formatNumber(resources.food?.amount || 0)}/{formatNumber(resources.food?.capacity || 100)}
+                {formatNumber(resources.food || 0)}/{formatNumber(gameState.resourceLimits.food || 100)}
               </span>
             </div>
             <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
               <span className="text-sm text-gray-300">木材</span>
               <span className="text-sm font-medium text-white">
-                {formatNumber(resources.wood?.amount || 0)}/{formatNumber(resources.wood?.capacity || 200)}
+                {formatNumber(resources.wood || 0)}/{formatNumber(gameState.resourceLimits.wood || 200)}
               </span>
             </div>
             <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
               <span className="text-sm text-gray-300">石料</span>
               <span className="text-sm font-medium text-white">
-                {formatNumber(resources.stone?.amount || 0)}/{formatNumber(resources.stone?.capacity || 150)}
+                {formatNumber(resources.stone || 0)}/{formatNumber(gameState.resourceLimits.stone || 150)}
               </span>
             </div>
             <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">

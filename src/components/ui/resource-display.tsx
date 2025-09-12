@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 import { Resources } from '@/types/game';
 import { formatNumber } from '@/utils/format';
 import { Tooltip } from './tooltip';

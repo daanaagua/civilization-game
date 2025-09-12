@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 import { Character, CharacterType } from '@/types/game';
 import { formatNumber } from '@/utils/format';
 import { 

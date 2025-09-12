@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Clock, History, AlertCircle, HelpCircle, ChevronRight, X } from 'lucide-react';
+import { useGameStore } from '@/lib/game-store';
 
 // 事件类型枚举
 export enum EventType {
@@ -54,6 +55,7 @@ interface EventItemProps {
 
 function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: EventItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const gameState = useGameStore(state => state.gameState);
 
   const getPriorityColor = (priority: EventPriority) => {
     switch (priority) {
@@ -76,8 +78,12 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
   };
 
   const formatTimestamp = (timestamp: number) => {
-    const now = Date.now();
-    const diff = now - timestamp;
+    // 使用游戏时间而不是系统时间
+    const gameStartTime = gameState.gameStartTime;
+    const currentGameTime = gameState.gameTime * 1000; // 转换为毫秒
+    const eventGameTime = timestamp - gameStartTime; // 事件发生时的游戏时间偏移
+    const diff = currentGameTime - eventGameTime; // 游戏时间差
+    
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);

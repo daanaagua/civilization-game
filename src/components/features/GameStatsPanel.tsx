@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 // 临时实现格式化函数
 const formatTime = (seconds: number): string => {
   if (seconds < 60) {
@@ -36,7 +36,8 @@ const formatNumber = (num: number, decimals: number = 1): string => {
 };
 
 export function GameStatsPanel() {
-  const { statistics, gameStartTime, inheritancePoints } = useGameStore();
+  const { gameState } = useGameStore();
+  const { statistics, gameStartTime, inheritancePoints } = gameState;
 
   // 使用store中的totalPlayTime避免水合错误
   const playTime = statistics.totalPlayTime;

@@ -3,13 +3,14 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { GameState, Resources, ResourceLimits, Technology, Building, Character, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent } from '@/types/game';
 import { BUILDINGS, TECHNOLOGIES, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
+import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
 
 // 初始游戏状态
 const initialGameState: GameState = {
   civilizationName: '原始部落',
   currentAge: 'stone',
   gameTime: 0,
-  isPaused: false,
+  isPaused: true,
   
   resources: {
     food: 10,
@@ -63,6 +64,22 @@ const initialGameState: GameState = {
     animationsEnabled: true,
     gameSpeed: 1,
   },
+
+  // 统计数据
+  statistics: {
+    totalPlayTime: 0,
+    totalResourcesCollected: {},
+    totalBuildingsBuilt: {},
+    totalTechnologiesResearched: 0,
+    totalEventsTriggered: 0,
+    totalAchievementsUnlocked: 0,
+    currentGeneration: 1
+  },
+
+  // 游戏时间相关
+  gameStartTime: Date.now(),
+  lastUpdateTime: Date.now(),
+  gameSpeed: 1,
 };
 
 const initialUIState: UIState = {
@@ -194,6 +211,18 @@ interface GameStore {
   showInheritanceShop: () => void;
   hideInheritanceShop: () => void;
   clearStorage: () => void;
+
+  // 持久化功能
+  saveGame: () => void;
+  loadGame: () => void;
+  initializePersistence: () => void;
+
+  // 统计数据管理
+  updateStatistics: (updates: Partial<GameState['statistics']>) => void;
+  incrementStatistic: (key: keyof GameState['statistics'], value?: number) => void;
+
+  // 游戏速度控制
+  setGameSpeed: (speed: number) => void;
 }
 
 export const useGameStore = create<GameStore>()(persist(
@@ -214,7 +243,8 @@ export const useGameStore = create<GameStore>()(persist(
       set((state) => ({
         gameState: {
           ...state.gameState,
-          isPaused: false
+          isPaused: false,
+          gameStartTime: state.gameState.gameStartTime === 0 ? Date.now() : state.gameState.gameStartTime
         },
         isRunning: true,
         lastUpdateTime: Date.now()
@@ -269,6 +299,8 @@ export const useGameStore = create<GameStore>()(persist(
       const gameSpeed = gameState.settings.gameSpeed;
       const adjustedDelta = deltaTime * gameSpeed;
       
+
+      
       // 计算天数变化
       const oldDays = Math.floor(gameState.gameTime / 86400);
       const newGameTime = gameState.gameTime + adjustedDelta;
@@ -313,6 +345,9 @@ export const useGameStore = create<GameStore>()(persist(
           
           newStability = Math.max(0, Math.min(100, newStability + populationStabilityChange));
         }
+        
+        // 更新游戏统计数据
+        state.gameState.statistics.totalPlayTime += adjustedDelta;
         
         // 重新计算基础稳定度（每次更新都计算）
         const population = state.gameState.resources.population;
@@ -2166,19 +2201,95 @@ export const useGameStore = create<GameStore>()(persist(
         window.location.reload();
       }
     },
+
+    // 持久化功能实现
+    saveGame: () => {
+      const state = get();
+      saveGameState(state.gameState);
+    },
+
+    loadGame: () => {
+      const loadedState = loadGameState();
+      if (loadedState) {
+        set((state) => ({
+          ...state,
+          gameState: loadedState,
+        }));
+      }
+    },
+
+    initializePersistence: () => {
+      const state = get();
+      
+      // 初始化自动保存管理器
+      const autoSaveManager = new AutoSaveManager();
+      
+      // 设置自动保存回调
+      autoSaveManager.setAutoSaveCallback(() => {
+        get().saveGame();
+      });
+      
+      // 启动自动保存
+      if (state.gameState.settings.autoSave) {
+        autoSaveManager.startAutoSave();
+      }
+      
+      // 尝试加载游戏状态
+      get().loadGame();
+    },
+
+    // 统计数据管理
+    updateStatistics: (updates) => {
+      set((state) => ({
+        ...state,
+        gameState: {
+          ...state.gameState,
+          statistics: {
+            ...state.gameState.statistics,
+            ...updates,
+          },
+        },
+      }));
+    },
+
+    incrementStatistic: (key, value = 1) => {
+      set((state) => {
+        const currentValue = state.gameState.statistics[key];
+        const newValue = typeof currentValue === 'number' ? currentValue + value : value;
+        
+        return {
+          ...state,
+          gameState: {
+            ...state.gameState,
+            statistics: {
+              ...state.gameState.statistics,
+              [key]: newValue,
+            },
+          },
+        };
+      });
+    },
+
+    // 游戏速度控制
+    setGameSpeed: (speed) => {
+      set((state) => ({
+        ...state,
+        gameState: {
+          ...state.gameState,
+          gameSpeed: speed,
+        },
+      }));
+    },
   }),
   {
     name: 'civilization-game-storage',
     version: 1,
     storage: createJSONStorage(() => localStorage),
     partialize: (state) => ({
-      gameState: {
-        ...state.gameState,
-        isPaused: state.gameState.isPaused // 保持原有的暂停状态
-      },
+      gameState: state.gameState, // 保存完整的游戏状态
       uiState: state.uiState,
       army: state.army,
-      isRunning: state.isRunning, // 保持原有的运行状态
+      isRunning: state.isRunning,
       lastUpdateTime: state.lastUpdateTime
     }),
     migrate: (persistedState: any, version: number) => {

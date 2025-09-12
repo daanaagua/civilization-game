@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 import { BUILDINGS } from '@/lib/game-data';
 import { Building, BuildingType } from '@/types/game';
 import { formatNumber, formatResourceCost } from '@/utils/format';

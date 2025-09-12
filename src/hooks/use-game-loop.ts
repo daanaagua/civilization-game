@@ -1,25 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 
 /**
  * 游戏主循环Hook
  * 负责管理游戏的时间更新和资源生产
  */
 export const useGameLoop = () => {
-  const { 
-    isPaused,
-    updateGame,
-    pauseGame,
-    resumeGame
-  } = useGameStore();
-  
-  const toggleGamePause = () => {
-    if (isPaused) {
-      resumeGame();
-    } else {
-      pauseGame();
-    }
-  };
+  const isRunning = useGameStore(state => state.isRunning);
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(Date.now());
   
@@ -28,8 +15,9 @@ export const useGameLoop = () => {
       const currentTime = Date.now();
       const deltaTime = (currentTime - lastTimeRef.current) / 1000; // 转换为秒
       
-      if (!isPaused && deltaTime > 0) {
-        updateGame(deltaTime);
+      if (isRunning && deltaTime > 0) {
+        // 直接从store获取最新的updateGameTime函数
+        useGameStore.getState().updateGameTime(deltaTime);
       }
       
       lastTimeRef.current = currentTime;
@@ -43,14 +31,15 @@ export const useGameLoop = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPaused, updateGame]);
+  }, [isRunning]);
   
   // 空格键快捷键监听
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault();
-        toggleGamePause();
+        // 直接从store获取最新的togglePause函数
+        useGameStore.getState().togglePause();
       }
     };
     
@@ -59,7 +48,7 @@ export const useGameLoop = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyPress);
     };
-  }, [isPaused, pauseGame, resumeGame]);
+  }, []);
   
   // 页面可见性变化时暂停/恢复游戏
   useEffect(() => {

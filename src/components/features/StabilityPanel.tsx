@@ -1,6 +1,6 @@
 'use client';
 
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 
 export function StabilityPanel() {
   const { stability, maxStability } = useGameStore();

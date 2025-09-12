@@ -1,7 +1,7 @@
 'use client';
 
 import { Play, Pause, RotateCcw, Settings } from 'lucide-react';
-import { useGameStore } from '@/lib/store/gameStore';
+import { useGameStore } from '@/lib/game-store';
 
 // 临时实现格式化函数
 const formatTime = (seconds: number): string => {
@@ -23,20 +23,15 @@ const formatTime = (seconds: number): string => {
 export function GameHeader() {
   const {
     isPaused,
+    isRunning,
     gameStartTime,
-    statistics,
-    pauseGame,
-    resumeGame,
+    gameState,
+    togglePause,
     resetGame,
   } = useGameStore();
 
-  const togglePause = () => {
-    if (isPaused) {
-      resumeGame();
-    } else {
-      pauseGame();
-    }
-  };
+  // 从gameState中获取statistics，避免未定义错误
+  const statistics = gameState?.statistics || { totalPlayTime: 0 };
 
   // 使用store中的totalPlayTime避免水合错误
   const playTime = statistics.totalPlayTime;
@@ -72,13 +67,13 @@ export function GameHeader() {
           <button
             onClick={togglePause}
             className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition-colors font-medium ${
-              isPaused 
+              !isRunning 
                 ? 'bg-green-600 hover:bg-green-700 text-white' 
                 : 'bg-yellow-600 hover:bg-yellow-700 text-white'
             }`}
           >
-            {isPaused ? <Play size={20} /> : <Pause size={20} />}
-            <span>{isPaused ? '开始' : '暂停'}</span>
+            {!isRunning ? <Play size={20} /> : <Pause size={20} />}
+            <span>{!isRunning ? '开始' : '暂停'}</span>
           </button>
 
           <button
