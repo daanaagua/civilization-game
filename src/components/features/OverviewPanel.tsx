@@ -8,7 +8,7 @@ import { useEffects } from '@/hooks/use-effects';
 import { useEvents } from '@/hooks/use-events';
 
 export function OverviewPanel() {
-  const { effects } = useEffects();
+  const { activeEffects } = useEffects();
   const { events, markAsRead, handleChoice } = useEvents();
   
   return (
@@ -22,7 +22,7 @@ export function OverviewPanel() {
       </div>
 
       {/* 当前效果面板 */}
-      <EffectsPanel effects={effects} />
+      <EffectsPanel effects={activeEffects} />
       
       {/* 事件面板 */}
       <EventsPanel 
