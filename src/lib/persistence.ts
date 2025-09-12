@@ -3,7 +3,7 @@
  * 负责游戏状态的保存和加载
  */
 
-const STORAGE_KEY = 'civilization-idle-game';
+const STORAGE_KEY = 'civilization-game-storage';
 const SAVE_INTERVAL = 5000; // 每5秒自动保存
 const VERSION = 1;
 

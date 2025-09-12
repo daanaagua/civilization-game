@@ -2298,18 +2298,14 @@ export const useGameStore = create<GameStore>()(persist(
       // 初始化自动保存管理器
       const autoSaveManager = new AutoSaveManager();
       
-      // 设置自动保存回调
-      autoSaveManager.setAutoSaveCallback(() => {
-        get().saveGame();
-      });
-      
       // 启动自动保存
       if (state.gameState.settings.autoSave) {
-        autoSaveManager.startAutoSave();
+        autoSaveManager.start(() => {
+          return get().gameState;
+        });
       }
       
-      // 尝试加载游戏状态
-      get().loadGame();
+      console.log('持久化功能已初始化');
     },
 
     // 统计数据管理

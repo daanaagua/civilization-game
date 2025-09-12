@@ -11,21 +11,24 @@ import { OverviewPanel } from '@/components/features/OverviewPanel';
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
   const gameStartTime = useGameStore(state => state.gameStartTime);
+  const initializePersistence = useGameStore(state => state.initializePersistence);
   const [activeTab, setActiveTab] = useState('overview');
   const [isInitialized, setIsInitialized] = useState(false);
   
   // 启动游戏循环
   useGameLoop();
   
-  // 初始化游戏
+  // 初始化游戏和持久化功能
   useEffect(() => {
     // 等待一个tick确保persist中间件已经恢复状态
     const timer = setTimeout(() => {
+      // 初始化持久化功能（自动保存等）
+      initializePersistence();
       setIsInitialized(true);
     }, 0);
     
     return () => clearTimeout(timer);
-  }, []);
+  }, [initializePersistence]);
   
   // 在状态恢复前显示加载状态
   if (!isInitialized) {
