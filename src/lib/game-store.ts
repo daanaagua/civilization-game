@@ -2283,26 +2283,55 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     loadGame: () => {
-      // Zustand persist 会自动处理加载，这里只是日志记录
-      console.log('Zustand persist 会自动加载游戏状态');
+      try {
+        const savedData = loadGameState();
+        if (savedData) {
+          console.log('从localStorage加载游戏状态');
+          set((state) => ({
+            ...state,
+            gameState: {
+              ...savedData.gameState,
+              isPaused: true, // 确保加载后游戏为暂停状态
+            },
+            uiState: savedData.uiState || state.uiState,
+            army: savedData.army || state.army,
+            isRunning: false,
+            lastUpdateTime: Date.now(),
+          }));
+          return true;
+        } else {
+          console.log('没有找到保存的游戏数据，使用默认状态');
+          return false;
+        }
+      } catch (error) {
+        console.error('加载游戏状态失败:', error);
+        return false;
+      }
     },
 
     initializePersistence: () => {
       const state = get();
       
-      // 初始化自动保存管理器（可选功能）
+      // 初始化自动保存管理器
       const autoSaveManager = new AutoSaveManager();
       
-      // 启动自动保存（实际上Zustand persist已经处理了持久化）
+      // 启动自动保存（每10秒保存一次）
       if (state.gameState.settings.autoSave) {
         autoSaveManager.start(() => {
-          // 返回当前状态，但实际保存由Zustand persist处理
-          console.log('自动保存触发 - Zustand persist 自动处理');
-          return get().gameState;
+          const currentState = get();
+          console.log('自动保存触发 - 保存当前游戏状态');
+          // 返回完整的状态用于保存
+          return {
+            gameState: currentState.gameState,
+            uiState: currentState.uiState,
+            army: currentState.army,
+            isRunning: false, // 保存时确保游戏为暂停状态
+            lastUpdateTime: currentState.lastUpdateTime
+          };
         });
       }
       
-      console.log('持久化功能已初始化 - 使用Zustand persist');
+      console.log('持久化功能已初始化 - 每10秒自动保存');
     },
 
     // 统计数据管理

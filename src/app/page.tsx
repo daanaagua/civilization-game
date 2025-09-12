@@ -11,6 +11,7 @@ import { OverviewPanel } from '@/components/features/OverviewPanel';
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
   const gameStartTime = useGameStore(state => state.gameStartTime);
+  const loadGame = useGameStore(state => state.loadGame);
   const initializePersistence = useGameStore(state => state.initializePersistence);
   const [activeTab, setActiveTab] = useState('overview');
   const [isInitialized, setIsInitialized] = useState(false);
@@ -23,17 +24,24 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       // 等待一个tick确保persist中间件已经恢复状态
       const timer = setTimeout(() => {
-        // Zustand persist 会自动恢复状态，无需手动调用loadGame
-        // 不自动启动游戏，保持暂停状态让用户手动开始
-        // 初始化持久化功能（自动保存等）
+        // 尝试加载保存的游戏状态
+        const loaded = loadGame();
+        if (loaded) {
+          console.log('成功加载保存的游戏状态');
+        } else {
+          console.log('使用默认游戏状态');
+        }
+        
+        // 初始化持久化功能（自动保存）
         initializePersistence();
         setIsInitialized(true);
-        console.log('游戏初始化完成 - 保持暂停状态等待用户操作');
+        console.log('游戏初始化完成 - 每10秒自动保存');
       }, 100); // 稍微增加延迟确保persist完全恢复
-      
+     }, 100);
+
       return () => clearTimeout(timer);
     }
-  }, [initializePersistence]);
+  }, [loadGame, initializePersistence]);
   
   // 在状态恢复前显示加载状态
   if (!isInitialized) {

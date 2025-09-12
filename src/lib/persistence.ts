@@ -4,7 +4,7 @@
  */
 
 const STORAGE_KEY = 'civilization-game-storage';
-const SAVE_INTERVAL = 5000; // 每5秒自动保存
+const SAVE_INTERVAL = 10000; // 每10秒自动保存
 const VERSION = 1;
 
 export interface SaveData {
