@@ -44,7 +44,7 @@ const initialGameState: GameState = {
     wood: 200,
     stone: 150,
     tools: 50,
-    population: 10,
+    population: 1,
     housing: 10,
   },
   
@@ -249,6 +249,14 @@ export const useGameStore = create<GameStore>()(persist(
     
     get isPaused() {
       return get().gameState.isPaused;
+    },
+    
+    get population() {
+      return get().gameState.resources.population;
+    },
+    
+    get maxPopulation() {
+      return get().gameState.resourceLimits.population;
     },
     
 
