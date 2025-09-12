@@ -2,6 +2,7 @@
 
 import { Play, Pause, RotateCcw, Settings } from 'lucide-react';
 import { useGameStore } from '@/lib/game-store';
+import { CompactTimeDisplay } from '@/components/features/TimeDisplay';
 
 // 临时实现格式化函数
 const formatTime = (seconds: number): string => {

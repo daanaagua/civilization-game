@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useGameTime } from '@/hooks/use-game-time';
+import { useGameStore } from '@/lib/game-store';
 import { Season } from '@/lib/time-system';
 
 interface TimeDisplayProps {
@@ -98,13 +99,13 @@ export function TimeDisplay({
  * 紧凑版时间显示组件
  */
 export function CompactTimeDisplay({ className = '' }: { className?: string }) {
-  const { formattedDate, seasonName, season } = useGameTime();
-  const seasonStyle = getSeasonStyle(season);
+  const { formatGameDate } = useGameStore();
+  const gameDate = formatGameDate();
 
   return (
     <div className={`flex items-center space-x-2 ${className}`}>
-      <span className="text-sm font-mono">{formattedDate}</span>
-      <span className="text-xs">{seasonStyle.icon}</span>
+      <span className="text-lg">📅</span>
+      <span className="text-sm font-mono">{gameDate}</span>
     </div>
   );
 }

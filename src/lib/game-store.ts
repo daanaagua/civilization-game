@@ -16,8 +16,8 @@ const initialGameState: GameState = {
   timeSystem: {
     startTime: Date.now(),
     currentDate: {
-      year: 0,
-      month: 0,
+      year: 1,
+      month: 1,
       day: 1
     }
   },
@@ -490,10 +490,10 @@ export const useGameStore = create<GameStore>()(persist(
         const gameTime = state.gameState.gameTime;
         const totalDays = Math.floor(gameTime * 2); // 1秒 = 2天
         
-        // 计算年、月、日
-        const year = Math.floor(totalDays / 360);
+        // 计算年、月、日（从1年1月1日开始）
+        const year = Math.floor(totalDays / 360) + 1;
         const remainingDays = totalDays % 360;
-        const month = Math.floor(remainingDays / 30);
+        const month = Math.floor(remainingDays / 30) + 1;
         const day = (remainingDays % 30) + 1;
         
         return {
@@ -516,10 +516,21 @@ export const useGameStore = create<GameStore>()(persist(
           ...state.gameState,
           timeSystem: {
             startTime: Date.now(),
-            currentDate: { year: 0, month: 0, day: 1 }
+            currentDate: {
+              year: 1,
+              month: 1,
+              day: 1
+            }
           }
         }
       }));
+    },
+
+    // 格式化日期显示
+    formatGameDate: () => {
+      const state = get();
+      const { year, month, day } = state.gameState.timeSystem.currentDate;
+      return `${year}年${month}月${day}日`;
     },
 
     addResources: (resources: Partial<Resources>) => {
