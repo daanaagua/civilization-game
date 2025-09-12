@@ -4,6 +4,7 @@ import { useGameStore } from '@/lib/game-store';
 import { Resources } from '@/types/game';
 import { formatNumber } from '@/utils/format';
 import { Tooltip } from './tooltip';
+import { ResourceDetailsTooltip } from './resource-details-tooltip';
 import { 
   Apple, 
   TreePine, 
@@ -83,24 +84,7 @@ export const ResourceDisplay = ({ resource, showRate = false, className = '' }: 
   const limit = resourceLimits[resource];
   
   const tooltipContent = (
-    <div className="max-w-xs">
-      <div className="font-semibold mb-1">{config.name}</div>
-      <div className="text-xs mb-2">{config.description}</div>
-      <div className="text-xs space-y-1">
-        <div>当前数量: {formatNumber(amount)}</div>
-        {resource !== 'housing' && (
-          <div>存储上限: {formatNumber(limit)}</div>
-        )}
-        {showRate && rate !== 0 && (
-          <div className={rate > 0 ? 'text-green-400' : 'text-red-400'}>
-            变化速率: {rate > 0 ? '+' : ''}{formatNumber(rate, 1)}/秒
-          </div>
-        )}
-        {resource === 'population' && (
-          <div>住房容量: {formatNumber(resources.housing)}</div>
-        )}
-      </div>
-    </div>
+    <ResourceDetailsTooltip resource={resource} />
   );
 
   return (

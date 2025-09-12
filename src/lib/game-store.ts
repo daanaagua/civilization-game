@@ -486,6 +486,13 @@ export const useGameStore = create<GameStore>()(persist(
         
         const resourceLimits = calculateResourceLimits();
         
+        // 计算食物腐烂（仅在未解锁保鲜技术时）
+        let foodRotLoss = 0;
+        const hasPreservation = state.gameState.technologies['food_preservation']?.researched;
+        if (!hasPreservation && state.gameState.resources.food > 0) {
+          foodRotLoss = state.gameState.resources.food * 0.001 * adjustedDelta; // 0.1%每秒腐烂
+        }
+
         return {
           gameState: {
             ...state.gameState,
@@ -495,7 +502,7 @@ export const useGameStore = create<GameStore>()(persist(
             resourceLimits,
             resources: {
               ...state.gameState.resources,
-              food: Math.max(0, Math.min(resourceLimits.food, state.gameState.resources.food + state.gameState.resourceRates.food * adjustedDelta * corruptionEfficiency)),
+              food: Math.max(0, Math.min(resourceLimits.food, state.gameState.resources.food + state.gameState.resourceRates.food * adjustedDelta * corruptionEfficiency - foodRotLoss)),
               wood: Math.max(0, Math.min(resourceLimits.wood, state.gameState.resources.wood + state.gameState.resourceRates.wood * adjustedDelta * corruptionEfficiency)),
               stone: Math.max(0, Math.min(resourceLimits.stone, state.gameState.resources.stone + state.gameState.resourceRates.stone * adjustedDelta * corruptionEfficiency)),
               tools: Math.max(0, Math.min(resourceLimits.tools, state.gameState.resources.tools + state.gameState.resourceRates.tools * adjustedDelta * corruptionEfficiency)),

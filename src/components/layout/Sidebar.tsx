@@ -3,6 +3,7 @@
 import { useGameStore } from '@/lib/game-store';
 import { formatNumber } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/tooltip';
+import { StatusDetailsTooltip } from '@/components/ui/status-details-tooltip';
 
 interface SidebarProps {}
 
@@ -108,7 +109,7 @@ export function Sidebar({}: SidebarProps) {
           <h3 className="text-sm font-semibold text-gray-300 mb-3">状态</h3>
           <div className="space-y-3">
             {/* 稳定度 */}
-             <Tooltip content={`当前稳定度: ${stability}%\n\n效果: ${getStabilityEffect(stability)}\n\n稳定度影响人口增长和资源产出效率`}>
+            <StatusDetailsTooltip statusType="stability">
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
                >
@@ -117,10 +118,10 @@ export function Sidebar({}: SidebarProps) {
                  </div>
                  <span className="font-bold">{stability}%</span>
                </div>
-             </Tooltip>
+            </StatusDetailsTooltip>
             
             {/* 腐败度 */}
-             <Tooltip content={`当前腐败度: ${corruption}%\n\n效果: ${getCorruptionEffect(corruption)}\n\n腐败度会降低资源产出并增加建筑成本`}>
+            <StatusDetailsTooltip statusType="corruption">
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
                >
@@ -129,7 +130,7 @@ export function Sidebar({}: SidebarProps) {
                  </div>
                  <span className="font-bold">{corruption}%</span>
                </div>
-             </Tooltip>
+            </StatusDetailsTooltip>
           </div>
         </div>
       </div>
