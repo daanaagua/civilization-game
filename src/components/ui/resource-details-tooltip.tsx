@@ -5,23 +5,69 @@ import { useGameStore } from '@/lib/game-store';
 import { BUILDINGS } from '@/lib/game-data';
 
 interface ResourceDetailsTooltipProps {
-  resourceType: 'food' | 'wood' | 'stone' | 'tools';
-  children: React.ReactNode;
+  resource: 'food' | 'wood' | 'stone' | 'tools' | 'population' | 'housing';
 }
 
-export function ResourceDetailsTooltip({ resourceType, children }: ResourceDetailsTooltipProps) {
+export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps) {
   const { gameState } = useGameStore();
-  const { buildings, resources, technologies } = gameState;
+  const { buildings, resources, technologies, stability, corruption } = gameState;
 
   const calculateDetailedRates = () => {
     const details: { source: string; rate: number; color: string }[] = [];
 
+    // 如果是人口或住房，显示不同的信息
+    if (resource === 'population') {
+      details.push({
+        source: '当前人口',
+        rate: resources.population,
+        color: 'text-blue-400'
+      });
+      details.push({
+        source: '住房容量',
+        rate: resources.housing,
+        color: 'text-gray-400'
+      });
+      return details;
+    }
+
+    if (resource === 'housing') {
+      // 计算住房来源
+      Object.values(buildings).forEach((building) => {
+        const buildingData = BUILDINGS[building.buildingId];
+        if (buildingData?.provides?.housing) {
+          const housingProvided = buildingData.provides.housing * building.count;
+          if (housingProvided > 0) {
+            details.push({
+              source: buildingData.name,
+              rate: housingProvided,
+              color: 'text-green-400'
+            });
+          }
+        }
+      });
+      return details;
+    }
+
+    // 计算稳定度和腐败度的总体影响
+    let stabilityMultiplier = 1;
+    if (stability >= 80) stabilityMultiplier = 1.1;
+    else if (stability >= 60) stabilityMultiplier = 1.05;
+    else if (stability < 40) stabilityMultiplier = 0.95;
+    else if (stability < 20) stabilityMultiplier = 0.9;
+
+    let corruptionMultiplier = 1;
+    if (corruption > 90) corruptionMultiplier = 0.4;
+    else if (corruption > 75) corruptionMultiplier = 0.6;
+    else if (corruption > 50) corruptionMultiplier = 0.75;
+    else if (corruption > 25) corruptionMultiplier = 0.9;
+
     // 人口消耗（仅食物）
-    if (resourceType === 'food' && resources.population > 0) {
-      const consumptionRate = resources.population * 0.2;
+    if (resource === 'food' && resources.population > 0) {
+      const baseConsumption = resources.population * 0.2;
+      const finalConsumption = baseConsumption * stabilityMultiplier;
       details.push({
         source: '人口消耗',
-        rate: -consumptionRate,
+        rate: -finalConsumption,
         color: 'text-red-400'
       });
     }
@@ -29,7 +75,7 @@ export function ResourceDetailsTooltip({ resourceType, children }: ResourceDetai
     // 建筑产出
     Object.values(buildings).forEach((building) => {
       const buildingData = BUILDINGS[building.buildingId];
-      if (buildingData?.produces?.[resourceType]) {
+      if (buildingData?.produces?.[resource]) {
         let efficiency = 1;
         
         // 计算工人效率
@@ -39,21 +85,21 @@ export function ResourceDetailsTooltip({ resourceType, children }: ResourceDetai
           efficiency = Math.max(0.1, assignedWorkers / maxWorkers);
         }
         
-        const baseRate = buildingData.produces[resourceType] * building.count * efficiency;
+        let baseRate = buildingData.produces[resource] * building.count * efficiency;
         
         // 应用科技加成
-        let techMultiplier = 1;
         Object.values(technologies).forEach((tech) => {
           if (tech.researched && tech.effects) {
             tech.effects.forEach((effect) => {
-              if (effect.type === 'resource_multiplier' && effect.target === resourceType) {
-                techMultiplier *= effect.value;
+              if (effect.type === 'resource_multiplier' && effect.target === resource) {
+                baseRate *= effect.value;
               }
             });
           }
         });
         
-        const finalRate = baseRate * techMultiplier;
+        // 应用稳定度和腐败度影响
+        const finalRate = baseRate * stabilityMultiplier * corruptionMultiplier;
         
         if (finalRate > 0) {
           const workerInfo = buildingData.canAssignWorkers 
@@ -70,7 +116,7 @@ export function ResourceDetailsTooltip({ resourceType, children }: ResourceDetai
     });
 
     // 食物腐烂（仅在未解锁保鲜技术时）
-    if (resourceType === 'food' && resources.food > 0) {
+    if (resource === 'food' && resources.food > 0) {
       const hasPreservation = technologies['food_preservation']?.researched;
       if (!hasPreservation) {
         const rotRate = resources.food * 0.001; // 0.1%每秒腐烂
@@ -89,44 +135,70 @@ export function ResourceDetailsTooltip({ resourceType, children }: ResourceDetai
   const totalRate = details.reduce((sum, detail) => sum + detail.rate, 0);
 
   const formatRate = (rate: number) => {
+    if (resource === 'population' || resource === 'housing') {
+      return rate.toString();
+    }
     const sign = rate >= 0 ? '+' : '';
     return `${sign}${rate.toFixed(2)}/s`;
   };
 
+  const getResourceName = () => {
+    const names = {
+      food: '食物',
+      wood: '木材', 
+      stone: '石料',
+      tools: '工具',
+      population: '人口',
+      housing: '住房'
+    };
+    return names[resource];
+  };
+
+  const getResourceDescription = () => {
+    const descriptions = {
+      food: '维持人口生存的基本资源',
+      wood: '建造和制作的基础材料',
+      stone: '坚固建筑的重要材料', 
+      tools: '提高生产效率的器具',
+      population: '文明发展的核心力量',
+      housing: '人口居住的容量限制'
+    };
+    return descriptions[resource];
+  };
+
   return (
-    <div className="group relative">
-      {children}
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 min-w-48">
-        <div className="font-semibold mb-2 text-center">
-          {resourceType === 'food' ? '食物' : 
-           resourceType === 'wood' ? '木材' : 
-           resourceType === 'stone' ? '石材' : '工具'} 详情
-        </div>
+    <div className="max-w-xs">
+      <div className="font-semibold mb-1">{getResourceName()}</div>
+      <div className="text-xs mb-2">{getResourceDescription()}</div>
+      <div className="text-xs space-y-1">
+        <div>当前数量: {resources[resource]}</div>
+        {resource !== 'housing' && resource !== 'population' && (
+          <div>存储上限: {gameState.resourceLimits[resource]}</div>
+        )}
+        {resource === 'population' && (
+          <div>住房容量: {resources.housing}</div>
+        )}
         
-        {details.length > 0 ? (
-          <div className="space-y-1">
+        {details.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-600">
+            <div className="font-medium mb-1">详细信息:</div>
             {details.map((detail, index) => (
               <div key={index} className="flex justify-between items-center">
                 <span className="text-gray-300">{detail.source}:</span>
-                <span className={detail.color}>{formatRate(detail.rate)}</span>
+                <span className={detail.color}>
+                  {formatRate(detail.rate)}
+                </span>
               </div>
             ))}
-            <div className="border-t border-gray-600 pt-1 mt-2">
-              <div className="flex justify-between items-center font-semibold">
+            
+            {resource !== 'population' && resource !== 'housing' && (
+              <div className="mt-1 pt-1 border-t border-gray-700 flex justify-between items-center font-medium">
                 <span>总计:</span>
                 <span className={totalRate >= 0 ? 'text-green-400' : 'text-red-400'}>
                   {formatRate(totalRate)}
                 </span>
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-gray-400 text-center">无产出或消耗</div>
-        )}
-        
-        {resourceType === 'food' && (
-          <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
-            点击可手动收集食物
+            )}
           </div>
         )}
       </div>
