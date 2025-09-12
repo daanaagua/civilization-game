@@ -2278,34 +2278,31 @@ export const useGameStore = create<GameStore>()(persist(
 
     // 持久化功能实现
     saveGame: () => {
-      const state = get();
-      saveGameState(state.gameState);
+      // Zustand persist 会自动处理保存，这里只是手动触发
+      console.log('手动保存游戏状态');
     },
 
     loadGame: () => {
-      const loadedState = loadGameState();
-      if (loadedState) {
-        set((state) => ({
-          ...state,
-          gameState: loadedState,
-        }));
-      }
+      // Zustand persist 会自动处理加载，这里只是日志记录
+      console.log('Zustand persist 会自动加载游戏状态');
     },
 
     initializePersistence: () => {
       const state = get();
       
-      // 初始化自动保存管理器
+      // 初始化自动保存管理器（可选功能）
       const autoSaveManager = new AutoSaveManager();
       
-      // 启动自动保存
+      // 启动自动保存（实际上Zustand persist已经处理了持久化）
       if (state.gameState.settings.autoSave) {
         autoSaveManager.start(() => {
+          // 返回当前状态，但实际保存由Zustand persist处理
+          console.log('自动保存触发 - Zustand persist 自动处理');
           return get().gameState;
         });
       }
       
-      console.log('持久化功能已初始化');
+      console.log('持久化功能已初始化 - 使用Zustand persist');
     },
 
     // 统计数据管理
