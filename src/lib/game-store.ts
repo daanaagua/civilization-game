@@ -311,7 +311,9 @@ export const useGameStore = create<GameStore>()(persist(
             isPaused: newPausedState
           },
           isRunning: newPausedState ? false : true
-        };      });    },
+        };
+      });
+    },
     
     resetGame: () => {
       // 从永久成就存储中恢复成就
@@ -1125,6 +1127,11 @@ export const useGameStore = create<GameStore>()(persist(
           });
         }
       });
+      
+      // 同步资源管理器的速率计算
+      if (resourceManager) {
+        resourceManager.calculateResourceRates(gameState);
+      }
       
       set((state) => ({
         gameState: {
