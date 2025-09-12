@@ -50,15 +50,21 @@ export class EffectsSystem {
   private effects: Effect[] = [];
 
   // 添加效果
-  addEffect(effect: Effect): void {
+  addEffect(effect: Effect | Omit<Effect, 'id'>): void {
+    // 如果没有id，生成一个
+    const effectWithId: Effect = 'id' in effect ? effect : {
+      ...effect,
+      id: `effect_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    };
+    
     // 检查是否已存在相同ID的效果
-    const existingIndex = this.effects.findIndex(e => e.id === effect.id);
+    const existingIndex = this.effects.findIndex(e => e.id === effectWithId.id);
     if (existingIndex >= 0) {
       // 更新现有效果
-      this.effects[existingIndex] = effect;
+      this.effects[existingIndex] = effectWithId;
     } else {
       // 添加新效果
-      this.effects.push(effect);
+      this.effects.push(effectWithId);
     }
   }
 
@@ -67,9 +73,23 @@ export class EffectsSystem {
     this.effects = this.effects.filter(e => e.id !== effectId);
   }
 
+  // 按来源移除效果
+  removeEffectsBySource(sourceType: EffectSourceType, sourceId?: string): void {
+    this.effects = this.effects.filter(e => {
+      if (e.source.type !== sourceType) return true;
+      if (sourceId && e.source.id !== sourceId) return true;
+      return false;
+    });
+  }
+
   // 获取所有效果
   getAllEffects(): Effect[] {
     return [...this.effects];
+  }
+
+  // 获取所有活跃效果（别名方法，与getAllEffects相同）
+  getActiveEffects(): Effect[] {
+    return this.getAllEffects();
   }
 
   // 按类型获取效果
@@ -82,8 +102,23 @@ export class EffectsSystem {
     return this.effects.filter(e => e.source.type === sourceType);
   }
 
+  // 按来源获取效果（支持可选的sourceId过滤）
+  getEffectsBySource(sourceType: EffectSourceType, sourceId?: string): Effect[] {
+    return this.effects.filter(e => {
+      if (e.source.type !== sourceType) return false;
+      if (sourceId && e.source.id !== sourceId) return false;
+      return true;
+    });
+  }
+
   // 计算特定类型效果的总值
-  calculateTotalEffect(type: EffectType): { absolute: number; percentage: number } {
+  calculateTotalEffect(type: EffectType): number {
+    const effects = this.getEffectsByType(type);
+    return effects.reduce((total, effect) => total + effect.value, 0);
+  }
+
+  // 计算特定类型效果的详细总值（绝对值和百分比分开）
+  calculateDetailedTotalEffect(type: EffectType): { absolute: number; percentage: number } {
     const effects = this.getEffectsByType(type);
     let absolute = 0;
     let percentage = 0;
@@ -113,6 +148,24 @@ export class EffectsSystem {
   // 清空所有效果
   clear(): void {
     this.effects = [];
+  }
+
+  // 从游戏状态更新效果系统
+  updateFromGameState(gameState: GameState): void {
+    // 清空现有效果
+    this.clear();
+    
+    // 初始化基础效果
+    this.initializeBaseEffects(gameState);
+    
+    // 更新科技效果
+    this.updateTechnologyEffects(gameState);
+    
+    // 更新建筑效果
+    this.updateBuildingEffects(gameState);
+    
+    // 更新持续时间
+    this.updateDurations();
   }
 
   // 初始化基础效果
