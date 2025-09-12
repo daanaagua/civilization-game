@@ -201,8 +201,9 @@ export class ResourceManager {
     else if (corruption > 25) corruptionMultiplier = 0.9;
 
     // 人口消耗食物
+    // 每人每天基础消耗为 0.05；由于 1 秒 = 2 天，所以折算为每秒 0.1
     if (resources.population > 0) {
-      const baseConsumption = resources.population * 0.1;
+      const baseConsumption = resources.population * 0.1; // 0.1 食物/秒/人
       const finalConsumption = baseConsumption * stabilityMultiplier;
       rates.food! -= finalConsumption;
       details.food!.push({

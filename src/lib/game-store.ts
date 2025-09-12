@@ -515,7 +515,7 @@ export const useGameStore = create<GameStore>()(persist(
             wood: baseLimit.wood + storageBonus,
             stone: baseLimit.stone + storageBonus,
             tools: baseLimit.tools + storageBonus,
-            population: state.gameState.resources.housing, // 人口上限等于住房数量
+            population: state.gameState.resources.housing + 1, // 人口上限等于住房数量 + 1（0住房时有一个免费人口）
             housing: baseLimit.housing,
           };
         };
@@ -536,7 +536,7 @@ export const useGameStore = create<GameStore>()(persist(
           stone: Math.max(0, Math.min(resourceLimits.stone, state.gameState.resources.stone + state.gameState.resourceRates.stone * adjustedDelta * corruptionEfficiency)),
           tools: Math.max(0, Math.min(resourceLimits.tools, state.gameState.resources.tools + state.gameState.resourceRates.tools * adjustedDelta * corruptionEfficiency)),
           population: Math.floor(Math.min(
-            state.gameState.resources.housing,
+            state.gameState.resources.housing + 1,
             state.gameState.resources.population + state.gameState.resourceRates.population * adjustedDelta
           )),
         };
@@ -648,7 +648,7 @@ export const useGameStore = create<GameStore>()(persist(
           stone: state.gameState.resources.stone + (resources.stone || 0),
           tools: state.gameState.resources.tools + (resources.tools || 0),
           population: Math.floor(Math.min(
-            state.gameState.resources.housing,
+            state.gameState.resources.housing + 1,
             state.gameState.resources.population + (resources.population || 0)
           )),
           housing: Math.floor(state.gameState.resources.housing + (resources.housing || 0)),
