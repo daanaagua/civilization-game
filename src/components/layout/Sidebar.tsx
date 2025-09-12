@@ -1,23 +1,15 @@
 'use client';
 
 import { useGameStore } from '@/lib/game-store';
-import { ResourceItem } from '@/components/ui/resource-item';
-import { StatusIndicator } from '@/components/ui/status-indicator';
+import { formatNumber } from '@/lib/utils';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface SidebarProps {}
 
-// 格式化数字显示
-const formatNumber = (num: number): string => {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return Math.floor(num).toString();
-};
+
 
 export function Sidebar({}: SidebarProps) {
-  const { gameState, maxPopulation, clickResource } = useGameStore();
+  const { gameState, population, maxPopulation, clickResource } = useGameStore();
   const { resources, stability } = gameState;
   
   // 计算腐败度（暂时用100-稳定度作为腐败度）
@@ -49,55 +41,95 @@ export function Sidebar({}: SidebarProps) {
         {/* 资源显示 */}
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-gray-300 mb-3">资源</h3>
-          <div className="space-y-2">
-            <ResourceItem
-              name="食物"
-              value={resources.food}
-              limit={gameState.resourceLimits.food}
-              tooltipContent={`食物产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${(gameState.workerAllocations?.farmer || 0) * 0.2}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集食物...`}
-              onClick={() => clickResource('food')}
-            />
-            <ResourceItem
-              name="木材"
-              value={resources.wood}
-              limit={gameState.resourceLimits.wood}
-              tooltipContent={`木材产出详情：\n• 基础产出: +0.04/s\n• 工人产出: +${(gameState.workerAllocations?.lumberjack || 0) * 0.18}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.025, 0)).toFixed(1)}/s\n\n点击可手动收集木材...`}
-              onClick={() => clickResource('wood')}
-            />
-            <ResourceItem
-              name="石料"
-              value={resources.stone}
-              limit={gameState.resourceLimits.stone}
-              tooltipContent={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${(gameState.workerAllocations?.miner || 0) * 0.15}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料...`}
-              onClick={() => clickResource('stone')}
-            />
-            <ResourceItem
-              name="人口"
-              value={resources.population}
-              limit={maxPopulation}
-              tooltipContent={`当前人口: ${formatNumber(resources.population)}\n最大人口: ${formatNumber(maxPopulation)}\n\n人口增长受住房限制影响`}
-            />
+          <div className="space-y-3">
+            {/* 食物 */}
+             <Tooltip content={`食物产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${(gameState.workerAllocations?.farmer || 0) * 0.2}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集食物`}>
+               <div 
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gray-800 border-gray-600"
+                 onClick={() => clickResource('food')}
+               >
+                 <div className="flex items-center">
+                   <span>食物</span>
+                 </div>
+                 <span className="font-bold">
+                   {formatNumber(resources.food)}/{formatNumber(gameState.resourceLimits.food)}
+                 </span>
+               </div>
+             </Tooltip>
+            
+            {/* 木材 */}
+             <Tooltip content={`木材产出详情：\n• 基础产出: +0.04/s\n• 工人产出: +${(gameState.workerAllocations?.lumberjack || 0) * 0.18}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.025, 0)).toFixed(1)}/s\n\n点击可手动收集木材`}>
+               <div 
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gray-800 border-gray-600"
+                 onClick={() => clickResource('wood')}
+               >
+                 <div className="flex items-center">
+                   <span>木材</span>
+                 </div>
+                 <span className="font-bold">
+                   {formatNumber(resources.wood)}/{formatNumber(gameState.resourceLimits.wood)}
+                 </span>
+               </div>
+             </Tooltip>
+            
+            {/* 石料 */}
+             <Tooltip content={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${(gameState.workerAllocations?.miner || 0) * 0.15}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料`}>
+               <div 
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gray-800 border-gray-600"
+                 onClick={() => clickResource('stone')}
+               >
+                 <div className="flex items-center">
+                   <span>石料</span>
+                 </div>
+                 <span className="font-bold">
+                   {formatNumber(resources.stone)}/{formatNumber(gameState.resourceLimits.stone)}
+                 </span>
+               </div>
+             </Tooltip>
+            
+            {/* 人口 */}
+             <Tooltip content={`当前人口: ${formatNumber(population)}\n最大人口: ${formatNumber(maxPopulation)}\n\n人口增长受住房限制影响`}>
+               <div 
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
+               >
+                 <div className="flex items-center">
+                   <span>人口</span>
+                 </div>
+                 <span className="font-bold">
+                   {formatNumber(population)}/{formatNumber(maxPopulation)}
+                 </span>
+               </div>
+             </Tooltip>
           </div>
         </div>
         
         {/* 状态显示 */}
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-gray-300 mb-3">状态</h3>
-          <div className="space-y-2">
-            <StatusIndicator
-              name="稳定度"
-              value={stability}
-              maxValue={100}
-              color="blue"
-              tooltipContent={`当前稳定度: ${stability}%\n\n效果: ${getStabilityEffect(stability)}\n\n稳定度影响人口增长和资源产出效率`}
-            />
-            <StatusIndicator
-              name="腐败度"
-              value={corruption}
-              maxValue={100}
-              color="red"
-              tooltipContent={`当前腐败度: ${corruption}%\n\n效果: ${getCorruptionEffect(corruption)}\n\n腐败度会降低资源产出并增加建筑成本`}
-            />
+          <div className="space-y-3">
+            {/* 稳定度 */}
+             <Tooltip content={`当前稳定度: ${stability}%\n\n效果: ${getStabilityEffect(stability)}\n\n稳定度影响人口增长和资源产出效率`}>
+               <div 
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
+               >
+                 <div className="flex items-center">
+                   <span>稳定度</span>
+                 </div>
+                 <span className="font-bold">{stability}%</span>
+               </div>
+             </Tooltip>
+            
+            {/* 腐败度 */}
+             <Tooltip content={`当前腐败度: ${corruption}%\n\n效果: ${getCorruptionEffect(corruption)}\n\n腐败度会降低资源产出并增加建筑成本`}>
+               <div 
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
+               >
+                 <div className="flex items-center">
+                   <span>腐败度</span>
+                 </div>
+                 <span className="font-bold">{corruption}%</span>
+               </div>
+             </Tooltip>
           </div>
         </div>
       </div>

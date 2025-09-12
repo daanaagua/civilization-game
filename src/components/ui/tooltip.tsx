@@ -1,127 +1,96 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 
 interface TooltipProps {
-  content: React.ReactNode;
+  content: string;
   children: React.ReactNode;
-  position?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
   delay?: number;
 }
 
-export const Tooltip: React.FC<TooltipProps> = ({
-  content,
-  children,
-  position = 'top',
+export const Tooltip: React.FC<TooltipProps> = ({ 
+  content, 
+  children, 
   className = '',
-  delay = 500
+  delay = 500 
 }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [showTimeout, setShowTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const calculatePosition = () => {
-    if (!triggerRef.current) return;
-    
-    const triggerRect = triggerRef.current.getBoundingClientRect();
-    const tooltipWidth = 200; // 估算宽度
-    const tooltipHeight = 40; // 估算高度
-    const offset = 8;
-    
-    let top = 0;
-    let left = 0;
-    
-    switch (position) {
-      case 'top':
-        top = triggerRect.top - tooltipHeight - offset;
-        left = triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2;
-        break;
-      case 'bottom':
-        top = triggerRect.bottom + offset;
-        left = triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2;
-        break;
-      case 'left':
-        top = triggerRect.top + triggerRect.height / 2 - tooltipHeight / 2;
-        left = triggerRect.left - tooltipWidth - offset;
-        break;
-      case 'right':
-        top = triggerRect.top + triggerRect.height / 2 - tooltipHeight / 2;
-        left = triggerRect.right + offset;
-        break;
+  const handleMouseEnter = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
-    
-    // 确保悬浮框不超出视窗
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    if (left < 0) left = 8;
-    if (left + tooltipWidth > viewportWidth) left = viewportWidth - tooltipWidth - 8;
-    if (top < 0) top = 8;
-    if (top + tooltipHeight > viewportHeight) top = viewportHeight - tooltipHeight - 8;
-    
-    setTooltipPosition({ top, left });
+
+    const target = event.currentTarget;
+    timeoutRef.current = setTimeout(() => {
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        setPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top - 10,
+        });
+        setIsVisible(true);
+      }
+    }, 300);
   };
 
-  const handleMouseEnter = () => {
-    const timeout = setTimeout(() => {
-      calculatePosition();
-      setIsVisible(true);
-    }, delay);
-    setShowTimeout(timeout);
-  };
-
-  const handleMouseLeave = () => {
-    if (showTimeout) {
-      clearTimeout(showTimeout);
-      setShowTimeout(null);
+  const hideTooltip = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
     setIsVisible(false);
   };
 
   useEffect(() => {
-    if (isVisible) {
-      const handleResize = () => calculatePosition();
-      const handleScroll = () => calculatePosition();
-      
-      window.addEventListener('resize', handleResize);
-      window.addEventListener('scroll', handleScroll, true);
-      
-      return () => {
-        window.removeEventListener('resize', handleResize);
-        window.removeEventListener('scroll', handleScroll, true);
-      };
-    }
-  }, [isVisible, position]);
-
-
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <>
-      <div 
-        ref={triggerRef}
-        className={`relative inline-block ${className}`}
+      <div
+        ref={containerRef}
         onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onMouseLeave={hideTooltip}
+        className={className}
       >
         {children}
       </div>
       
-      {isVisible && typeof window !== 'undefined' && createPortal(
+      {isVisible && (
         <div
-          ref={tooltipRef}
-          className="fixed z-[9999] px-3 py-2 text-sm text-white bg-gray-800 rounded-lg shadow-lg whitespace-nowrap pointer-events-none"
+          className="fixed z-50 bg-gray-900 border border-gray-600 rounded-lg p-3 shadow-xl max-w-xs pointer-events-none"
           style={{
-            top: tooltipPosition.top,
-            left: tooltipPosition.left,
+            left: position.x,
+            top: position.y - 10,
+            transform: 'translate(-50%, -100%)'
           }}
         >
-          {content}
-        </div>,
-        document.body
+          <div className="text-white text-sm whitespace-pre-line">
+            {content.split('\n').map((line, index) => {
+              if (line.startsWith('•')) {
+                return (
+                  <div key={index} className="text-green-400 flex items-start mt-1">
+                    <span className="mr-1">•</span>
+                    <span>{line.substring(1).trim()}</span>
+                  </div>
+                );
+              }
+              return (
+                <div key={index} className={index === 0 ? 'font-semibold mb-2' : 'text-gray-300'}>
+                  {line}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </>
   );
