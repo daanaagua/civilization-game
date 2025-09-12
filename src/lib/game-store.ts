@@ -29,7 +29,7 @@ const initialGameState: GameState = {
     stone: 3,
     tools: 0,
     population: 1,
-    housing: 10, // 初始住房容量
+    housing: 0, // 初始无住房，有一个免费人口
   },
   
   resourceRates: {
@@ -46,7 +46,7 @@ const initialGameState: GameState = {
     stone: 150,
     tools: 50,
     population: 1,
-    housing: 10,
+    housing: 0,
   },
   
   buildings: {},
@@ -112,6 +112,10 @@ interface GameStore {
   isRunning: boolean;
   lastUpdateTime: number;
   isPaused: boolean;
+  
+  // 计算属性
+  population: number;
+  maxPopulation: number;
   
   // 游戏控制方法
   startGame: () => void;
@@ -257,7 +261,8 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     get maxPopulation() {
-      return get().gameState.resources.housing;
+      // 0住房时有一个免费人口，之后每个住房容纳一个人口
+      return get().gameState.resources.housing + 1;
     },
     
 
@@ -373,43 +378,80 @@ export const useGameStore = create<GameStore>()(persist(
         // 更新游戏统计数据
         state.gameState.statistics.totalPlayTime += adjustedDelta;
         
-        // 重新计算基础稳定度（每次更新都计算）
-        const population = state.gameState.resources.population;
-        let baseStability = 50; // 基础稳定度
-        
-        // 人口规模对基础稳定度的影响
-        if (population <= 3) {
-          baseStability = 40; // 小规模人口：基础稳定度较低
-        } else if (population <= 10) {
-          baseStability = 50; // 中等人口：基础稳定度正常
-        } else if (population <= 25) {
-          baseStability = 60; // 较大人口：基础稳定度较高
-        } else {
-          baseStability = 45; // 大规模人口：管理困难，基础稳定度下降
-        }
-        
-        // 应用科技稳定度加成
-        let technologyStabilityBonus = 0;
-        Object.values(state.gameState.technologies).forEach((tech) => {
-          if (tech.researched && tech.effects) {
-            tech.effects.forEach((effect) => {
-              if (effect.type === 'stability_bonus') {
-                technologyStabilityBonus += effect.value;
-              }
-            });
+        // 根据stability.md重新计算稳定度
+        const calculateTargetStability = () => {
+          const { resources, technologies, corruption } = state.gameState;
+          
+          // 基础稳定度 = 50
+          let baseStability = 50;
+          
+          // 政治制度加成
+          let politicalBonus = 0;
+          if (technologies['tribal_organization']?.researched) {
+            politicalBonus += 5; // 部落组织
           }
-        });
+          if (technologies['monarchy']?.researched) {
+            politicalBonus += 15; // 君主制
+          }
+          if (technologies['feudalism']?.researched) {
+            politicalBonus += 5; // 分封制
+          }
+          if (technologies['centralization']?.researched) {
+            politicalBonus += 5; // 集权制
+          }
+          
+          // 人口规模影响
+          const population = resources.population;
+          const researchedTechCount = Object.values(technologies).filter(tech => tech.researched).length;
+          const softLimit = 10 * (1 + researchedTechCount * 0.1); // 软性上限
+          
+          let populationPenalty = 0;
+          if (population > softLimit * 3.0) {
+            populationPenalty = -40;
+          } else if (population > softLimit * 2.5) {
+            populationPenalty = -30;
+          } else if (population > softLimit * 2.0) {
+            populationPenalty = -25;
+          } else if (population > softLimit * 1.5) {
+            populationPenalty = -20;
+          } else if (population > softLimit * 1.2) {
+            populationPenalty = -15;
+          }
+          
+          // 资源充足度影响（简化版本）
+          const foodSufficiency = (resources.food / Math.max(1, population * 2)) * 100; // 假设每人需要2食物
+          let resourceBonus = 0;
+          if (foodSufficiency > 150) {
+            resourceBonus = 8;
+          } else if (foodSufficiency >= 100) {
+            resourceBonus = 4;
+          } else if (foodSufficiency >= 80) {
+            resourceBonus = 0;
+          } else if (foodSufficiency >= 50) {
+            resourceBonus = -12;
+          } else {
+            resourceBonus = -30;
+          }
+          
+          // 计算目标稳定度
+          const targetStability = Math.max(0, Math.min(100, 
+            baseStability + politicalBonus + populationPenalty + resourceBonus - corruption
+          ));
+          
+          return targetStability;
+        };
         
-        // 计算目标稳定度
-        const targetStability = Math.max(0, Math.min(100, baseStability + technologyStabilityBonus));
+        const targetStability = calculateTargetStability();
         
-        // 平滑过渡到目标稳定度（每秒调整1%）
+        // 平滑过渡到目标稳定度（每秒调整10%的差值）
         const stabilityDiff = targetStability - newStability;
         if (Math.abs(stabilityDiff) > 0.1) {
-          const adjustmentRate = 1.0; // 每秒调整1%
-          const maxAdjustment = adjustmentRate * adjustedDelta;
+          const adjustmentRate = 10.0; // 每秒调整10%的差值
+          const maxAdjustment = Math.abs(stabilityDiff) * adjustmentRate * adjustedDelta;
           const adjustment = Math.sign(stabilityDiff) * Math.min(Math.abs(stabilityDiff), maxAdjustment);
           newStability = Math.max(0, Math.min(100, newStability + adjustment));
+          // 保留一位小数
+          newStability = Math.round(newStability * 10) / 10;
         }
         
         // 计算资源上限
@@ -538,7 +580,11 @@ export const useGameStore = create<GameStore>()(persist(
     // 格式化日期显示
     formatGameDate: () => {
       const state = get();
-      const { year, month, day } = state.gameState.timeSystem.currentDate;
+      const timeSystem = state.gameState.timeSystem;
+      if (!timeSystem || !timeSystem.currentDate) {
+        return '1年1月1日'; // 默认日期
+      }
+      const { year, month, day } = timeSystem.currentDate;
       return `${year}年${month}月${day}日`;
     },
 
@@ -1309,40 +1355,51 @@ export const useGameStore = create<GameStore>()(persist(
         return;
       }
       
-      // 简化增长条件：只需要空余住房和基本稳定度
+      // 基础条件：必须有空余住房和食物
       const availableHousing = resources.housing - resources.population;
-      
-      // 基础条件：必须有空余住房、稳定度>30
-      if (availableHousing <= 0 || stability <= 30) {
+      if (availableHousing <= 0 || resources.food <= 0) {
         return;
       }
       
-      // 简化的基础增长概率
-      const baseGrowthChance = 0.02; // 每秒2%概率，约50秒一个人口（放慢五倍）
+      // 基础增长概率：每十天增长一个人口（约0.1%每秒）
+      const baseGrowthChance = 0.001;
       
-      // 住房系数计算
+      // 根据稳定度等级调整增长倍率
+      let stabilityMultiplier = 1.0;
+      if (stability >= 90) {
+        // 极度稳定：正常增长
+        stabilityMultiplier = 1.0;
+      } else if (stability >= 75) {
+        // 高度稳定：正常增长
+        stabilityMultiplier = 1.0;
+      } else if (stability >= 60) {
+        // 基本稳定：正常增长
+        stabilityMultiplier = 1.0;
+      } else if (stability >= 45) {
+        // 轻度不稳：-25%增长率
+        stabilityMultiplier = 0.75;
+      } else if (stability >= 30) {
+        // 中度不稳：-50%增长率
+        stabilityMultiplier = 0.5;
+      } else if (stability >= 15) {
+        // 严重不稳：-75%增长率
+        stabilityMultiplier = 0.25;
+      } else {
+        // 崩溃：-100%增长率（无增长）
+        stabilityMultiplier = 0;
+      }
+      
+      // 住房充足度影响
       const housingAbundance = availableHousing / resources.population;
       let housingMultiplier = 1.0;
       if (housingAbundance > 0.5) {
         housingMultiplier = 1.5;
       } else if (housingAbundance < 0.2) {
-        housingMultiplier = 0.3;
-      }
-      
-      // 稳定度系数计算
-      let stabilityMultiplier = 1.0;
-      if (stability > 80) {
-        stabilityMultiplier = 1.4;
-      } else if (stability >= 60) {
-        stabilityMultiplier = 1.0;
-      } else if (stability >= 40) {
-        stabilityMultiplier = 0.7;
-      } else {
-        stabilityMultiplier = 0.5;
+        housingMultiplier = 0.5;
       }
       
       // 计算最终增长概率
-      const finalGrowthChance = baseGrowthChance * housingMultiplier * stabilityMultiplier;
+      const finalGrowthChance = baseGrowthChance * stabilityMultiplier * housingMultiplier;
       
       // 使用随机数决定是否增长
       if (Math.random() < finalGrowthChance) {

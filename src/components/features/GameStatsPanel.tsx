@@ -39,8 +39,13 @@ export function GameStatsPanel() {
   const { gameState } = useGameStore();
   const { statistics, gameStartTime, inheritancePoints } = gameState;
 
+  // 添加安全检查避免statistics未定义的错误
+  if (!statistics) {
+    return <div className="p-4 text-center text-gray-500">加载统计数据中...</div>;
+  }
+
   // 使用store中的totalPlayTime避免水合错误
-  const playTime = statistics.totalPlayTime;
+  const playTime = statistics.totalPlayTime || 0;
 
   const stats = [
     {

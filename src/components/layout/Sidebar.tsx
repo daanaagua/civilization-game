@@ -1,6 +1,8 @@
 'use client';
 
 import { useGameStore } from '@/lib/game-store';
+import { ResourceItem } from '@/components/ui/resource-item';
+import { StatusIndicator } from '@/components/ui/status-indicator';
 
 interface SidebarProps {}
 
@@ -8,21 +10,36 @@ interface SidebarProps {}
 const formatNumber = (num: number): string => {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + 'M';
-  }
-  if (num >= 1000) {
+  } else if (num >= 1000) {
     return (num / 1000).toFixed(1) + 'K';
   }
   return Math.floor(num).toString();
 };
 
 export function Sidebar({}: SidebarProps) {
-  const { gameState } = useGameStore();
+  const { gameState, maxPopulation, clickResource } = useGameStore();
   const { resources, stability } = gameState;
-  const population = resources.population;
-  const maxPopulation = gameState.resourceLimits.population;
   
   // 计算腐败度（暂时用100-稳定度作为腐败度）
   const corruption = Math.max(0, 100 - stability);
+  
+  // 稳定度效果计算
+  const getStabilityEffect = (stability: number): string => {
+    if (stability >= 80) return '人口增长 +20%，资源产出 +10%';
+    if (stability >= 60) return '人口增长 +10%，资源产出 +5%';
+    if (stability >= 40) return '正常状态';
+    if (stability >= 20) return '人口增长 -10%，资源产出 -5%';
+    return '人口增长 -20%，资源产出 -10%';
+  };
+  
+  // 腐败度效果计算
+  const getCorruptionEffect = (corruption: number): string => {
+    if (corruption >= 80) return '资源产出 -30%，建筑成本 +50%';
+    if (corruption >= 60) return '资源产出 -20%，建筑成本 +30%';
+    if (corruption >= 40) return '资源产出 -10%，建筑成本 +15%';
+    if (corruption >= 20) return '资源产出 -5%，建筑成本 +10%';
+    return '无负面影响';
+  };
   
   return (
     <aside className="w-80 bg-gray-800 border-r border-gray-700 min-h-screen">
@@ -33,61 +50,54 @@ export function Sidebar({}: SidebarProps) {
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-gray-300 mb-3">资源</h3>
           <div className="space-y-2">
-            <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
-              <span className="text-sm text-gray-300">食物</span>
-              <span className="text-sm font-medium text-white">
-                {formatNumber(resources.food || 0)}/{formatNumber(gameState.resourceLimits.food || 100)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
-              <span className="text-sm text-gray-300">木材</span>
-              <span className="text-sm font-medium text-white">
-                {formatNumber(resources.wood || 0)}/{formatNumber(gameState.resourceLimits.wood || 200)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
-              <span className="text-sm text-gray-300">石料</span>
-              <span className="text-sm font-medium text-white">
-                {formatNumber(resources.stone || 0)}/{formatNumber(gameState.resourceLimits.stone || 150)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center bg-gray-700 px-3 py-2 rounded">
-              <span className="text-sm text-gray-300">人口</span>
-              <span className="text-sm font-medium text-white">
-                {population}/{maxPopulation}
-              </span>
-            </div>
+            <ResourceItem
+              name="食物"
+              value={resources.food}
+              limit={gameState.resourceLimits.food}
+              tooltipContent={`食物产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${(gameState.workerAllocations?.farmer || 0) * 0.2}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集食物...`}
+              onClick={() => clickResource('food')}
+            />
+            <ResourceItem
+              name="木材"
+              value={resources.wood}
+              limit={gameState.resourceLimits.wood}
+              tooltipContent={`木材产出详情：\n• 基础产出: +0.04/s\n• 工人产出: +${(gameState.workerAllocations?.lumberjack || 0) * 0.18}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.025, 0)).toFixed(1)}/s\n\n点击可手动收集木材...`}
+              onClick={() => clickResource('wood')}
+            />
+            <ResourceItem
+              name="石料"
+              value={resources.stone}
+              limit={gameState.resourceLimits.stone}
+              tooltipContent={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${(gameState.workerAllocations?.miner || 0) * 0.15}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料...`}
+              onClick={() => clickResource('stone')}
+            />
+            <ResourceItem
+              name="人口"
+              value={resources.population}
+              limit={maxPopulation}
+              tooltipContent={`当前人口: ${formatNumber(resources.population)}\n最大人口: ${formatNumber(maxPopulation)}\n\n人口增长受住房限制影响`}
+            />
           </div>
         </div>
         
         {/* 状态显示 */}
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-gray-300 mb-3">状态</h3>
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-300">稳定度</span>
-                <span className="text-sm font-medium text-blue-400">{stability}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${stability}%` }}
-                ></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-300">腐败度</span>
-                <span className="text-sm font-medium text-red-400">{corruption}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-red-500 h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${corruption}%` }}
-                ></div>
-              </div>
-            </div>
+          <div className="space-y-2">
+            <StatusIndicator
+              name="稳定度"
+              value={stability}
+              maxValue={100}
+              color="blue"
+              tooltipContent={`当前稳定度: ${stability}%\n\n效果: ${getStabilityEffect(stability)}\n\n稳定度影响人口增长和资源产出效率`}
+            />
+            <StatusIndicator
+              name="腐败度"
+              value={corruption}
+              maxValue={100}
+              color="red"
+              tooltipContent={`当前腐败度: ${corruption}%\n\n效果: ${getCorruptionEffect(corruption)}\n\n腐败度会降低资源产出并增加建筑成本`}
+            />
           </div>
         </div>
       </div>
