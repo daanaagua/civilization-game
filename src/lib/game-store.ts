@@ -4,6 +4,7 @@ import { GameState, Resources, ResourceLimits, Technology, Building, Character, 
 import { BUILDINGS, TECHNOLOGIES, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
+import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced } from '@/lib/enhanced-persistence';
 
 // 初始游戏状态
 const initialGameState: GameState = {
@@ -28,7 +29,7 @@ const initialGameState: GameState = {
     stone: 3,
     tools: 0,
     population: 1,
-    housing: 1, // 初始有一个简易住所
+    housing: 10, // 初始住房容量
   },
   
   resourceRates: {
@@ -256,7 +257,7 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     get maxPopulation() {
-      return get().gameState.resourceLimits.population;
+      return get().gameState.resources.housing;
     },
     
 
@@ -436,7 +437,7 @@ export const useGameStore = create<GameStore>()(persist(
             wood: baseLimit.wood + storageBonus,
             stone: baseLimit.stone + storageBonus,
             tools: baseLimit.tools + storageBonus,
-            population: Math.max(baseLimit.population, Math.floor(state.gameState.resources.population / 10) * 10),
+            population: state.gameState.resources.housing, // 人口上限等于住房数量
             housing: baseLimit.housing,
           };
         };
@@ -2278,33 +2279,110 @@ export const useGameStore = create<GameStore>()(persist(
 
     // 持久化功能实现
     saveGame: () => {
-      // Zustand persist 会自动处理保存，这里只是手动触发
-      console.log('手动保存游戏状态');
+      try {
+        const state = get();
+        // 使用增强的持久化系统
+        const success = saveGameStateEnhanced(
+          state.gameState,
+          state.uiState,
+          state.army
+        );
+        
+        if (success) {
+          state.addNotification({
+            type: 'success',
+            title: '游戏已保存',
+            message: '游戏状态已成功保存到本地存储（包含备份）',
+          });
+        } else {
+          state.addNotification({
+            type: 'error',
+            title: '保存失败',
+            message: '无法保存游戏状态，请检查浏览器存储权限',
+          });
+        }
+      } catch (error) {
+        console.error('保存游戏状态失败:', error);
+        const state = get();
+        state.addNotification({
+          type: 'error',
+          title: '保存失败',
+          message: '保存过程中发生错误，请重试',
+        });
+      }
     },
 
     loadGame: () => {
       try {
-        const savedData = loadGameState();
-        if (savedData) {
-          console.log('从localStorage加载游戏状态');
+        // 首先尝试从增强持久化系统加载
+        const enhancedData = loadGameStateEnhanced();
+        if (enhancedData) {
+          console.log('从增强持久化系统加载游戏状态');
           set((state) => ({
             ...state,
             gameState: {
-              ...savedData.gameState,
+              ...enhancedData.gameState,
               isPaused: true, // 确保加载后游戏为暂停状态
             },
-            uiState: savedData.uiState || state.uiState,
-            army: savedData.army || state.army,
+            uiState: enhancedData.uiState || state.uiState,
+            army: enhancedData.army || state.army,
             isRunning: false,
             lastUpdateTime: Date.now(),
           }));
+          
+          const currentState = get();
+          currentState.addNotification({
+            type: 'success',
+            title: '游戏已加载',
+            message: '游戏状态已从本地存储恢复',
+          });
           return true;
-        } else {
-          console.log('没有找到保存的游戏数据，使用默认状态');
-          return false;
         }
+        
+        // 如果增强系统没有数据，尝试从zustand persist加载
+        const savedData = localStorage.getItem('civilization-game-storage');
+        if (savedData) {
+          const parsed = JSON.parse(savedData);
+          if (parsed.state) {
+            console.log('从zustand persist加载游戏状态');
+            set((state) => ({
+              ...state,
+              gameState: {
+                ...parsed.state.gameState,
+                isPaused: true,
+              },
+              uiState: parsed.state.uiState || state.uiState,
+              army: parsed.state.army || state.army,
+              isRunning: false,
+              lastUpdateTime: Date.now(),
+            }));
+            
+            const currentState = get();
+            currentState.addNotification({
+              type: 'info',
+              title: '游戏已加载',
+              message: '从旧版本存储恢复游戏状态',
+            });
+            return true;
+          }
+        }
+        
+        console.log('没有找到保存的游戏数据，使用默认状态');
+        const currentState = get();
+        currentState.addNotification({
+          type: 'info',
+          title: '新游戏',
+          message: '没有找到保存数据，开始新游戏',
+        });
+        return false;
       } catch (error) {
         console.error('加载游戏状态失败:', error);
+        const currentState = get();
+        currentState.addNotification({
+          type: 'error',
+          title: '加载失败',
+          message: '无法加载游戏状态，将使用默认设置',
+        });
         return false;
       }
     },

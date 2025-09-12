@@ -3,7 +3,7 @@
  * 负责游戏状态的保存和加载
  */
 
-const STORAGE_KEY = 'civilization-game-storage';
+const STORAGE_KEY = 'civilization-game-manual-save';
 const SAVE_INTERVAL = 10000; // 每10秒自动保存
 const VERSION = 1;
 
