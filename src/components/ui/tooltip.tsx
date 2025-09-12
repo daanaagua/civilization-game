@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 interface TooltipProps {
-  content: string;
+  content: React.ReactNode;
   children: React.ReactNode;
   className?: string;
   delay?: number;
@@ -73,22 +73,26 @@ export const Tooltip: React.FC<TooltipProps> = ({
             transform: 'translate(-50%, -100%)'
           }}
         >
-          <div className="text-white text-sm whitespace-pre-line">
-            {content.split('\n').map((line, index) => {
-              if (line.startsWith('•')) {
+          <div className="text-white text-sm">
+            {typeof content === 'string' ? (
+              content.split('\n').map((line, index) => {
+                if (line.startsWith('•')) {
+                  return (
+                    <div key={index} className="text-green-400 flex items-start mt-1">
+                      <span className="mr-1">•</span>
+                      <span>{line.substring(1).trim()}</span>
+                    </div>
+                  );
+                }
                 return (
-                  <div key={index} className="text-green-400 flex items-start mt-1">
-                    <span className="mr-1">•</span>
-                    <span>{line.substring(1).trim()}</span>
+                  <div key={index} className={index === 0 ? 'font-semibold mb-2' : 'text-gray-300'}>
+                    {line}
                   </div>
                 );
-              }
-              return (
-                <div key={index} className={index === 0 ? 'font-semibold mb-2' : 'text-gray-300'}>
-                  {line}
-                </div>
-              );
-            })}
+              })
+            ) : (
+              content
+            )}
           </div>
         </div>
       )}

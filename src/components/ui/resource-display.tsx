@@ -83,12 +83,13 @@ export const ResourceDisplay = ({ resource, showRate = false, className = '' }: 
   const rate = resourceRates[resource as keyof typeof resourceRates] || 0;
   const limit = resourceLimits[resource];
   
-  const tooltipContent = (
-    <ResourceDetailsTooltip resource={resource} />
-  );
-
   return (
-    <Tooltip content={tooltipContent} position="right">
+    <Tooltip 
+      content={
+        <ResourceDetailsTooltip resource={resource} />
+      } 
+      position="right"
+    >
       <div className={`flex items-center gap-2 p-3 rounded-lg border ${config.bgColor} ${config.borderColor} ${className} cursor-help`}>
         <div className={`p-2 rounded-md ${config.color} bg-slate-700`}>
           <Icon size={20} />
