@@ -246,7 +246,7 @@ const OverviewPanel = () => {
     },
     {
       name: '人口',
-      value: formatNumber(gameState.population),
+      value: formatNumber(gameState.population, 0), // 人口显示为整数
       icon: Users,
       color: 'text-green-400',
       bgColor: 'bg-green-900/20',
@@ -865,7 +865,7 @@ const Sidebar = () => {
             name="人口"
             value={resources.population}
             limit={maxPopulation}
-            tooltipContent={`当前人口: ${formatNumber(resources.population)}\n最大人口: ${formatNumber(maxPopulation)}\n\n人口增长受住房限制影响`}
+            tooltipContent={`当前人口: ${formatNumber(resources.population, 0)}\n最大人口: ${formatNumber(maxPopulation, 0)}\n\n人口增长受住房限制影响`}
           />
         </div>
       </div>
@@ -876,15 +876,15 @@ const Sidebar = () => {
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">总人口</span>
-            <span className="text-sm text-white">{formatNumber(resources.population)}/{formatNumber(maxPopulation)}</span>
+            <span className="text-sm text-white">{formatNumber(resources.population, 0)}/{formatNumber(maxPopulation, 0)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">可用人口</span>
-            <span className="text-sm text-green-400">{formatNumber(gameState.availableWorkers || resources.population)}</span>
+            <span className="text-sm text-green-400">{formatNumber(gameState.availableWorkers || resources.population, 0)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">已分配人口</span>
-            <span className="text-sm text-red-400">{formatNumber(resources.population - (gameState.availableWorkers || resources.population))}</span>
+            <span className="text-sm text-red-400">{formatNumber(resources.population - (gameState.availableWorkers || resources.population), 0)}</span>
           </div>
         </div>
       </div>

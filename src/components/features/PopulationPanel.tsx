@@ -34,7 +34,7 @@ export function PopulationPanel() {
         <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
           <div className="bg-gray-700 rounded p-2">
             <div className="text-gray-400">当前人口</div>
-            <div className="font-semibold">{formatNumber(population, 1)}</div>
+            <div className="font-semibold">{formatNumber(population, 0)}</div> {/* 人口显示为整数 */}
           </div>
           <div className="bg-gray-700 rounded p-2">
             <div className="text-gray-400">人口上限</div>

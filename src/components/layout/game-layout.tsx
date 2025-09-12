@@ -79,7 +79,7 @@ const OverviewPanel = () => {
             <h3 className="font-semibold text-green-900">人口</h3>
           </div>
           <div className="text-2xl font-bold text-green-900">
-            {formatNumber(gameState.resources.population)}
+            {formatNumber(gameState.resources.population, 0)} {/* 人口显示为整数 */}
           </div>
           <p className="text-sm text-green-700 mt-1">部落成员</p>
         </div>

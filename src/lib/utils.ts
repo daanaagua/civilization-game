@@ -5,7 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatNumber(num: number | undefined | null, decimals: number = 1): string {
+/**
+ * 格式化数字显示，统一保留两位小数
+ * 用于游戏中所有数值显示（人口等整数类型除外）
+ * 包括资源数量、战斗数值、buff效果等
+ */
+export function formatNumber(num: number | undefined | null, decimals: number = 2): string {
   if (num == null || num === undefined) {
     return '0';
   }

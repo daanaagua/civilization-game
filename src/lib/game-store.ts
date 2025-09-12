@@ -1025,7 +1025,7 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 人口消耗资源
       if (resources.population > 0) {
-        newRates.food -= resources.population * 0.2; // 每人每秒消耗0.2食物
+        newRates.food -= resources.population * 0.05; // 每人每日消耗0.05食物
         // 移除木材消耗：人口不应该消耗木材
       }
       

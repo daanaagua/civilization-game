@@ -90,7 +90,7 @@ export function Sidebar({}: SidebarProps) {
              </Tooltip>
             
             {/* 人口 */}
-             <Tooltip content={`当前人口: ${formatNumber(population)}\n最大人口: ${formatNumber(maxPopulation)}\n\n人口增长受住房限制影响`}>
+             <Tooltip content={`当前人口: ${formatNumber(population, 0)}\n最大人口: ${formatNumber(maxPopulation, 0)}\n\n人口增长受住房限制影响`}>
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
                >
@@ -98,7 +98,7 @@ export function Sidebar({}: SidebarProps) {
                    <span>人口</span>
                  </div>
                  <span className="font-bold">
-                   {formatNumber(population)}/{formatNumber(maxPopulation)}
+                   {formatNumber(population, 0)}/{formatNumber(maxPopulation, 0)} {/* 人口显示为整数 */}
                  </span>
                </div>
              </Tooltip>

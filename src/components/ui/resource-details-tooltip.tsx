@@ -61,9 +61,9 @@ export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps
     else if (corruption > 50) corruptionMultiplier = 0.75;
     else if (corruption > 25) corruptionMultiplier = 0.9;
 
-    // 人口消耗（仅食物）
+    // 人口消耗（仅食物）- 每人每日消耗0.05食物
     if (resource === 'food' && resources.population > 0) {
-      const baseConsumption = resources.population * 0.2;
+      const baseConsumption = resources.population * 0.05;
       const finalConsumption = baseConsumption * stabilityMultiplier;
       details.push({
         source: '人口消耗',
