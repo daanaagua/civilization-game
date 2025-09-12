@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>持久化功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>持久化功能测试</h1>
+        
+        <div class="section">
+            <h3>基础localStorage测试</h3>
+            <input type="text" id="basicInput" placeholder="输入一些文本">
+            <button onclick="saveBasic()">保存到localStorage</button>
+            <button onclick="loadBasic()">从localStorage加载</button>
+            <button onclick="clearBasic()">清除localStorage</button>
+            <div id="basicStatus" class="status info">状态：未操作</div>
+        </div>
+
+        <div class="section">
+            <h3>游戏状态模拟测试</h3>
+            <div>
+                <label>金币: <input type="number" id="gold" value="100"></label>
+                <label>食物: <input type="number" id="food" value="50"></label>
+                <label>人口: <input type="number" id="population" value="1"></label>
+            </div>
+            <button onclick="saveGameState()">保存游戏状态</button>
+            <button onclick="loadGameState()">加载游戏状态</button>
+            <button onclick="clearGameState()">清除游戏状态</button>
+            <div id="gameStatus" class="status info">状态：未操作</div>
+        </div>
+
+        <div class="section">
+            <h3>Zustand模拟测试</h3>
+            <div>
+                <label>等级: <input type="number" id="level" value="1"></label>
+                <label>经验: <input type="number" id="exp" value="0"></label>
+            </div>
+            <button onclick="saveZustandState()">保存Zustand状态</button>
+            <button onclick="loadZustandState()">加载Zustand状态</button>
+            <button onclick="clearZustandState()">清除Zustand状态</button>
+            <div id="zustandStatus" class="status info">状态：未操作</div>
+        </div>
+
+        <div class="section">
+            <h3>自动保存测试</h3>
+            <button onclick="startAutoSave()">开始自动保存</button>
+            <button onclick="stopAutoSave()">停止自动保存</button>
+            <div id="autoSaveStatus" class="status info">自动保存：未启动</div>
+            <div id="autoSaveLog"></div>
+        </div>
+
+        <div class="section">
+            <h3>存储信息</h3>
+            <button onclick="showStorageInfo()">显示存储信息</button>
+            <div id="storageInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        // 存储键名
+        const STORAGE_KEYS = {
+            basic: 'test-basic',
+            game: 'civilization-game-storage',
+            zustand: 'zustand-test'
+        };
+
+        let autoSaveInterval = null;
+
+        // 基础localStorage测试
+        function saveBasic() {
+            const value = document.getElementById('basicInput').value;
+            try {
+                localStorage.setItem(STORAGE_KEYS.basic, value);
+                showStatus('basicStatus', `成功保存: "${value}"`, 'success');
+            } catch (error) {
+                showStatus('basicStatus', `保存失败: ${error.message}`, 'error');
+            }
+        }
+
+        function loadBasic() {
+            try {
+                const value = localStorage.getItem(STORAGE_KEYS.basic);
+                if (value !== null) {
+                    document.getElementById('basicInput').value = value;
+                    showStatus('basicStatus', `成功加载: "${value}"`, 'success');
+                } else {
+                    showStatus('basicStatus', '没有找到保存的数据', 'info');
+                }
+            } catch (error) {
+                showStatus('basicStatus', `加载失败: ${error.message}`, 'error');
+            }
+        }
+
+        function clearBasic() {
+            try {
+                localStorage.removeItem(STORAGE_KEYS.basic);
+                document.getElementById('basicInput').value = '';
+                showStatus('basicStatus', '成功清除数据', 'success');
+            } catch (error) {
+                showStatus('basicStatus', `清除失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 游戏状态测试
+        function saveGameState() {
+            const gameState = {
+                resources: {
+                    gold: parseInt(document.getElementById('gold').value),
+                    food: parseInt(document.getElementById('food').value)
+                },
+                population: parseInt(document.getElementById('population').value),
+                timestamp: Date.now()
+            };
+
+            try {
+                localStorage.setItem(STORAGE_KEYS.game, JSON.stringify(gameState));
+                showStatus('gameStatus', `游戏状态已保存 (${new Date().toLocaleTimeString()})`, 'success');
+            } catch (error) {
+                showStatus('gameStatus', `保存失败: ${error.message}`, 'error');
+            }
+        }
+
+        function loadGameState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEYS.game);
+                if (saved) {
+                    const gameState = JSON.parse(saved);
+                    document.getElementById('gold').value = gameState.resources.gold;
+                    document.getElementById('food').value = gameState.resources.food;
+                    document.getElementById('population').value = gameState.population;
+                    
+                    const saveTime = new Date(gameState.timestamp).toLocaleString();
+                    showStatus('gameStatus', `游戏状态已加载 (保存时间: ${saveTime})`, 'success');
+                } else {
+                    showStatus('gameStatus', '没有找到保存的游戏状态', 'info');
+                }
+            } catch (error) {
+                showStatus('gameStatus', `加载失败: ${error.message}`, 'error');
+            }
+        }
+
+        function clearGameState() {
+            try {
+                localStorage.removeItem(STORAGE_KEYS.game);
+                showStatus('gameStatus', '游戏状态已清除', 'success');
+            } catch (error) {
+                showStatus('gameStatus', `清除失败: ${error.message}`, 'error');
+            }
+        }
+
+        // Zustand模拟测试
+        function saveZustandState() {
+            const zustandState = {
+                state: {
+                    level: parseInt(document.getElementById('level').value),
+                    exp: parseInt(document.getElementById('exp').value)
+                },
+                version: 1
+            };
+
+            try {
+                localStorage.setItem(STORAGE_KEYS.zustand, JSON.stringify(zustandState));
+                showStatus('zustandStatus', `Zustand状态已保存`, 'success');
+            } catch (error) {
+                showStatus('zustandStatus', `保存失败: ${error.message}`, 'error');
+            }
+        }
+
+        function loadZustandState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEYS.zustand);
+                if (saved) {
+                    const zustandState = JSON.parse(saved);
+                    document.getElementById('level').value = zustandState.state.level;
+                    document.getElementById('exp').value = zustandState.state.exp;
+                    showStatus('zustandStatus', `Zustand状态已加载 (版本: ${zustandState.version})`, 'success');
+                } else {
+                    showStatus('zustandStatus', '没有找到保存的Zustand状态', 'info');
+                }
+            } catch (error) {
+                showStatus('zustandStatus', `加载失败: ${error.message}`, 'error');
+            }
+        }
+
+        function clearZustandState() {
+            try {
+                localStorage.removeItem(STORAGE_KEYS.zustand);
+                showStatus('zustandStatus', 'Zustand状态已清除', 'success');
+            } catch (error) {
+                showStatus('zustandStatus', `清除失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 自动保存测试
+        function startAutoSave() {
+            if (autoSaveInterval) {
+                showStatus('autoSaveStatus', '自动保存已在运行', 'info');
+                return;
+            }
+
+            autoSaveInterval = setInterval(() => {
+                saveGameState();
+                const log = document.getElementById('autoSaveLog');
+                log.innerHTML = `<div>自动保存: ${new Date().toLocaleTimeString()}</div>` + log.innerHTML;
+                
+                // 只保留最近10条日志
+                const logs = log.children;
+                if (logs.length > 10) {
+                    log.removeChild(logs[logs.length - 1]);
+                }
+            }, 3000); // 每3秒自动保存一次
+
+            showStatus('autoSaveStatus', '自动保存已启动 (每3秒)', 'success');
+        }
+
+        function stopAutoSave() {
+            if (autoSaveInterval) {
+                clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+                showStatus('autoSaveStatus', '自动保存已停止', 'info');
+            } else {
+                showStatus('autoSaveStatus', '自动保存未运行', 'info');
+            }
+        }
+
+        // 显示存储信息
+        function showStorageInfo() {
+            const info = document.getElementById('storageInfo');
+            let html = '<h4>localStorage内容:</h4>';
+            
+            if (localStorage.length === 0) {
+                html += '<p>localStorage为空</p>';
+            } else {
+                html += '<ul>';
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    const value = localStorage.getItem(key);
+                    const preview = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                    html += `<li><strong>${key}:</strong> ${preview}</li>`;
+                }
+                html += '</ul>';
+            }
+            
+            info.innerHTML = html;
+        }
+
+        // 工具函数
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+
+        // 页面加载时自动加载数据
+        window.addEventListener('load', () => {
+            loadBasic();
+            loadGameState();
+            loadZustandState();
+            showStorageInfo();
+        });
+
+        // 页面卸载时保存数据
+        window.addEventListener('beforeunload', () => {
+            if (autoSaveInterval) {
+                saveGameState();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -2359,8 +2359,8 @@ export const useGameStore = create<GameStore>()(persist(
       gameState: state.gameState, // 保存完整的游戏状态
       uiState: state.uiState,
       army: state.army,
-      isRunning: state.isRunning,
-      lastUpdateTime: state.lastUpdateTime
+      // 不保存 isRunning 状态，让游戏总是以暂停状态加载
+      // lastUpdateTime 也不保存，让它在每次加载时重新初始化
     }),
     migrate: (persistedState: any, version: number) => {
       // 处理版本迁移
