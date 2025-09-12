@@ -349,6 +349,10 @@ export const useGameStore = create<GameStore>()(persist(
       // 初始化资源管理器
       resourceManager = initializeResourceManager(newGameState.resources, newGameState.resourceLimits);
       
+      // 重置并初始化效果系统
+      globalEffectsSystem.clear();
+      globalEffectsSystem.updateFromGameState(newGameState);
+      
       get().resetTimeSystem();
     },
     
@@ -1103,12 +1107,8 @@ export const useGameStore = create<GameStore>()(persist(
         population: 0, // 人口增长通过专门函数处理
       };
       
-      // 人口消耗资源
-      if (resources.population > 0) {
-        // 每人每秒消耗0.1食物（更明显的消耗率）
-        newRates.food -= resources.population * 0.1;
-        // 移除木材消耗：人口不应该消耗木材
-      }
+      // 人口消耗资源 - 移除这里的计算，让resourceManager统一处理
+      // 这里不再计算人口消耗，避免与resourceManager重复计算
       
       // 计算建筑提供的资源生产率
       Object.values(buildings).forEach((building) => {
@@ -1144,9 +1144,18 @@ export const useGameStore = create<GameStore>()(persist(
       });
       
       // 同步资源管理器的速率计算
-      if (resourceManager) {
-        resourceManager.calculateResourceRates(gameState);
-      }
+        if (resourceManager) {
+          resourceManager.calculateResourceRates(gameState);
+          // 使用resourceManager的计算结果更新gameState的resourceRates
+          const managerRates = resourceManager.getResourceRates();
+          newRates = {
+            food: managerRates.food || 0,
+            wood: managerRates.wood || 0,
+            stone: managerRates.stone || 0,
+            tools: managerRates.tools || 0,
+            population: newRates.population, // 人口增长仍由原逻辑处理
+          };
+        }
       
       set((state) => ({
         gameState: {
