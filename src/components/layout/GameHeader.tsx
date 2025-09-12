@@ -44,10 +44,8 @@ export function GameHeader() {
           <h1 className="text-2xl font-bold text-white">文明发展游戏</h1>
           
           <div className="flex items-center space-x-4 text-sm text-gray-300">
-            <div className="flex items-center space-x-1">
-              <span>⏱️</span>
-              <span>{formatTime(playTime)}</span>
-            </div>
+            {/* 游戏时间显示 */}
+            <CompactTimeDisplay className="text-white" />
             
             <div className="flex items-center space-x-1">
               <span>🏆</span>

@@ -12,6 +12,16 @@ const initialGameState: GameState = {
   gameTime: 0,
   isPaused: true,
   
+  // 时间系统状态
+  timeSystem: {
+    startTime: Date.now(),
+    currentDate: {
+      year: 0,
+      month: 0,
+      day: 1
+    }
+  },
+  
   resources: {
     food: 10,
     wood: 5,
@@ -102,12 +112,16 @@ interface GameStore {
   lastUpdateTime: number;
   isPaused: boolean;
   
-  // 游戏控制
+  // 游戏控制方法
   startGame: () => void;
   pauseGame: () => void;
   togglePause: () => void;
   resetGame: () => void;
   updateGameTime: (deltaTime: number) => void;
+  
+  // 时间系统方法
+  updateTimeSystem: () => void;
+  resetTimeSystem: () => void;
   
   // 资源管理
   addResources: (resources: Partial<Resources>) => void;
@@ -290,6 +304,7 @@ export const useGameStore = create<GameStore>()(persist(
         isRunning: false,
         lastUpdateTime: Date.now(),
       });
+      get().resetTimeSystem();
     },
     
     updateGameTime: (deltaTime: number) => {
@@ -465,8 +480,48 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 更新buff状态（清理过期buff）
       get().updateBuffs();
+      
+      // 更新时间系统
+      get().updateTimeSystem();
     },
-    
+
+    updateTimeSystem: () => {
+      set((state) => {
+        const gameTime = state.gameState.gameTime;
+        const totalDays = Math.floor(gameTime * 2); // 1秒 = 2天
+        
+        // 计算年、月、日
+        const year = Math.floor(totalDays / 360);
+        const remainingDays = totalDays % 360;
+        const month = Math.floor(remainingDays / 30);
+        const day = (remainingDays % 30) + 1;
+        
+        return {
+          ...state,
+          gameState: {
+            ...state.gameState,
+            timeSystem: {
+              ...state.gameState.timeSystem,
+              currentDate: { year, month, day }
+            }
+          }
+        };
+      });
+    },
+
+    resetTimeSystem: () => {
+      set((state) => ({
+        ...state,
+        gameState: {
+          ...state.gameState,
+          timeSystem: {
+            startTime: Date.now(),
+            currentDate: { year: 0, month: 0, day: 1 }
+          }
+        }
+      }));
+    },
+
     addResources: (resources: Partial<Resources>) => {
       set((state) => ({
         gameState: {
