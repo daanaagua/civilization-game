@@ -5,6 +5,7 @@ import { BUILDINGS, TECHNOLOGIES, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, 
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
 import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced } from '@/lib/enhanced-persistence';
+import { ResourceManager, initializeResourceManager, getResourceManager } from './resource-manager';
 
 // 初始游戏状态
 const initialGameState: GameState = {
@@ -113,7 +114,7 @@ interface GameStore {
   lastUpdateTime: number;
   isPaused: boolean;
   
-  // 计算属性
+  // 人口相关
   population: number;
   maxPopulation: number;
   
@@ -124,7 +125,7 @@ interface GameStore {
   resetGame: () => void;
   updateGameTime: (deltaTime: number) => void;
   
-  // 时间系统方法
+  // 时间系统
   updateTimeSystem: () => void;
   resetTimeSystem: () => void;
   
@@ -132,6 +133,12 @@ interface GameStore {
   addResources: (resources: Partial<Resources>) => void;
   spendResources: (resources: Partial<Resources>) => boolean;
   canAfford: (cost: Partial<Resources>) => boolean;
+  
+  // 新的资源管理器方法
+  getResourceManager: () => ResourceManager;
+  initializeResourceManager: () => void;
+  getResourceRates: () => Partial<Resources>;
+  getResourceRateDetails: (resource: keyof Resources) => any[];
   
   // 建筑管理
   buildStructure: (buildingId: string) => boolean;
@@ -244,6 +251,9 @@ interface GameStore {
   setGameSpeed: (speed: number) => void;
 }
 
+// 全局资源管理器实例
+let resourceManager: ResourceManager | null = null;
+
 export const useGameStore = create<GameStore>()(persist(
   (set, get) => ({
     gameState: initialGameState,
@@ -277,6 +287,9 @@ export const useGameStore = create<GameStore>()(persist(
         isRunning: true,
         lastUpdateTime: Date.now()
       }));
+      
+      // 初始化资源管理器
+      get().initializeResourceManager();
     },
     
     pauseGame: () => {
@@ -298,9 +311,7 @@ export const useGameStore = create<GameStore>()(persist(
             isPaused: newPausedState
           },
           isRunning: newPausedState ? false : true
-        };
-      });
-    },
+        };      });    },
     
     resetGame: () => {
       // 从永久成就存储中恢复成就
@@ -309,15 +320,21 @@ export const useGameStore = create<GameStore>()(persist(
         preservedAchievements = useAchievementStore.getState().getAllAchievements();
       }
       
+      const newGameState = { 
+        ...initialGameState,
+        achievements: preservedAchievements // 保留已解锁的成就
+      };
+      
       set({
-        gameState: { 
-          ...initialGameState,
-          achievements: preservedAchievements // 保留已解锁的成就
-        },
+        gameState: newGameState,
         uiState: { ...initialUIState },
         isRunning: false,
         lastUpdateTime: Date.now(),
       });
+      
+      // 初始化资源管理器
+      resourceManager = initializeResourceManager(newGameState.resources, newGameState.resourceLimits);
+      
       get().resetTimeSystem();
     },
     
@@ -328,7 +345,8 @@ export const useGameStore = create<GameStore>()(persist(
       const gameSpeed = gameState.settings.gameSpeed;
       const adjustedDelta = deltaTime * gameSpeed;
       
-
+      // 重新计算资源生产率（确保使用最新的数据）
+      get().calculateResourceRates();
       
       // 计算天数变化
       const oldDays = Math.floor(gameState.gameTime / 86400);
@@ -493,6 +511,24 @@ export const useGameStore = create<GameStore>()(persist(
           foodRotLoss = state.gameState.resources.food * 0.001 * adjustedDelta; // 0.1%每秒腐烂
         }
 
+        const updatedResources = {
+          ...state.gameState.resources,
+          food: Math.max(0, Math.min(resourceLimits.food, state.gameState.resources.food + state.gameState.resourceRates.food * adjustedDelta * corruptionEfficiency - foodRotLoss)),
+          wood: Math.max(0, Math.min(resourceLimits.wood, state.gameState.resources.wood + state.gameState.resourceRates.wood * adjustedDelta * corruptionEfficiency)),
+          stone: Math.max(0, Math.min(resourceLimits.stone, state.gameState.resources.stone + state.gameState.resourceRates.stone * adjustedDelta * corruptionEfficiency)),
+          tools: Math.max(0, Math.min(resourceLimits.tools, state.gameState.resources.tools + state.gameState.resourceRates.tools * adjustedDelta * corruptionEfficiency)),
+          population: Math.floor(Math.min(
+            state.gameState.resources.housing,
+            state.gameState.resources.population + state.gameState.resourceRates.population * adjustedDelta
+          )),
+        };
+
+        // 同步资源管理器状态
+        if (resourceManager) {
+          resourceManager.setResources(updatedResources, 'production');
+          resourceManager.updateResourceLimits(resourceLimits);
+        }
+
         return {
           gameState: {
             ...state.gameState,
@@ -500,17 +536,7 @@ export const useGameStore = create<GameStore>()(persist(
             corruption: newCorruption,
             stability: newStability,
             resourceLimits,
-            resources: {
-              ...state.gameState.resources,
-              food: Math.max(0, Math.min(resourceLimits.food, state.gameState.resources.food + state.gameState.resourceRates.food * adjustedDelta * corruptionEfficiency - foodRotLoss)),
-              wood: Math.max(0, Math.min(resourceLimits.wood, state.gameState.resources.wood + state.gameState.resourceRates.wood * adjustedDelta * corruptionEfficiency)),
-              stone: Math.max(0, Math.min(resourceLimits.stone, state.gameState.resources.stone + state.gameState.resourceRates.stone * adjustedDelta * corruptionEfficiency)),
-              tools: Math.max(0, Math.min(resourceLimits.tools, state.gameState.resources.tools + state.gameState.resourceRates.tools * adjustedDelta * corruptionEfficiency)),
-              population: Math.floor(Math.min(
-                state.gameState.resources.housing,
-                state.gameState.resources.population + state.gameState.resourceRates.population * adjustedDelta
-              )),
-            },
+            resources: updatedResources,
           },
         };
       });
@@ -523,9 +549,6 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 更新研究进度
       get().updateResearchProgress(adjustedDelta);
-      
-      // 重新计算资源生产率
-      get().calculateResourceRates();
       
       // 计算人口增长
       get().calculatePopulationGrowth();
@@ -596,23 +619,32 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     addResources: (resources: Partial<Resources>) => {
-      set((state) => ({
-        gameState: {
-          ...state.gameState,
-          resources: {
-            ...state.gameState.resources,
-            food: state.gameState.resources.food + (resources.food || 0),
-            wood: state.gameState.resources.wood + (resources.wood || 0),
-            stone: state.gameState.resources.stone + (resources.stone || 0),
-            tools: state.gameState.resources.tools + (resources.tools || 0),
-            population: Math.floor(Math.min(
-              state.gameState.resources.housing,
-              state.gameState.resources.population + (resources.population || 0)
-            )),
-            housing: Math.floor(state.gameState.resources.housing + (resources.housing || 0)),
+      set((state) => {
+        const newResources = {
+          ...state.gameState.resources,
+          food: state.gameState.resources.food + (resources.food || 0),
+          wood: state.gameState.resources.wood + (resources.wood || 0),
+          stone: state.gameState.resources.stone + (resources.stone || 0),
+          tools: state.gameState.resources.tools + (resources.tools || 0),
+          population: Math.floor(Math.min(
+            state.gameState.resources.housing,
+            state.gameState.resources.population + (resources.population || 0)
+          )),
+          housing: Math.floor(state.gameState.resources.housing + (resources.housing || 0)),
+        };
+
+        // 同步资源管理器状态
+        if (resourceManager) {
+          resourceManager.setResources(newResources, 'manual');
+        }
+
+        return {
+          gameState: {
+            ...state.gameState,
+            resources: newResources,
           },
-        },
-      }));
+        };
+      });
     },
     
     spendResources: (cost: Partial<Resources>) => {
@@ -623,19 +655,26 @@ export const useGameStore = create<GameStore>()(persist(
         return false;
       }
       
+      const newResources = {
+        ...gameState.resources,
+        food: gameState.resources.food - (cost.food || 0),
+        wood: gameState.resources.wood - (cost.wood || 0),
+        stone: gameState.resources.stone - (cost.stone || 0),
+        tools: gameState.resources.tools - (cost.tools || 0),
+        population: gameState.resources.population - (cost.population || 0),
+      };
+      
       set((state) => ({
         gameState: {
           ...state.gameState,
-          resources: {
-            ...state.gameState.resources,
-            food: state.gameState.resources.food - (cost.food || 0),
-            wood: state.gameState.resources.wood - (cost.wood || 0),
-            stone: state.gameState.resources.stone - (cost.stone || 0),
-            tools: state.gameState.resources.tools - (cost.tools || 0),
-            population: state.gameState.resources.population - (cost.population || 0),
-          },
+          resources: newResources,
         },
       }));
+      
+      // 同步资源管理器状态
+      if (resourceManager) {
+            resourceManager.setResources(newResources, 'consumption');
+          }
       
       return true;
     },
@@ -650,6 +689,30 @@ export const useGameStore = create<GameStore>()(persist(
         (cost.tools || 0) <= resources.tools &&
         (cost.population || 0) <= resources.population
       );
+    },
+
+    // 资源管理器方法
+    getResourceManager: () => {
+      if (!resourceManager) {
+        const { resources, resourceLimits } = get().gameState;
+        resourceManager = initializeResourceManager(resources, resourceLimits);
+      }
+      return resourceManager;
+    },
+
+    initializeResourceManager: () => {
+      const { resources, resourceLimits } = get().gameState;
+      resourceManager = initializeResourceManager(resources, resourceLimits);
+    },
+
+    getResourceRates: () => {
+      const manager = get().getResourceManager();
+      return manager.getResourceRates();
+    },
+
+    getResourceRateDetails: (resource: keyof Resources) => {
+      const manager = get().getResourceManager();
+      return manager.getResourceRateDetails(resource);
     },
     
     buildStructure: (buildingId: string) => {
@@ -1025,8 +1088,8 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 人口消耗资源
       if (resources.population > 0) {
-        // 每人每日消耗0.05食物，转换为每秒消耗：0.05 / (24 * 60 * 60) * 2天/秒 = 0.05 / 43200
-        newRates.food -= resources.population * (0.05 / 43200); // 每人每秒消耗
+        // 每人每秒消耗0.1食物（更明显的消耗率）
+        newRates.food -= resources.population * 0.1;
         // 移除木材消耗：人口不应该消耗木材
       }
       
@@ -1292,15 +1355,23 @@ export const useGameStore = create<GameStore>()(persist(
         return;
       }
       
+      const { gameState } = get();
+      const newResources = {
+        ...gameState.resources,
+        [resourceType]: gameState.resources[resourceType] + 1,
+      };
+      
       set((state) => ({
         gameState: {
           ...state.gameState,
-          resources: {
-            ...state.gameState.resources,
-            [resourceType]: state.gameState.resources[resourceType] + 1,
-          },
+          resources: newResources,
         },
       }));
+      
+      // 同步资源管理器状态
+      if (resourceManager) {
+            resourceManager.setResources(newResources, 'manual');
+          }
     },
 
     recruitCharacter: (type: string, cost: Partial<Resources>) => {
