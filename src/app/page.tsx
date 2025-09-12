@@ -37,7 +37,6 @@ export default function Home() {
         setIsInitialized(true);
         console.log('游戏初始化完成 - 每10秒自动保存');
       }, 100); // 稍微增加延迟确保persist完全恢复
-     }, 100);
 
       return () => clearTimeout(timer);
     }
