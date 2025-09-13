@@ -244,6 +244,19 @@ export interface GameState {
     }[];
   };
   
+  // 外交系统状态
+  diplomacy: {
+    discoveredCountries: import('../types/diplomacy').Country[];
+    marketPrices: import('../types/diplomacy').MarketPrices;
+    relationships: Record<string, import('../types/diplomacy').RelationshipLevel>;
+    tradeHistory: import('../types/diplomacy').TradeRecord[];
+    giftHistory: import('../types/diplomacy').GiftRecord[];
+    warHistory: import('../types/diplomacy').WarRecord[];
+    mercenaryUnits: import('../types/diplomacy').MercenaryUnit[];
+    specialTreasures: import('../types/diplomacy').SpecialTreasure[];
+    raidEvents: import('../types/diplomacy').RaidEvent[];
+  };
+  
   // 游戏设置
   settings: GameSettings;
 }
@@ -317,6 +330,7 @@ export type GameTab =
   | 'buildings'
   | 'technology'
   | 'characters'
+  | 'diplomacy'
   | 'achievements';
 
 export interface Notification {

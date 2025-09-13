@@ -12,6 +12,7 @@ import { BuildingTab } from '@/components/features/building-tab';
 import { MilitaryTab } from '@/components/features/military-tab';
 import { ExplorationTab } from '@/components/features/exploration-tab';
 import { CharacterTab } from '@/components/features/character-tab';
+import { DiplomacyTab } from '@/components/features/diplomacy-tab';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
@@ -82,13 +83,7 @@ export default function Home() {
       case 'characters':
         return <CharacterTab />;
       case 'diplomacy':
-        return (
-          <div className="bg-gray-800 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">🤝</div>
-            <h2 className="text-2xl font-bold mb-2">外交系统</h2>
-            <p className="text-gray-400">外交功能开发中，敬请期待...</p>
-          </div>
-        );
+        return <DiplomacyTab gameState={gameState} onUpdateGameState={handleUpdateGameState} />;
       case 'settings':
         return (
           <div className="bg-gray-800 rounded-lg p-6 text-center">

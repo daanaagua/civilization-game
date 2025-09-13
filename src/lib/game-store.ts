@@ -15,6 +15,9 @@ import { globalEffectsSystem, Effect, EffectType, EffectSourceType } from './eff
 import { MilitarySystem } from './military-system';
 import { ExplorationSystem } from './exploration-system';
 import { CombatSystem } from './combat-system';
+import { DiplomacySystem } from './diplomacy-system';
+import { Country, RelationshipLevel, MarketPrices, TradeRecord, GiftRecord, WarRecord, MercenaryUnit, SpecialTreasure, RaidEvent } from '@/types/diplomacy';
+import { DIPLOMACY_CONFIG, COUNTRY_TEMPLATES, BASE_MARKET_PRICES } from './diplomacy-data';
 
 // 初始游戏状态
 const initialGameState: GameState = {
@@ -123,6 +126,19 @@ const initialGameState: GameState = {
       events: []
     },
     explorationHistory: []
+  },
+  
+  // 外交系统初始状态
+  diplomacy: {
+    discoveredCountries: [],
+    marketPrices: { ...BASE_MARKET_PRICES },
+    relationships: {},
+    tradeHistory: [],
+    giftHistory: [],
+    warHistory: [],
+    mercenaryUnits: [],
+    specialTreasures: [],
+    raidEvents: []
   },
 
   settings: {
@@ -374,6 +390,20 @@ interface GameStore {
   removeCharacterBuff: (characterId: string, buffId: string) => void;
   calculateCharacterEffects: () => any[];
   updateCharacterSystem: () => void;
+  
+  // 外交系统方法
+  discoverCountry: (countryTemplate?: any) => Country;
+  tradeWithCountry: (countryId: string, offer: Partial<Resources>, request: Partial<Resources>) => boolean;
+  giftToCountry: (countryId: string, gift: Partial<Resources>) => boolean;
+  declareWarOnCountry: (countryId: string) => boolean;
+  hireMercenaries: (countryId: string, unitType: string, count: number) => boolean;
+  updateDiplomaticRelationships: () => void;
+  getCountryRelationship: (countryId: string) => RelationshipLevel;
+  getDiscoveredCountries: () => Country[];
+  getDiplomacyMarketPrices: () => MarketPrices;
+  updateMarketPrices: () => void;
+  processRaidEvents: () => void;
+  generateRaidEvent: (countryId: string) => void;
 }
 
 // 全局资源管理器实例
@@ -3772,6 +3802,257 @@ export const useGameStore = create<GameStore>()(persist(
       set((state) => ({
         effectsVersion: state.effectsVersion + 1
       }));
+    },
+
+    // 外交系统方法
+    discoverCountry: (country: Country) => {
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          diplomacy: {
+            ...state.gameState.diplomacy,
+            discoveredCountries: [...state.gameState.diplomacy.discoveredCountries, country],
+            relationships: {
+              ...state.gameState.diplomacy.relationships,
+              [country.id]: DiplomacySystem.generateInitialRelationship(state.gameState.diplomacy.discoveredCountries.length)
+            }
+          }
+        }
+      }));
+    },
+
+    tradeWithCountry: (countryId: string, ourOffer: Partial<Resources>, theirOffer: Partial<Resources>) => {
+      const state = get().gameState;
+      const result = DiplomacySystem.executeTrade(state, countryId, ourOffer, theirOffer);
+      
+      if (result.success) {
+        set((gameState) => ({
+          gameState: {
+            ...gameState.gameState,
+            resources: {
+              ...gameState.gameState.resources,
+              ...result.newResources
+            },
+            diplomacy: {
+              ...gameState.gameState.diplomacy,
+              relationships: {
+                ...gameState.gameState.diplomacy.relationships,
+                [countryId]: result.newRelationship
+              },
+              tradeHistory: [...gameState.gameState.diplomacy.tradeHistory, result.tradeRecord!]
+            }
+          }
+        }));
+        
+        get().addNotification({
+          type: 'success',
+          message: `与${result.tradeRecord!.countryName}的贸易成功完成！`
+        });
+      } else {
+        get().addNotification({
+          type: 'error',
+          message: result.error || '贸易失败'
+        });
+      }
+    },
+
+    giftToCountry: (countryId: string, gift: Partial<Resources>) => {
+      const state = get().gameState;
+      const result = DiplomacySystem.executeGift(state, countryId, gift);
+      
+      if (result.success) {
+        set((gameState) => ({
+          gameState: {
+            ...gameState.gameState,
+            resources: {
+              ...gameState.gameState.resources,
+              ...result.newResources
+            },
+            diplomacy: {
+              ...gameState.gameState.diplomacy,
+              relationships: {
+                ...gameState.gameState.diplomacy.relationships,
+                [countryId]: result.newRelationship
+              },
+              giftHistory: [...gameState.gameState.diplomacy.giftHistory, result.giftRecord!]
+            }
+          }
+        }));
+        
+        get().addNotification({
+          type: 'success',
+          message: `成功向${result.giftRecord!.countryName}赠送礼物，关系得到改善！`
+        });
+      } else {
+        get().addNotification({
+          type: 'error',
+          message: result.error || '赠礼失败'
+        });
+      }
+    },
+
+    declareWar: (countryId: string) => {
+      const state = get().gameState;
+      const country = state.diplomacy.discoveredCountries.find(c => c.id === countryId);
+      
+      if (country) {
+        const warRecord: WarRecord = {
+          id: `war_${Date.now()}`,
+          countryId,
+          countryName: country.name,
+          startDate: state.gameTime,
+          isActive: true,
+          playerInitiated: true
+        };
+        
+        set((gameState) => ({
+          gameState: {
+            ...gameState.gameState,
+            diplomacy: {
+              ...gameState.gameState.diplomacy,
+              relationships: {
+                ...gameState.gameState.diplomacy.relationships,
+                [countryId]: {
+                  ...gameState.gameState.diplomacy.relationships[countryId],
+                  level: 'hostile',
+                  value: -100,
+                  atWar: true
+                }
+              },
+              warHistory: [...gameState.gameState.diplomacy.warHistory, warRecord]
+            }
+          }
+        }));
+        
+        get().addNotification({
+          type: 'warning',
+          message: `已向${country.name}宣战！`
+        });
+      }
+    },
+
+    hireMercenary: (mercenaryId: string) => {
+      const state = get().gameState;
+      const mercenary = state.diplomacy.mercenaryUnits.find(m => m.id === mercenaryId);
+      
+      if (mercenary && get().canAfford(mercenary.cost)) {
+        get().spendResources(mercenary.cost);
+        get().addUnit(mercenary.unitType, mercenary.count);
+        
+        set((gameState) => ({
+          gameState: {
+            ...gameState.gameState,
+            diplomacy: {
+              ...gameState.gameState.diplomacy,
+              mercenaryUnits: gameState.gameState.diplomacy.mercenaryUnits.filter(m => m.id !== mercenaryId)
+            }
+          }
+        }));
+        
+        get().addNotification({
+          type: 'success',
+          message: `成功雇佣${mercenary.count}个${mercenary.name}！`
+        });
+      }
+    },
+
+    updateMarketPrices: () => {
+      const newPrices = DiplomacySystem.generateMarketPrices();
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          diplomacy: {
+            ...state.gameState.diplomacy,
+            marketPrices: newPrices
+          }
+        }
+      }));
+    },
+
+    updateDiplomacyRelationships: () => {
+      const state = get().gameState;
+      const updatedRelationships = { ...state.diplomacy.relationships };
+      
+      // 自然关系衰减
+      Object.keys(updatedRelationships).forEach(countryId => {
+        const relationship = updatedRelationships[countryId];
+        if (!relationship.atWar) {
+          const decay = DiplomacySystem.calculateRelationshipDecay(relationship);
+          updatedRelationships[countryId] = {
+            ...relationship,
+            value: Math.max(-100, Math.min(100, relationship.value + decay)),
+            level: DiplomacySystem.calculateRelationshipLevel(relationship.value + decay)
+          };
+        }
+      });
+      
+      set((gameState) => ({
+        gameState: {
+          ...gameState.gameState,
+          diplomacy: {
+            ...gameState.gameState.diplomacy,
+            relationships: updatedRelationships
+          }
+        }
+      }));
+    },
+
+    generateRaidEvent: () => {
+      const state = get().gameState;
+      const hostileCountries = state.diplomacy.discoveredCountries.filter(country => {
+        const relationship = state.diplomacy.relationships[country.id];
+        return relationship && relationship.level === 'hostile';
+      });
+      
+      if (hostileCountries.length > 0) {
+        const raidEvent = DiplomacySystem.generateRaidEvent(hostileCountries);
+        if (raidEvent) {
+          set((gameState) => ({
+            gameState: {
+              ...gameState.gameState,
+              diplomacy: {
+                ...gameState.gameState.diplomacy,
+                raidEvents: [...gameState.gameState.diplomacy.raidEvents, raidEvent]
+              }
+            }
+          }));
+          
+          get().triggerPauseEvent({
+            id: `raid_${raidEvent.id}`,
+            type: 'raid',
+            title: '敌国袭扰',
+            description: `${raidEvent.countryName}的军队正在袭扰我们的边境！`,
+            choices: [
+              { text: '派兵抵御', effects: { stability: -5 } },
+              { text: '加强防御', effects: { resources: { wood: -50, stone: -30 } } }
+            ]
+          });
+        }
+      }
+    },
+
+    getCountryRelationship: (countryId: string) => {
+      const state = get().gameState;
+      if (!state.diplomacy || !state.diplomacy.relationships) {
+        return undefined;
+      }
+      return state.diplomacy.relationships[countryId];
+    },
+
+    getDiscoveredCountries: () => {
+      const state = get().gameState;
+      if (!state.diplomacy) {
+        return [];
+      }
+      return state.diplomacy.discoveredCountries || [];
+    },
+
+    getDiplomacyEffects: () => {
+      const state = get().gameState;
+      if (!state.diplomacy) {
+        return [];
+      }
+      return DiplomacySystem.getNationEffects ? DiplomacySystem.getNationEffects(state.diplomacy.discoveredCountries[0]) || [] : [];
     },
   }),
   {

@@ -6,6 +6,7 @@ import { ExplorationSystem } from '../../lib/exploration-system';
 import { CombatSystem } from '../../lib/combat-system';
 import { getUnitType } from '../../lib/military-data';
 import { getDungeonById } from '../../lib/dungeon-data';
+import { useGameStore } from '../../lib/game-store';
 
 interface ExplorationTabProps {
   gameState: {
@@ -31,6 +32,8 @@ interface ExplorationTabProps {
 }
 
 export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabProps) {
+  const { discoverCountry } = useGameStore();
+  
   const [explorationSystem] = useState(() => {
     const system = new ExplorationSystem();
     if (gameState.exploration) {
@@ -94,6 +97,14 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
       
       // 应用探索结果
       explorationSystem.applyExplorationResult(result, gameState.military?.units || []);
+      
+      // 如果发现了国家，添加到外交系统
+      if (result.discovery && result.discovery.type === 'country') {
+        const countryData = result.discovery.data;
+        if (countryData) {
+          discoverCountry(countryData.id, countryData);
+        }
+      }
       
       // 更新游戏状态
       const updates: any = {
