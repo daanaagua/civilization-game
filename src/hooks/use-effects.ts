@@ -27,11 +27,13 @@ interface EffectsBySource {
 
 export const useEffects = () => {
   const { getActiveEffects, getEffectsByType, getEffectsBySource, calculateEffectTotal } = useGameStore();
+  // 订阅effectsVersion用于触发重渲染
+  const effectsVersion = useGameStore((s) => s.effectsVersion);
 
   // 获取所有活跃效果
   const activeEffects = useMemo(() => {
     return getActiveEffects();
-  }, [getActiveEffects]);
+  }, [getActiveEffects, effectsVersion]);
 
   // 获取效果显示信息
   const getEffectDisplayInfo = (effect: Effect): EffectDisplayInfo => {
@@ -93,9 +95,9 @@ export const useEffects = () => {
       description: getEffectDescription(effect),
       value: effect.value,
       type: effect.type,
-      sourceType: effect.sourceType,
-      sourceId: effect.sourceId,
-      sourceName: getSourceName(effect.sourceType, effect.sourceId),
+      sourceType: (effect as any).sourceType,
+      sourceId: (effect as any).sourceId,
+      sourceName: (effect as any).source?.name ?? getSourceName((effect as any).sourceType, (effect as any).sourceId),
       isPositive: effect.value >= 0
     };
   };
@@ -105,13 +107,13 @@ export const useEffects = () => {
     const grouped = new Map<string, EffectsBySource>();
 
     activeEffects.forEach(effect => {
-      const key = `${effect.sourceType}-${effect.sourceId}`;
+      const key = `${(effect as any).source?.type ?? (effect as any).sourceType}-${(effect as any).source?.id ?? (effect as any).sourceId}`;
       const displayInfo = getEffectDisplayInfo(effect);
 
       if (!grouped.has(key)) {
         grouped.set(key, {
-          sourceType: effect.sourceType,
-          sourceId: effect.sourceId,
+          sourceType: (effect as any).source?.type ?? (effect as any).sourceType,
+          sourceId: (effect as any).source?.id ?? (effect as any).sourceId,
           sourceName: displayInfo.sourceName,
           effects: []
         });

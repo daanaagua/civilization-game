@@ -252,6 +252,7 @@ interface GameStore {
   setGameSpeed: (speed: number) => void;
 
   // 效果系统
+  effectsVersion: number;
   getEffectsSystem: () => typeof globalEffectsSystem;
   updateEffectsSystem: () => void;
   getActiveEffects: () => Effect[];
@@ -273,6 +274,7 @@ export const useGameStore = create<GameStore>()(persist(
     isRunning: false,
     lastUpdateTime: Date.now(),
     army: {},
+    effectsVersion: 0,
     
     get isPaused() {
       return get().gameState.isPaused;
@@ -302,6 +304,9 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 初始化资源管理器
       get().initializeResourceManager();
+      
+      // 计算初始资源速率
+      get().calculateResourceRates();
     },
     
     pauseGame: () => {
@@ -352,6 +357,11 @@ export const useGameStore = create<GameStore>()(persist(
       // 重置并初始化效果系统
       globalEffectsSystem.clear();
       globalEffectsSystem.updateFromGameState(newGameState);
+      // 增加版本以触发UI刷新
+      set((s) => ({ ...s, effectsVersion: s.effectsVersion + 1 }));
+      
+      // 计算初始资源速率
+      get().calculateResourceRates();
       
       get().resetTimeSystem();
     },
@@ -1018,7 +1028,24 @@ export const useGameStore = create<GameStore>()(persist(
       const technology = gameState.technologies[research.technologyId];
       if (!technology) return;
       
-      const newProgress = research.progress + deltaTime;
+      // 计算稳定度和腐败度对研究速度的影响
+      let researchSpeedMultiplier = 1;
+      
+      // 稳定度加成
+      if (gameState.stability >= 75) researchSpeedMultiplier += 0.25; // +25%
+      else if (gameState.stability >= 50) researchSpeedMultiplier += 0.15; // +15%
+      else if (gameState.stability >= 25) researchSpeedMultiplier += 0.05; // +5%
+      else if (gameState.stability < 20) researchSpeedMultiplier -= 0.1; // -10%
+      
+      // 腐败度惩罚
+      const corruptionPenalty = Math.min(gameState.corruption * 0.005, 0.25); // 每点腐败度-0.5%，最多-25%
+      researchSpeedMultiplier -= corruptionPenalty;
+      
+      // 确保速度不会为负
+      researchSpeedMultiplier = Math.max(0.1, researchSpeedMultiplier);
+      
+      const adjustedDeltaTime = deltaTime * researchSpeedMultiplier;
+      const newProgress = research.progress + adjustedDeltaTime;
       
       if (newProgress >= technology.researchTime) {
         get().completeResearch(research.technologyId);
@@ -1144,18 +1171,21 @@ export const useGameStore = create<GameStore>()(persist(
       });
       
       // 同步资源管理器的速率计算
-        if (resourceManager) {
-          resourceManager.calculateResourceRates(gameState);
-          // 使用resourceManager的计算结果更新gameState的resourceRates
-          const managerRates = resourceManager.getResourceRates();
-          newRates = {
-            food: managerRates.food || 0,
-            wood: managerRates.wood || 0,
-            stone: managerRates.stone || 0,
-            tools: managerRates.tools || 0,
-            population: newRates.population, // 人口增长仍由原逻辑处理
-          };
-        }
+      try {
+        const manager = get().getResourceManager();
+        manager.calculateResourceRates(gameState);
+        // 使用resourceManager的计算结果更新gameState的resourceRates
+        const managerRates = manager.getResourceRates();
+        newRates = {
+          food: managerRates.food || 0,
+          wood: managerRates.wood || 0,
+          stone: managerRates.stone || 0,
+          tools: managerRates.tools || 0,
+          population: newRates.population, // 人口增长仍由原逻辑处理
+        };
+      } catch (error) {
+        console.warn('Resource manager not available for rate calculation:', error);
+      }
       
       set((state) => ({
         gameState: {
@@ -2489,6 +2519,9 @@ export const useGameStore = create<GameStore>()(persist(
             lastUpdateTime: Date.now(),
           }));
           
+          // 加载后立刻初始化效果系统
+          get().updateEffectsSystem();
+          
           const currentState = get();
           currentState.addNotification({
             type: 'success',
@@ -2516,6 +2549,9 @@ export const useGameStore = create<GameStore>()(persist(
               lastUpdateTime: Date.now(),
             }));
             
+            // 加载后立刻初始化效果系统
+            get().updateEffectsSystem();
+            
             const currentState = get();
             currentState.addNotification({
               type: 'info',
@@ -2533,6 +2569,10 @@ export const useGameStore = create<GameStore>()(persist(
           title: '新游戏',
           message: '没有找到保存数据，开始新游戏',
         });
+        
+        // 使用默认初始状态时，也初始化效果系统
+        get().updateEffectsSystem();
+        
         return false;
       } catch (error) {
         console.error('加载游戏状态失败:', error);
@@ -2622,6 +2662,7 @@ export const useGameStore = create<GameStore>()(persist(
     updateEffectsSystem: () => {
       const state = get().gameState;
       globalEffectsSystem.updateFromGameState(state);
+      set((s) => ({ ...s, effectsVersion: s.effectsVersion + 1 }));
     },
 
     getActiveEffects: () => {

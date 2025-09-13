@@ -204,6 +204,9 @@ export class EffectsSystem {
       },
       duration: -1
     });
+
+    // 注意：稳定度和腐败度的具体影响现在在EffectsPanel组件中计算和显示
+    // 这里不再生成单独的研究速度效果，避免重复和混乱
   }
 
   // 根据游戏状态更新科技效果
