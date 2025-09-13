@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Info } from 'lucide-react';
 import { Effect, EffectType } from '@/lib/effects-system';
+import { AllEffectsModal } from '@/components/ui/AllEffectsModal';
 
 // 格式化效果值显示
 function formatValue(value: number, isPercentage: boolean): string {
@@ -289,11 +290,22 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
     return acc;
   }, {} as Record<string, Effect[]>);
 
+  const [showAllEffects, setShowAllEffects] = useState(false);
+
   return (
     <div className={`bg-gray-800/50 rounded-lg p-4 ${className || ''}`} onMouseMove={handleMouseMove}>
-      <div className="flex items-center gap-2 mb-3">
-        <Info className="w-4 h-4 text-blue-400" />
-        <h3 className="text-lg font-semibold text-white">当前效果</h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-blue-400" />
+          <h3 className="text-lg font-semibold text-white">当前效果</h3>
+        </div>
+        <button
+          onClick={() => setShowAllEffects(true)}
+          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
+        >
+          <Info className="h-4 w-4" />
+          全部效果
+        </button>
       </div>
       
       {/* 横排显示效果标签，支持自动换行 */}
@@ -331,6 +343,12 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
           position={mousePosition}
         />
       )}
+      
+      {/* 全部效果弹窗 */}
+      <AllEffectsModal 
+        isOpen={showAllEffects} 
+        onClose={() => setShowAllEffects(false)} 
+      />
     </div>
   );
 }

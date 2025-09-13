@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { GameState, Resources, ResourceLimits, Technology, Building, Character, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent, ResearchState } from '@/types/game';
+import { BuildingInstance, BuildingCategory } from '@/types/building';
 import { BUILDINGS, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
+import { BUILDING_DEFINITIONS, BUILDING_CATEGORIES, getBuildingDefinition, getBuildingsByCategory, isBuildingUnlocked, getAvailableBuildings } from './building-data';
+import { BuildingSystem, BuildingUtils } from './building-system';
 import { TECHNOLOGIES, getTechnologyPrerequisites, canResearchTechnology } from './technology-data';
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
@@ -64,7 +67,7 @@ const initialGameState: GameState = {
     horses: 100,
   },
   
-  buildings: {},
+  buildings: {} as Record<string, BuildingInstance>,
   
   // 使用新的科技数据结构
   technologies: Object.fromEntries(
@@ -170,6 +173,19 @@ interface GameStore {
   demolishBuilding: (buildingId: string) => boolean;
   getBuildingCount: (buildingId: string) => number;
   isBuildingUnlocked: (buildingId: string) => boolean;
+  
+  // 新建筑系统方法
+  constructBuilding: (buildingId: string) => boolean;
+  demolishBuildingNew: (instanceId: string) => boolean;
+  assignWorkerToBuildingNew: (instanceId: string, count?: number) => boolean;
+  removeWorkerFromBuildingNew: (instanceId: string, count?: number) => boolean;
+  getBuildingInstances: (buildingId?: string) => BuildingInstance[];
+  getBuildingsByCategory: (category: BuildingCategory) => BuildingInstance[];
+  updateBuildingProduction: () => void;
+  getBuildingProductionRates: () => Partial<Resources>;
+  getBuildingStorageBonus: () => Partial<Resources>;
+  canConstructBuilding: (buildingId: string) => { canBuild: boolean; reason?: string };
+  getBuildingConstructionCost: (buildingId: string) => Partial<Resources>;
   
   // 科技管理
   startResearch: (technologyId: string) => boolean;
@@ -643,6 +659,9 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 更新效果系统
       get().updateEffectsSystem();
+      
+      // 更新建筑生产
+      get().updateBuildingProduction();
       
       // 更新时间系统
       get().updateTimeSystem();
@@ -2884,6 +2903,330 @@ export const useGameStore = create<GameStore>()(persist(
       // 重新计算资源生产率
       get().calculateResourceRates();
       get().updateResearchPointsGeneration();
+    },
+    
+    // 新建筑系统方法实现
+    constructBuilding: (buildingId: string) => {
+      const { gameState } = get();
+      const buildingDef = getBuildingDefinition(buildingId);
+      
+      if (!buildingDef) {
+        console.error(`Building definition not found: ${buildingId}`);
+        return false;
+      }
+      
+      // 检查是否可以建造
+      const canBuild = get().canConstructBuilding(buildingId);
+      if (!canBuild.canBuild) {
+        get().addNotification({
+          type: 'error',
+          message: canBuild.reason || '无法建造此建筑'
+        });
+        return false;
+      }
+      
+      // 扣除建造成本
+      const cost = get().getBuildingConstructionCost(buildingId);
+      if (!get().spendResources(cost)) {
+        return false;
+      }
+      
+      // 创建建筑实例
+      const instanceId = `${buildingId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newBuilding: BuildingInstance = {
+        id: instanceId,
+        buildingId,
+        name: buildingDef.name,
+        level: 1,
+        assignedWorkers: 0,
+        constructionProgress: 100, // 立即完成建造
+        isConstructed: true,
+        constructionStartTime: Date.now(),
+        lastProductionTime: Date.now(),
+        effects: buildingDef.effects || {},
+        upgrades: []
+      };
+      
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          buildings: {
+            ...state.gameState.buildings,
+            [instanceId]: newBuilding
+          }
+        }
+      }));
+      
+      // 更新统计
+      get().incrementStatistic('totalBuildingsBuilt');
+      
+      // 重新计算资源生产率
+      get().calculateResourceRates();
+      
+      get().addNotification({
+        type: 'success',
+        message: `成功建造了${buildingDef.name}`
+      });
+      
+      return true;
+    },
+    
+    demolishBuildingNew: (instanceId: string) => {
+      const { gameState } = get();
+      const building = gameState.buildings[instanceId];
+      
+      if (!building) {
+        return false;
+      }
+      
+      // 移除建筑
+      const newBuildings = { ...gameState.buildings };
+      delete newBuildings[instanceId];
+      
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          buildings: newBuildings
+        }
+      }));
+      
+      // 重新计算资源生产率
+      get().calculateResourceRates();
+      
+      get().addNotification({
+        type: 'info',
+        message: `已拆除${building.name}`
+      });
+      
+      return true;
+    },
+    
+    assignWorkerToBuildingNew: (instanceId: string, count = 1) => {
+      const { gameState } = get();
+      const building = gameState.buildings[instanceId];
+      const buildingDef = getBuildingDefinition(building?.buildingId || '');
+      
+      if (!building || !buildingDef) {
+        return false;
+      }
+      
+      const availableWorkers = get().getAvailableWorkers();
+      const maxWorkers = buildingDef.maxWorkers || 1;
+      const canAssign = Math.min(count, availableWorkers, maxWorkers - building.assignedWorkers);
+      
+      if (canAssign <= 0) {
+        return false;
+      }
+      
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          buildings: {
+            ...state.gameState.buildings,
+            [instanceId]: {
+              ...building,
+              assignedWorkers: building.assignedWorkers + canAssign
+            }
+          }
+        }
+      }));
+      
+      // 重新计算资源生产率
+      get().calculateResourceRates();
+      
+      return true;
+    },
+    
+    removeWorkerFromBuildingNew: (instanceId: string, count = 1) => {
+      const { gameState } = get();
+      const building = gameState.buildings[instanceId];
+      
+      if (!building) {
+        return false;
+      }
+      
+      const canRemove = Math.min(count, building.assignedWorkers);
+      
+      if (canRemove <= 0) {
+        return false;
+      }
+      
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          buildings: {
+            ...state.gameState.buildings,
+            [instanceId]: {
+              ...building,
+              assignedWorkers: building.assignedWorkers - canRemove
+            }
+          }
+        }
+      }));
+      
+      // 重新计算资源生产率
+      get().calculateResourceRates();
+      
+      return true;
+    },
+    
+    getBuildingInstances: (buildingId?: string) => {
+      const { gameState } = get();
+      const buildings = Object.values(gameState.buildings);
+      
+      if (buildingId) {
+        return buildings.filter(building => building.buildingId === buildingId);
+      }
+      
+      return buildings;
+    },
+    
+    getBuildingsByCategory: (category: BuildingCategory) => {
+      const { gameState } = get();
+      const categoryBuildings = getBuildingsByCategory(category);
+      const buildingIds = categoryBuildings.map(b => b.id);
+      
+      return Object.values(gameState.buildings).filter(building => 
+        buildingIds.includes(building.buildingId)
+      );
+    },
+    
+    updateBuildingProduction: () => {
+      const { gameState } = get();
+      const now = Date.now();
+      
+      Object.values(gameState.buildings).forEach(building => {
+        if (!building.isConstructed || building.assignedWorkers === 0) {
+          return;
+        }
+        
+        const buildingDef = getBuildingDefinition(building.buildingId);
+        if (!buildingDef || !buildingDef.effects.production) {
+          return;
+        }
+        
+        const timeDiff = (now - building.lastProductionTime) / 1000; // 转换为秒
+        const productionRates = BuildingUtils.calculateProductionRates(building, buildingDef, gameState.technologies);
+        
+        const producedResources: Partial<Resources> = {};
+        Object.entries(productionRates).forEach(([resource, rate]) => {
+          if (rate > 0) {
+            producedResources[resource as keyof Resources] = rate * timeDiff;
+          }
+        });
+        
+        if (Object.keys(producedResources).length > 0) {
+          get().addResources(producedResources);
+        }
+        
+        // 更新最后生产时间
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            buildings: {
+              ...state.gameState.buildings,
+              [building.id]: {
+                ...building,
+                lastProductionTime: now
+              }
+            }
+          }
+        }));
+      });
+    },
+    
+    getBuildingProductionRates: () => {
+      const { gameState } = get();
+      const totalRates: Partial<Resources> = {};
+      
+      Object.values(gameState.buildings).forEach(building => {
+        if (!building.isConstructed || building.assignedWorkers === 0) {
+          return;
+        }
+        
+        const buildingDef = getBuildingDefinition(building.buildingId);
+        if (!buildingDef) {
+          return;
+        }
+        
+        const rates = BuildingUtils.calculateProductionRates(building, buildingDef, gameState.technologies);
+        Object.entries(rates).forEach(([resource, rate]) => {
+          totalRates[resource as keyof Resources] = (totalRates[resource as keyof Resources] || 0) + rate;
+        });
+      });
+      
+      return totalRates;
+    },
+    
+    getBuildingStorageBonus: () => {
+      const { gameState } = get();
+      const totalBonus: Partial<Resources> = {};
+      
+      Object.values(gameState.buildings).forEach(building => {
+        if (!building.isConstructed) {
+          return;
+        }
+        
+        const buildingDef = getBuildingDefinition(building.buildingId);
+        if (!buildingDef || !buildingDef.effects.storage) {
+          return;
+        }
+        
+        const bonus = BuildingUtils.calculateStorageBonus(building, buildingDef, gameState.technologies);
+        Object.entries(bonus).forEach(([resource, amount]) => {
+          totalBonus[resource as keyof Resources] = (totalBonus[resource as keyof Resources] || 0) + amount;
+        });
+      });
+      
+      return totalBonus;
+    },
+    
+    canConstructBuilding: (buildingId: string) => {
+      const { gameState } = get();
+      const buildingDef = getBuildingDefinition(buildingId);
+      
+      if (!buildingDef) {
+        return { canBuild: false, reason: '建筑定义未找到' };
+      }
+      
+      // 检查科技前置条件
+      if (!isBuildingUnlocked(buildingId, gameState.technologies)) {
+        return { canBuild: false, reason: '需要先研究相关科技' };
+      }
+      
+      // 检查建造限制
+      if (buildingDef.buildLimit !== undefined) {
+        const existingCount = get().getBuildingInstances(buildingId).length;
+        if (existingCount >= buildingDef.buildLimit) {
+          return { canBuild: false, reason: `已达到建造上限 (${buildingDef.buildLimit})` };
+        }
+      }
+      
+      // 检查资源
+      const cost = get().getBuildingConstructionCost(buildingId);
+      if (!get().canAfford(cost)) {
+        return { canBuild: false, reason: '资源不足' };
+      }
+      
+      return { canBuild: true };
+    },
+    
+    getBuildingConstructionCost: (buildingId: string) => {
+      const buildingDef = getBuildingDefinition(buildingId);
+      if (!buildingDef) {
+        return {};
+      }
+      
+      // 这里可以根据已有建筑数量调整成本
+      const existingCount = get().getBuildingInstances(buildingId).length;
+      const costMultiplier = Math.pow(1.2, existingCount); // 每个额外建筑增加20%成本
+      
+      const adjustedCost: Partial<Resources> = {};
+      Object.entries(buildingDef.cost).forEach(([resource, amount]) => {
+        adjustedCost[resource as keyof Resources] = Math.ceil(amount * costMultiplier);
+      });
+      
+      return adjustedCost;
     },
     
     removeTechnologyEffects: (technologyId: string) => {

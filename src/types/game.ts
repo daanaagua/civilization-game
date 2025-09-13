@@ -65,7 +65,7 @@ export interface ResourceRates {
   currency: number;
 }
 
-// 建筑类型
+// 建筑类型（保留兼容性，实际使用 building.ts 中的类型）
 export interface Building {
   id: string;
   name: string;
@@ -88,7 +88,7 @@ export type BuildingType =
   | 'special'
   | 'storage';
 
-// 建筑实例
+// 建筑实例（保留兼容性，实际使用 building.ts 中的 BuildingInstance）
 export interface BuildingInstance {
   buildingId: string;
   count: number;
@@ -207,8 +207,8 @@ export interface GameState {
   resourceRates: ResourceRates;
   resourceLimits: ResourceLimits;
   
-  // 建筑
-  buildings: Record<string, BuildingInstance>;
+  // 建筑（使用新的建筑系统）
+  buildings: Record<string, import('../types/building').BuildingInstance>;
   
   // 科技
   technologies: Record<string, Technology>;
