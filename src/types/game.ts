@@ -154,35 +154,8 @@ export interface ResearchState {
   researchSpeed: number; // 研究速度倍数
 }
 
-// 人物类型
-export interface Character {
-  id: string;
-  name: string;
-  type: CharacterType;
-  level: number;
-  experience: number;
-  skills: CharacterSkills;
-  traits: string[];
-  isActive: boolean;
-  description: string;
-}
-
-export type CharacterType = 
-  | 'chief'
-  | 'elder'
-  | 'craftsman'
-  | 'warrior'
-  | 'farmer'
-  | 'builder';
-
-export interface CharacterSkills {
-  leadership: number;
-  crafting: number;
-  farming: number;
-  building: number;
-  military: number;
-  research: number;
-}
+// 人物系统（新版本）
+// 人物相关类型定义已移至 character.ts 文件
 
 // 游戏状态
 export interface GameState {
@@ -215,7 +188,12 @@ export interface GameState {
   researchState: ResearchState;
   
   // 人物
-  characters: Record<string, Character>;
+  characterSystem: {
+    activeCharacters: { [position: string]: string }; // 职位 -> 人物ID
+    availableCharacters: string[]; // 可用人物ID列表
+    allCharacters: { [id: string]: Character }; // 所有人物数据
+    unlockedPositions: string[]; // 已解锁的职位
+  };
   
   // 核心系统
   stability: number;

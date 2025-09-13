@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { GameState, Resources, ResourceLimits, Technology, Building, Character, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent, ResearchState } from '@/types/game';
+import { GameState, Resources, ResourceLimits, Technology, Building, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent, ResearchState } from '@/types/game';
+import { Character, CharacterPosition, CharacterSystem } from '@/types/character';
 import { BuildingInstance, BuildingCategory } from '@/types/building';
 import { BUILDINGS, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
 import { BUILDING_DEFINITIONS, BUILDING_CATEGORIES, getBuildingDefinition, getBuildingsByCategory, isBuildingUnlocked, getAvailableBuildings } from './building-data';
@@ -85,7 +86,12 @@ const initialGameState: GameState = {
     researchPointsPerSecond: 0,
   } as ResearchState,
   
-  characters: {}, // 初始无关键人物
+  characterSystem: {
+    activeCharacters: {},
+    availableCharacters: [],
+    allCharacters: {},
+    unlockedPositions: ['chief'] // 默认解锁酋长职位
+  },
   
   stability: 50,
   corruption: 0, // 初始腐败度为0，需要解锁法律法典后显示
@@ -352,6 +358,22 @@ interface GameStore {
   getExplorationHistory: () => any[];
   addDiscoveredLocation: (location: any) => void;
   addExplorationRecord: (record: any) => void;
+
+  // 人物系统方法
+  generateCharacter: () => string; // 返回生成的人物ID
+  appointCharacter: (characterId: string, position: CharacterPosition) => boolean;
+  dismissCharacter: (position: CharacterPosition) => boolean;
+  getActiveCharacters: () => { [position: string]: Character };
+  getAvailableCharacters: () => Character[];
+  getAllCharacters: () => Character[];
+  getCharacterById: (id: string) => Character | undefined;
+  unlockPosition: (position: CharacterPosition) => void;
+  getUnlockedPositions: () => CharacterPosition[];
+  updateCharacterHealth: (characterId: string, change: number) => void;
+  addCharacterBuff: (characterId: string, buff: any) => void;
+  removeCharacterBuff: (characterId: string, buffId: string) => void;
+  calculateCharacterEffects: () => any[];
+  updateCharacterSystem: () => void;
 }
 
 // 全局资源管理器实例
@@ -3516,6 +3538,239 @@ export const useGameStore = create<GameStore>()(persist(
             explorationHistory: [...state.gameState.exploration.explorationHistory, record]
           }
         }
+      }));
+    },
+
+    // 人物系统方法
+    generateCharacter: () => {
+      const { generateRandomCharacter } = require('./character-system');
+      const character = generateRandomCharacter();
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          characterSystem: {
+            ...state.gameState.characterSystem,
+            availableCharacters: [...state.gameState.characterSystem.availableCharacters, character],
+            allCharacters: {
+              ...state.gameState.characterSystem.allCharacters,
+              [character.id]: character
+            }
+          }
+        }
+      }));
+      return character;
+    },
+
+    appointCharacter: (characterId: string, position: CharacterPosition) => {
+      const state = get();
+      const character = state.gameState.characterSystem.allCharacters[characterId];
+      if (!character) return false;
+
+      // 检查职位是否已解锁
+      if (!state.gameState.characterSystem.unlockedPositions.includes(position)) {
+        return false;
+      }
+
+      // 检查职位是否已被占用
+      const currentHolder = Object.values(state.gameState.characterSystem.activeCharacters)
+        .find(char => char.position === position);
+      if (currentHolder) return false;
+
+      // 任命人物
+      const appointedCharacter = { ...character, position };
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          characterSystem: {
+            ...state.gameState.characterSystem,
+            activeCharacters: {
+              ...state.gameState.characterSystem.activeCharacters,
+              [characterId]: appointedCharacter
+            },
+            availableCharacters: state.gameState.characterSystem.availableCharacters
+              .filter(char => char.id !== characterId)
+          }
+        }
+      }));
+
+      // 更新效果系统
+      get().updateCharacterSystem();
+      return true;
+    },
+
+    dismissCharacter: (characterId: string) => {
+      const state = get();
+      const character = state.gameState.characterSystem.activeCharacters[characterId];
+      if (!character) return false;
+
+      const dismissedCharacter = { ...character, position: undefined };
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          characterSystem: {
+            ...state.gameState.characterSystem,
+            activeCharacters: Object.fromEntries(
+              Object.entries(state.gameState.characterSystem.activeCharacters)
+                .filter(([id]) => id !== characterId)
+            ),
+            availableCharacters: [...state.gameState.characterSystem.availableCharacters, dismissedCharacter]
+          }
+        }
+      }));
+
+      // 更新效果系统
+      get().updateCharacterSystem();
+      return true;
+    },
+
+    updateCharacterHealth: (characterId: string, healthChange: number) => {
+      set((state) => {
+        const character = state.gameState.characterSystem.allCharacters[characterId];
+        if (!character) return state;
+
+        const newHealth = Math.max(0, Math.min(100, character.health + healthChange));
+        const updatedCharacter = { ...character, health: newHealth };
+
+        return {
+          gameState: {
+            ...state.gameState,
+            characterSystem: {
+              ...state.gameState.characterSystem,
+              allCharacters: {
+                ...state.gameState.characterSystem.allCharacters,
+                [characterId]: updatedCharacter
+              },
+              activeCharacters: state.gameState.characterSystem.activeCharacters[characterId]
+                ? { ...state.gameState.characterSystem.activeCharacters, [characterId]: updatedCharacter }
+                : state.gameState.characterSystem.activeCharacters,
+              availableCharacters: state.gameState.characterSystem.availableCharacters.map(char =>
+                char.id === characterId ? updatedCharacter : char
+              )
+            }
+          }
+        };
+      });
+    },
+
+    addCharacterBuff: (characterId: string, buff: any) => {
+      set((state) => {
+        const character = state.gameState.characterSystem.allCharacters[characterId];
+        if (!character) return state;
+
+        const updatedCharacter = {
+          ...character,
+          buffs: [...character.buffs, buff]
+        };
+
+        return {
+          gameState: {
+            ...state.gameState,
+            characterSystem: {
+              ...state.gameState.characterSystem,
+              allCharacters: {
+                ...state.gameState.characterSystem.allCharacters,
+                [characterId]: updatedCharacter
+              },
+              activeCharacters: state.gameState.characterSystem.activeCharacters[characterId]
+                ? { ...state.gameState.characterSystem.activeCharacters, [characterId]: updatedCharacter }
+                : state.gameState.characterSystem.activeCharacters,
+              availableCharacters: state.gameState.characterSystem.availableCharacters.map(char =>
+                char.id === characterId ? updatedCharacter : char
+              )
+            }
+          }
+        };
+      });
+
+      // 更新效果系统
+      get().updateCharacterSystem();
+    },
+
+    removeCharacterBuff: (characterId: string, buffId: string) => {
+      set((state) => {
+        const character = state.gameState.characterSystem.allCharacters[characterId];
+        if (!character) return state;
+
+        const updatedCharacter = {
+          ...character,
+          buffs: character.buffs.filter(buff => buff.id !== buffId)
+        };
+
+        return {
+          gameState: {
+            ...state.gameState,
+            characterSystem: {
+              ...state.gameState.characterSystem,
+              allCharacters: {
+                ...state.gameState.characterSystem.allCharacters,
+                [characterId]: updatedCharacter
+              },
+              activeCharacters: state.gameState.characterSystem.activeCharacters[characterId]
+                ? { ...state.gameState.characterSystem.activeCharacters, [characterId]: updatedCharacter }
+                : state.gameState.characterSystem.activeCharacters,
+              availableCharacters: state.gameState.characterSystem.availableCharacters.map(char =>
+                char.id === characterId ? updatedCharacter : char
+              )
+            }
+          }
+        };
+      });
+
+      // 更新效果系统
+      get().updateCharacterSystem();
+    },
+
+    unlockCharacterPosition: (position: CharacterPosition) => {
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          characterSystem: {
+            ...state.gameState.characterSystem,
+            unlockedPositions: state.gameState.characterSystem.unlockedPositions.includes(position)
+              ? state.gameState.characterSystem.unlockedPositions
+              : [...state.gameState.characterSystem.unlockedPositions, position]
+          }
+        }
+      }));
+    },
+
+    getActiveCharacters: () => {
+      return Object.values(get().gameState.characterSystem.activeCharacters);
+    },
+
+    getAvailableCharacters: () => {
+      return get().gameState.characterSystem.availableCharacters;
+    },
+
+    getCharacterById: (characterId: string) => {
+      return get().gameState.characterSystem.allCharacters[characterId];
+    },
+
+    calculateCharacterEffects: () => {
+      const { calculateCharacterEffects } = require('./character-system');
+      const activeCharacters = get().getActiveCharacters();
+      return calculateCharacterEffects(activeCharacters);
+    },
+
+    updateCharacterSystem: () => {
+      const effects = get().calculateCharacterEffects();
+      const effectsSystem = get().getEffectsSystem();
+      
+      // 移除旧的人物效果
+      effectsSystem.removeEffectsBySource('character');
+      
+      // 添加新的人物效果
+      effects.forEach(effect => {
+        effectsSystem.addEffect({
+          ...effect,
+          sourceType: 'character',
+          sourceId: effect.characterId
+        });
+      });
+      
+      // 更新效果系统版本
+      set((state) => ({
+        effectsVersion: state.effectsVersion + 1
       }));
     },
   }),
