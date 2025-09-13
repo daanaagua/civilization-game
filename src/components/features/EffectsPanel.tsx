@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Info } from 'lucide-react';
+import { Info, List } from 'lucide-react';
 import { Effect, EffectType } from '@/lib/effects-system';
+import { AllEffectsModal } from '@/components/ui/AllEffectsModal';
 
 // 格式化效果值显示
 function formatValue(value: number, isPercentage: boolean): string {
@@ -329,6 +330,7 @@ interface EffectsPanelProps {
 export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   const [hoveredEffect, setHoveredEffect] = useState<Effect | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showAllEffectsModal, setShowAllEffectsModal] = useState(false);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePosition({ x: e.clientX, y: e.clientY });
@@ -337,9 +339,11 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   if (!effects || effects.length === 0) {
     return (
       <div className={`bg-gray-800/50 rounded-lg p-4 ${className || ''}`}>
-        <div className="flex items-center gap-2 mb-3">
-          <Info className="w-4 h-4 text-blue-400" />
-          <h3 className="text-lg font-semibold text-white">当前效果</h3>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-blue-400" />
+            <h3 className="text-lg font-semibold text-white">当前效果</h3>
+          </div>
         </div>
         <p className="text-gray-400 text-sm">暂无生效的国家效果</p>
       </div>
@@ -363,9 +367,21 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
 
   return (
     <div className={`bg-gray-800/50 rounded-lg p-4 ${className || ''}`} onMouseMove={handleMouseMove}>
-      <div className="flex items-center gap-2 mb-3">
-        <Info className="w-4 h-4 text-blue-400" />
-        <h3 className="text-lg font-semibold text-white">当前效果</h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-blue-400" />
+          <h3 className="text-lg font-semibold text-white">当前效果</h3>
+        </div>
+        {effects && effects.length > 0 && (
+          <button
+            onClick={() => setShowAllEffectsModal(true)}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 rounded transition-colors"
+            title="查看全部效果详情"
+          >
+            <List className="w-3 h-3" />
+            全部效果
+          </button>
+        )}
       </div>
       
       {/* 横排显示效果标签，支持自动换行 */}
@@ -399,6 +415,12 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
           position={mousePosition}
         />
       )}
+      
+      <AllEffectsModal
+        isOpen={showAllEffectsModal}
+        onClose={() => setShowAllEffectsModal(false)}
+        effects={effects || []}
+      />
     </div>
   );
 }

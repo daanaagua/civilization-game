@@ -11,6 +11,7 @@ export enum EffectType {
   RESEARCH_SPEED = 'research_speed',
   BUILDING_COST = 'building_cost',
   MILITARY_STRENGTH = 'military_strength',
+  TRADE_INCOME = 'trade_income',
   INHERITANCE = 'inheritance'
 }
 
