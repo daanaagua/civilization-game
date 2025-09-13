@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Info, List } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { Effect, EffectType } from '@/lib/effects-system';
-import { AllEffectsModal } from '@/components/ui/AllEffectsModal';
 
 // 格式化效果值显示
 function formatValue(value: number, isPercentage: boolean): string {
@@ -94,96 +93,21 @@ function getStabilityEffects(stability: number): Array<{name: string, value: str
   return effects;
 }
 
-// 计算腐败度对游戏机制的影响（根据corruption.md设计文档）
+// 计算腐败度对游戏机制的影响
 function getCorruptionEffects(corruption: number): Array<{name: string, value: string}> {
-  let resourceOutput = 0;
-  let buildingCost = 0;
-  let researchSpeed = 0;
-  let diplomacySpeed = 0;
-  let trustLevel = 0;
+  const taxEfficiency = Math.max(-50, -corruption);
+  const buildingCost = Math.min(50, corruption);
+  const researchSpeed = Math.max(-30, -corruption * 0.5);
+  const tradeIncome = Math.max(-40, -corruption * 0.8);
+  const armyMaintenance = Math.min(30, corruption * 0.6);
 
-  if (corruption <= 25) {
-    // 0-25：无影响
-    resourceOutput = 0;
-    buildingCost = 0;
-    researchSpeed = 0;
-  } else if (corruption <= 50) {
-    // 26-50：所有资源产出 -10%
-    resourceOutput = -10;
-    buildingCost = 0;
-    researchSpeed = 0;
-  } else if (corruption <= 60) {
-    // 51-60：所有资源产出 -25%，建筑建造成本 +20%
-    resourceOutput = -25;
-    buildingCost = 20;
-    researchSpeed = 0;
-    diplomacySpeed = -50; // 超过60%：外交关系改善速度 -50%
-  } else if (corruption <= 70) {
-    // 61-70：所有资源产出 -25%，建筑建造成本 +20%，科技研究速度 -30%
-    resourceOutput = -25;
-    buildingCost = 20;
-    researchSpeed = -30;
-    diplomacySpeed = -50;
-  } else if (corruption <= 75) {
-    // 71-75：所有资源产出 -40%，建筑建造成本 +50%，科技研究速度 -30%
-    resourceOutput = -40;
-    buildingCost = 50;
-    researchSpeed = -30;
-    diplomacySpeed = -50;
-  } else if (corruption <= 80) {
-    // 76-80：所有资源产出 -40%，建筑建造成本 +50%，科技研究速度 -30%
-    resourceOutput = -40;
-    buildingCost = 50;
-    researchSpeed = -30;
-    diplomacySpeed = -50;
-    trustLevel = -20; // 超过80%：其他文明信任度 -20%
-  } else if (corruption <= 85) {
-    // 81-85：所有资源产出 -40%，建筑建造成本 +50%，科技研究速度 -50%
-    resourceOutput = -40;
-    buildingCost = 50;
-    researchSpeed = -50;
-    diplomacySpeed = -50;
-    trustLevel = -20;
-  } else if (corruption <= 90) {
-    // 86-90：所有资源产出 -40%，建筑建造成本 +50%，科技研究速度 -50%
-    resourceOutput = -40;
-    buildingCost = 50;
-    researchSpeed = -50;
-    diplomacySpeed = -50;
-    trustLevel = -20;
-  } else {
-    // 91-100：所有资源产出 -60%，建筑建造成本 +100%，科技研究速度 -50%，可能触发叛乱事件
-    resourceOutput = -60;
-    buildingCost = 100;
-    researchSpeed = -50;
-    diplomacySpeed = -50;
-    trustLevel = -20;
-  }
-
-  const effects = [];
-  
-  if (resourceOutput !== 0) {
-    effects.push({ name: '资源产出', value: `${resourceOutput}%` });
-  }
-  if (buildingCost !== 0) {
-    effects.push({ name: '建筑成本', value: `+${buildingCost}%` });
-  }
-  if (researchSpeed !== 0) {
-    effects.push({ name: '科技研发速度', value: `${researchSpeed}%` });
-  }
-  if (diplomacySpeed !== 0) {
-    effects.push({ name: '外交改善速度', value: `${diplomacySpeed}%` });
-  }
-  if (trustLevel !== 0) {
-    effects.push({ name: '文明信任度', value: `${trustLevel}%` });
-  }
-  
-  // 如果腐败度很低，显示无影响
-  if (effects.length === 0) {
-    effects.push({ name: '当前影响', value: '无负面影响' });
-  }
-
-  return effects;
+  return [
+    { name: '税收效率', value: `${taxEfficiency}%` },
+    { name: '建筑成本', value: `+${buildingCost}%` },
+    { name: '科技研发速度', value: `${researchSpeed}%` },
+    { name: '贸易收益', value: `${tradeIncome}%` },
+    { name: '军队维护费', value: `+${armyMaintenance}%` }
+  ];
 }
 
 // 效果标签组件
@@ -218,6 +142,9 @@ function EffectTag({ effect, onHover }: EffectTagProps) {
 
   const colorClass = getEffectColor(effect.type, effect.value);
   const displayValue = formatValue(effect.value, effect.isPercentage);
+  
+  // 使用displayName如果存在，否则使用默认格式
+  const displayText = (effect as any).displayName || `${effect.name}: ${displayValue}`;
 
   return (
     <div
@@ -225,7 +152,7 @@ function EffectTag({ effect, onHover }: EffectTagProps) {
       onMouseEnter={() => onHover?.(effect)}
       onMouseLeave={() => onHover?.(null)}
     >
-      {effect.name}: {displayValue}
+      {displayText}
     </div>
   );
 }
@@ -330,7 +257,6 @@ interface EffectsPanelProps {
 export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   const [hoveredEffect, setHoveredEffect] = useState<Effect | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [showAllEffectsModal, setShowAllEffectsModal] = useState(false);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePosition({ x: e.clientX, y: e.clientY });
@@ -339,11 +265,9 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   if (!effects || effects.length === 0) {
     return (
       <div className={`bg-gray-800/50 rounded-lg p-4 ${className || ''}`}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-blue-400" />
-            <h3 className="text-lg font-semibold text-white">当前效果</h3>
-          </div>
+        <div className="flex items-center gap-2 mb-3">
+          <Info className="w-4 h-4 text-blue-400" />
+          <h3 className="text-lg font-semibold text-white">当前效果</h3>
         </div>
         <p className="text-gray-400 text-sm">暂无生效的国家效果</p>
       </div>
@@ -367,21 +291,9 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
 
   return (
     <div className={`bg-gray-800/50 rounded-lg p-4 ${className || ''}`} onMouseMove={handleMouseMove}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-blue-400" />
-          <h3 className="text-lg font-semibold text-white">当前效果</h3>
-        </div>
-        {effects && effects.length > 0 && (
-          <button
-            onClick={() => setShowAllEffectsModal(true)}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 rounded transition-colors"
-            title="查看全部效果详情"
-          >
-            <List className="w-3 h-3" />
-            全部效果
-          </button>
-        )}
+      <div className="flex items-center gap-2 mb-3">
+        <Info className="w-4 h-4 text-blue-400" />
+        <h3 className="text-lg font-semibold text-white">当前效果</h3>
       </div>
       
       {/* 横排显示效果标签，支持自动换行 */}
@@ -390,13 +302,17 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
           // 对于同类型的效果，显示合并后的值
           const firstEffect = effectGroup[0];
           const totalValue = effectGroup.reduce((sum, effect) => sum + effect.value, 0);
+          // 强制稳定度和腐败度不显示数值
+          const isStabilityOrCorruption = firstEffect.name === '稳定度' || firstEffect.name === '腐败度';
+
           const mergedEffect = {
             ...firstEffect,
             value: totalValue,
-            // 确保必要字段存在
             name: firstEffect.name || '未知效果',
             type: firstEffect.type || EffectType.STABILITY,
-            isPercentage: firstEffect.isPercentage !== undefined ? firstEffect.isPercentage : true
+            isPercentage: isStabilityOrCorruption ? false : (firstEffect.isPercentage !== undefined ? firstEffect.isPercentage : true),
+            // 直接在这里控制显示，稳定度和腐败度只显示名称
+            displayName: isStabilityOrCorruption ? firstEffect.name : `${firstEffect.name}: ${formatValue(totalValue, firstEffect.isPercentage)}`
           };
           
           return (
@@ -415,12 +331,6 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
           position={mousePosition}
         />
       )}
-      
-      <AllEffectsModal
-        isOpen={showAllEffectsModal}
-        onClose={() => setShowAllEffectsModal(false)}
-        effects={effects || []}
-      />
     </div>
   );
 }
