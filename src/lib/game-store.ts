@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { GameState, Resources, ResourceLimits, Technology, Building, Character, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent } from '@/types/game';
-import { BUILDINGS, TECHNOLOGIES, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
+import { GameState, Resources, ResourceLimits, Technology, Building, Character, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent, ResearchState } from '@/types/game';
+import { BUILDINGS, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
+import { TECHNOLOGIES, getTechnologyPrerequisites, canResearchTechnology } from './technology-data';
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
 import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced } from '@/lib/enhanced-persistence';
@@ -32,6 +33,10 @@ const initialGameState: GameState = {
     tools: 0,
     population: 1,
     housing: 0, // 初始无住房，有一个免费人口
+    researchPoints: 0,
+    copper: 0,
+    iron: 0,
+    horses: 0,
   },
   
   resourceRates: {
@@ -40,6 +45,10 @@ const initialGameState: GameState = {
     stone: 0,
     tools: 0,
     population: 1,
+    researchPoints: 0,
+    copper: 0,
+    iron: 0,
+    horses: 0,
   },
   
   resourceLimits: {
@@ -49,11 +58,26 @@ const initialGameState: GameState = {
     tools: 50,
     population: 1,
     housing: 0,
+    researchPoints: 1000,
+    copper: 500,
+    iron: 300,
+    horses: 100,
   },
   
   buildings: {},
   
-  technologies: { ...TECHNOLOGIES },
+  // 使用新的科技数据结构
+  technologies: Object.fromEntries(
+    Object.values(TECHNOLOGIES).map(tech => [tech.id, { ...tech, researched: false, researchProgress: 0 }])
+  ),
+  
+  // 科技研究状态
+  researchState: {
+    currentResearch: null,
+    researchQueue: [],
+    researchPoints: 0,
+    researchPointsPerSecond: 0,
+  } as ResearchState,
   
   characters: {}, // 初始无关键人物
   
@@ -149,9 +173,20 @@ interface GameStore {
   
   // 科技管理
   startResearch: (technologyId: string) => boolean;
-    completeResearch: (technologyId: string) => void;
-    pauseResearch: () => void;
-    updateResearchProgress: (deltaTime: number) => void;
+  completeResearch: (technologyId: string) => void;
+  pauseResearch: () => void;
+  updateResearchProgress: (deltaTime: number) => void;
+  
+  // 新的科技系统方法
+  getTechnology: (technologyId: string) => Technology | undefined;
+  getAvailableTechnologies: () => Technology[];
+  getResearchedTechnologies: () => Technology[];
+  canResearch: (technologyId: string) => boolean;
+  addResearchPoints: (points: number) => void;
+  spendResearchPoints: (points: number) => boolean;
+  updateResearchPointsGeneration: () => void;
+  applyTechnologyEffects: (technologyId: string) => void;
+  removeTechnologyEffects: (technologyId: string) => void;
   
   // UI 管理
   setActiveTab: (tab: GameState['settings'] extends { activeTab: infer T } ? T : never) => void;
@@ -549,6 +584,22 @@ export const useGameStore = create<GameStore>()(persist(
             state.gameState.resources.housing + 1,
             state.gameState.resources.population + state.gameState.resourceRates.population * adjustedDelta
           )),
+          researchPoints: Math.max(0, Math.min(
+            state.gameState.resourceLimits.researchPoints,
+            state.gameState.resources.researchPoints + state.gameState.resourceRates.researchPoints * adjustedDelta * corruptionEfficiency
+          )),
+          copper: Math.max(0, Math.min(
+            state.gameState.resourceLimits.copper,
+            state.gameState.resources.copper + state.gameState.resourceRates.copper * adjustedDelta * corruptionEfficiency
+          )),
+          iron: Math.max(0, Math.min(
+            state.gameState.resourceLimits.iron,
+            state.gameState.resources.iron + state.gameState.resourceRates.iron * adjustedDelta * corruptionEfficiency
+          )),
+          horses: Math.max(0, Math.min(
+            state.gameState.resourceLimits.horses,
+            state.gameState.resources.horses + state.gameState.resourceRates.horses * adjustedDelta * corruptionEfficiency
+          )),
         };
 
         // 同步资源管理器状态
@@ -908,25 +959,32 @@ export const useGameStore = create<GameStore>()(persist(
       const { gameState } = get();
       const technology = gameState.technologies[technologyId];
       
-      if (!technology || !technology.unlocked || technology.researched) {
+      if (!technology || technology.researched) {
         return false;
       }
       
-      if (gameState.currentResearch) {
+      if (!get().canResearch(technologyId)) {
+        return false;
+      }
+      
+      if (gameState.researchState?.currentResearch) {
         return false; // 已经在研究其他科技
       }
       
-      if (!get().spendResources(technology.cost)) {
+      if (!get().spendResearchPoints(technology.cost.researchPoints || 0)) {
         return false;
       }
       
       set((state) => ({
         gameState: {
           ...state.gameState,
-          currentResearch: {
-            technologyId,
-            progress: 0,
-            startTime: Date.now(),
+          researchState: {
+            ...state.gameState.researchState,
+            currentResearch: {
+              technologyId,
+              progress: 0,
+              startTime: Date.now(),
+            },
           },
         },
       }));
@@ -955,39 +1013,21 @@ export const useGameStore = create<GameStore>()(persist(
             [technologyId]: {
               ...technology,
               researched: true,
+              researchProgress: technology.researchTime,
             },
           },
-          currentResearch: undefined,
+          researchState: {
+            ...state.gameState.researchState,
+            currentResearch: null,
+          },
         },
       }));
       
-      // 检查并解锁所有依赖此科技的其他科技
-      const updatedTechnologies = { ...gameState.technologies };
-      updatedTechnologies[technologyId] = { ...technology, researched: true };
+      // 应用科技效果
+      get().applyTechnologyEffects(technologyId);
       
-      Object.values(updatedTechnologies).forEach((tech) => {
-        if (!tech.unlocked && tech.requires && tech.requires.length > 0) {
-          // 检查是否所有前置条件都已满足
-          const allRequirementsMet = tech.requires.every((reqId) => {
-            const reqTech = updatedTechnologies[reqId];
-            return reqTech && reqTech.researched;
-          });
-          
-          if (allRequirementsMet) {
-            updatedTechnologies[tech.id] = { ...tech, unlocked: true };
-          }
-        }
-      });
-      
-      // 更新所有科技状态
-      set((state) => ({
-        gameState: {
-          ...state.gameState,
-          technologies: updatedTechnologies,
-        },
-      }));
-      
-      // 建筑解锁现在通过动态检查科技状态实现，无需手动设置
+      // 更新统计数据
+      get().incrementStatistic('totalTechnologiesResearched');
       
       get().addNotification({
         type: 'success',
@@ -1000,14 +1040,17 @@ export const useGameStore = create<GameStore>()(persist(
     pauseResearch: () => {
       const { gameState } = get();
       
-      if (!gameState.currentResearch) {
+      if (!gameState.researchState?.currentResearch) {
         return;
       }
       
       set((state) => ({
         gameState: {
           ...state.gameState,
-          currentResearch: undefined,
+          researchState: {
+            ...state.gameState.researchState,
+            currentResearch: null,
+          },
         },
       }));
       
@@ -1021,7 +1064,7 @@ export const useGameStore = create<GameStore>()(persist(
     
     updateResearchProgress: (deltaTime: number) => {
       const { gameState } = get();
-      const research = gameState.currentResearch;
+      const research = gameState.researchState?.currentResearch;
       
       if (!research) return;
       
@@ -1053,9 +1096,12 @@ export const useGameStore = create<GameStore>()(persist(
         set((state) => ({
           gameState: {
             ...state.gameState,
-            currentResearch: {
-              ...research,
-              progress: newProgress,
+            researchState: {
+              ...state.gameState.researchState,
+              currentResearch: {
+                ...research,
+                progress: newProgress,
+              },
             },
           },
         }));
@@ -2690,7 +2736,189 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     calculateEffectTotal: (type: EffectType) => {
-      return globalEffectsSystem.calculateEffectTotal(type);
+      return get().getEffectsSystem().calculateEffectTotal(type);
+    },
+    
+    // 新的科技系统方法实现
+    getTechnology: (technologyId: string) => {
+      const { gameState } = get();
+      return gameState.technologies[technologyId];
+    },
+    
+    getAvailableTechnologies: () => {
+      const { gameState } = get();
+      return Object.values(gameState.technologies).filter(tech => 
+        !tech.researched && get().canResearch(tech.id)
+      );
+    },
+    
+    getResearchedTechnologies: () => {
+      const { gameState } = get();
+      return Object.values(gameState.technologies).filter(tech => tech.researched);
+    },
+    
+    canResearch: (technologyId: string) => {
+      const { gameState } = get();
+      const technology = gameState.technologies[technologyId];
+      
+      if (!technology || technology.researched) {
+        return false;
+      }
+      
+      // 获取已研究的科技集合
+      const researchedTechs = new Set(
+        Object.values(gameState.technologies)
+          .filter(tech => tech.researched)
+          .map(tech => tech.id)
+      );
+      
+      return canResearchTechnology(technologyId, researchedTechs);
+    },
+    
+    addResearchPoints: (points: number) => {
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          resources: {
+            ...state.gameState.resources,
+            researchPoints: Math.min(
+              state.gameState.resources.researchPoints + points,
+              state.gameState.resourceLimits.researchPoints
+            ),
+          },
+        },
+      }));
+    },
+    
+    spendResearchPoints: (points: number) => {
+      const { gameState } = get();
+      if (gameState.resources.researchPoints >= points) {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            resources: {
+              ...state.gameState.resources,
+              researchPoints: state.gameState.resources.researchPoints - points,
+            },
+          },
+        }));
+        return true;
+      }
+      return false;
+    },
+    
+    updateResearchPointsGeneration: () => {
+      const { gameState } = get();
+      let researchPointsPerSecond = 0;
+      
+      // 基于建筑的研究点生成
+      Object.entries(gameState.buildings).forEach(([buildingId, building]) => {
+        if (building.effects) {
+          building.effects.forEach(effect => {
+            if (effect.type === 'research_points') {
+              researchPointsPerSecond += effect.value * building.count;
+            }
+          });
+        }
+      });
+      
+      // 基于科技的研究点加成
+      Object.values(gameState.technologies).forEach(tech => {
+        if (tech.researched && tech.effects) {
+          tech.effects.forEach(effect => {
+            if (effect.type === 'research_points') {
+              researchPointsPerSecond += effect.value;
+            }
+          });
+        }
+      });
+      
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          researchState: {
+            ...state.gameState.researchState,
+            researchPointsPerSecond,
+          },
+        },
+      }));
+    },
+    
+    applyTechnologyEffects: (technologyId: string) => {
+      const { gameState } = get();
+      const technology = gameState.technologies[technologyId];
+      
+      if (!technology || !technology.effects) return;
+      
+      technology.effects.forEach(effect => {
+        switch (effect.type) {
+          case 'resource_rate':
+            // 资源生产率效果通过动态计算实现
+            break;
+          case 'resource_limit':
+            // 资源上限效果
+            if (effect.resource) {
+              set((state) => ({
+                gameState: {
+                  ...state.gameState,
+                  resourceLimits: {
+                    ...state.gameState.resourceLimits,
+                    [effect.resource!]: state.gameState.resourceLimits[effect.resource! as keyof Resources] + effect.value,
+                  },
+                },
+              }));
+            }
+            break;
+          case 'building_unlock':
+            // 建筑解锁通过动态检查实现
+            break;
+          case 'stability':
+            get().updateStability(effect.value);
+            break;
+          case 'corruption':
+            get().updateCorruption(effect.value);
+            break;
+        }
+      });
+      
+      // 重新计算资源生产率
+      get().calculateResourceRates();
+      get().updateResearchPointsGeneration();
+    },
+    
+    removeTechnologyEffects: (technologyId: string) => {
+      // 移除科技效果的逻辑（用于重置或调试）
+      const { gameState } = get();
+      const technology = gameState.technologies[technologyId];
+      
+      if (!technology || !technology.effects) return;
+      
+      technology.effects.forEach(effect => {
+        switch (effect.type) {
+          case 'resource_limit':
+            if (effect.resource) {
+              set((state) => ({
+                gameState: {
+                  ...state.gameState,
+                  resourceLimits: {
+                    ...state.gameState.resourceLimits,
+                    [effect.resource!]: Math.max(0, state.gameState.resourceLimits[effect.resource! as keyof Resources] - effect.value),
+                  },
+                },
+              }));
+            }
+            break;
+          case 'stability':
+            get().updateStability(-effect.value);
+            break;
+          case 'corruption':
+            get().updateCorruption(-effect.value);
+            break;
+        }
+      });
+      
+      get().calculateResourceRates();
+      get().updateResearchPointsGeneration();
     },
   }),
   {
@@ -2713,6 +2941,17 @@ export const useGameStore = create<GameStore>()(persist(
           uiState: persistedState.uiState || initialUIState,
         };
       }
+      
+      // 确保 researchState 存在
+      if (persistedState?.gameState && !persistedState.gameState.researchState) {
+        persistedState.gameState.researchState = {
+          currentResearch: null,
+          researchQueue: [],
+          researchPoints: 0,
+          researchPointsPerSecond: 0,
+        };
+      }
+      
       return persistedState;
     },
     onRehydrateStorage: () => {

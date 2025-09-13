@@ -7,6 +7,7 @@ import { GameHeader } from '@/components/layout/GameHeader';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TabNavigation } from '@/components/layout/TabNavigation';
 import { OverviewPanel } from '@/components/features/OverviewPanel';
+import TechnologyTab from '@/components/features/technology-tab';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
@@ -68,13 +69,7 @@ export default function Home() {
           </div>
         );
       case 'technology':
-        return (
-          <div className="bg-gray-800 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">🔬</div>
-            <h2 className="text-2xl font-bold mb-2">科技系统</h2>
-            <p className="text-gray-400">科技功能开发中，敬请期待...</p>
-          </div>
-        );
+        return <TechnologyTab />;
       case 'military':
         return (
           <div className="bg-gray-800 rounded-lg p-6 text-center">

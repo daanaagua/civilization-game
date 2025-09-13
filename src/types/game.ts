@@ -8,6 +8,18 @@ export interface Resources {
   tools: number;
   population: number;
   housing: number;
+  // 科技系统新增资源
+  researchPoints: number;
+  copper: number;
+  iron: number;
+  livestock: number;
+  horses: number;
+  cloth: number;
+  weapons: number;
+  crystal: number;
+  magic: number;
+  faith: number;
+  currency: number;
 }
 
 // 资源上限
@@ -18,6 +30,18 @@ export interface ResourceLimits {
   tools: number;
   population: number;
   housing: number;
+  // 科技系统新增资源上限
+  researchPoints: number;
+  copper: number;
+  iron: number;
+  livestock: number;
+  horses: number;
+  cloth: number;
+  weapons: number;
+  crystal: number;
+  magic: number;
+  faith: number;
+  currency: number;
 }
 
 // 资源生产率
@@ -27,6 +51,18 @@ export interface ResourceRates {
   stone: number;
   tools: number;
   population: number;
+  // 科技系统新增资源生产率
+  researchPoints: number;
+  copper: number;
+  iron: number;
+  livestock: number;
+  horses: number;
+  cloth: number;
+  weapons: number;
+  crystal: number;
+  magic: number;
+  faith: number;
+  currency: number;
 }
 
 // 建筑类型
@@ -67,30 +103,55 @@ export interface Technology {
   description: string;
   category: TechnologyCategory;
   cost: Partial<Resources>;
-  researchTime: number; // 研究时间（秒）
+  researchTime: number; // 研究时间（天）
   requires?: string[]; // 前置科技
-  unlocks?: string[]; // 解锁的建筑或科技
+  unlocks?: TechnologyUnlock[]; // 解锁内容
   effects?: TechnologyEffect[];
   unlocked: boolean;
   researched: boolean;
+  researchProgress?: number; // 当前研究进度（0-100）
 }
 
 export type TechnologyCategory = 
-  | 'survival'
-  | 'agriculture'
-  | 'crafting'
-  | 'construction'
-  | 'military'
-  | 'culture'
-  | 'social'
-  | 'knowledge'
-  | 'metalworking'
-  | 'production';
+  | 'production' // 生产科技
+  | 'military'   // 军事科技
+  | 'social'     // 社会科技
+  | 'special'    // 特殊科技
+  | 'research';  // 研究科技
 
 export interface TechnologyEffect {
-  type: 'resource_multiplier' | 'building_unlock' | 'population_growth' | 'stability_bonus';
+  type: TechnologyEffectType;
   target: string;
   value: number;
+  description: string;
+}
+
+export type TechnologyEffectType = 
+  | 'resource_production_bonus' // 资源生产加成
+  | 'resource_storage_bonus'    // 资源储存加成
+  | 'building_efficiency_bonus' // 建筑效率加成
+  | 'stability_bonus'           // 稳定度加成
+  | 'research_speed_bonus'      // 研究速度加成
+  | 'military_bonus'            // 军事加成
+  | 'population_growth_bonus'   // 人口增长加成
+  | 'global_bonus';             // 全局加成
+
+export interface TechnologyUnlock {
+  type: 'building' | 'character' | 'resource' | 'upgrade';
+  id: string;
+  name: string;
+}
+
+// 科技研究状态
+export interface ResearchState {
+  currentResearch?: {
+    technologyId: string;
+    progress: number; // 0-100
+    startTime: number;
+    estimatedCompletionTime: number;
+  };
+  researchQueue: string[]; // 研究队列
+  researchSpeed: number; // 研究速度倍数
 }
 
 // 人物类型
@@ -151,11 +212,7 @@ export interface GameState {
   
   // 科技
   technologies: Record<string, Technology>;
-  currentResearch?: {
-    technologyId: string;
-    progress: number;
-    startTime: number;
-  };
+  researchState: ResearchState;
   
   // 人物
   characters: Record<string, Character>;
