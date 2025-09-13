@@ -11,6 +11,9 @@ import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence
 import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced } from '@/lib/enhanced-persistence';
 import { ResourceManager, initializeResourceManager, getResourceManager } from './resource-manager';
 import { globalEffectsSystem, Effect, EffectType, EffectSourceType } from './effects-system';
+import { MilitarySystem } from './military-system';
+import { ExplorationSystem } from './exploration-system';
+import { CombatSystem } from './combat-system';
 
 // 初始游戏状态
 const initialGameState: GameState = {
@@ -97,6 +100,24 @@ const initialGameState: GameState = {
   activeEvents: [], // 当前活跃的暂停事件
   events: [], // 历史事件记录
   recentEvents: [], // 最近的不暂停事件
+
+  // 军队系统
+  military: {
+    units: [],
+    trainingQueue: [],
+    availableUnitTypes: ['tribal_militia'], // 默认解锁部落民兵
+    isTraining: false
+  },
+  
+  // 探索系统
+  exploration: {
+    discoveredLocations: {
+      dungeons: [],
+      countries: [],
+      events: []
+    },
+    explorationHistory: []
+  },
 
   settings: {
     autoSave: true,
@@ -313,6 +334,24 @@ interface GameStore {
   removeEffect: (effectId: string) => void;
   removeEffectsBySource: (sourceType: EffectSourceType, sourceId?: string) => void;
   calculateEffectTotal: (type: EffectType) => number;
+
+  // 军队系统
+  trainUnit: (unitType: string) => boolean;
+  cancelTraining: () => void;
+  setMilitaryStatus: (status: 'defending' | 'exploring') => void;
+  disbandUnit: (unitId: string) => void;
+  getMilitaryUnits: () => any[];
+  getTrainingQueue: () => any[];
+  updateMilitaryTraining: (deltaTime: number) => void;
+  unlockUnitType: (unitType: string) => void;
+
+  // 探索系统
+  exploreWithUnits: (units: any[]) => any;
+  attackDungeon: (dungeonId: string, units: any[]) => any;
+  getDiscoveredLocations: () => any;
+  getExplorationHistory: () => any[];
+  addDiscoveredLocation: (location: any) => void;
+  addExplorationRecord: (record: any) => void;
 }
 
 // 全局资源管理器实例
@@ -3262,6 +3301,222 @@ export const useGameStore = create<GameStore>()(persist(
       
       get().calculateResourceRates();
       get().updateResearchPointsGeneration();
+    },
+
+    // 军队系统方法
+    trainUnit: (unitType: string) => {
+      const militarySystem = new MilitarySystem();
+      const { gameState } = get();
+      const result = militarySystem.trainUnit(gameState, unitType);
+      
+      if (result.success) {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            military: result.newMilitaryState!,
+            resources: result.newResources!
+          }
+        }));
+        return true;
+      }
+      return false;
+    },
+
+    cancelTraining: () => {
+      const militarySystem = new MilitarySystem();
+      const { gameState } = get();
+      const result = militarySystem.cancelTraining(gameState);
+      
+      if (result.success) {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            military: result.newMilitaryState!,
+            resources: result.newResources!
+          }
+        }));
+      }
+    },
+
+    setMilitaryStatus: (status: 'defending' | 'exploring') => {
+      const militarySystem = new MilitarySystem();
+      const { gameState } = get();
+      const result = militarySystem.setMilitaryStatus(gameState, status);
+      
+      if (result.success) {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            military: result.newMilitaryState!
+          }
+        }));
+      }
+    },
+
+    disbandUnit: (unitId: string) => {
+      const militarySystem = new MilitarySystem();
+      const { gameState } = get();
+      const result = militarySystem.disbandUnit(gameState, unitId);
+      
+      if (result.success) {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            military: result.newMilitaryState!,
+            resources: result.newResources!
+          }
+        }));
+      }
+    },
+
+    getMilitaryUnits: () => {
+      const { gameState } = get();
+      return gameState.military.units;
+    },
+
+    getTrainingQueue: () => {
+      const { gameState } = get();
+      return gameState.military.trainingQueue;
+    },
+
+    updateMilitaryTraining: (deltaTime: number) => {
+      const militarySystem = new MilitarySystem();
+      const { gameState } = get();
+      const result = militarySystem.updateTraining(gameState, deltaTime);
+      
+      if (result.success) {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            military: result.newMilitaryState!
+          }
+        }));
+      }
+    },
+
+    unlockUnitType: (unitType: string) => {
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          military: {
+            ...state.gameState.military,
+            availableUnitTypes: [...state.gameState.military.availableUnitTypes, unitType]
+          }
+        }
+      }));
+    },
+
+    // 探索系统方法
+    exploreWithUnits: (units: any[]) => {
+      const explorationSystem = new ExplorationSystem();
+      const { gameState } = get();
+      const result = explorationSystem.explore(gameState, units);
+      
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          exploration: {
+            ...state.gameState.exploration,
+            explorationHistory: [...state.gameState.exploration.explorationHistory, result]
+          },
+          military: {
+            ...state.gameState.military,
+            units: state.gameState.military.units.map(unit => {
+              const exploringUnit = units.find(u => u.id === unit.id);
+              if (exploringUnit && result.casualties > 0) {
+                return { ...unit, count: Math.max(0, unit.count - result.casualties) };
+              }
+              return unit;
+            })
+          }
+        }
+      }));
+      
+      if (result.discovery) {
+        get().addDiscoveredLocation(result.discovery);
+      }
+      
+      return result;
+    },
+
+    attackDungeon: (dungeonId: string, units: any[]) => {
+      const combatSystem = new CombatSystem();
+      const { gameState } = get();
+      const dungeon = gameState.exploration.discoveredLocations.dungeons.find(d => d.id === dungeonId);
+      
+      if (!dungeon) return null;
+      
+      const result = combatSystem.simulateCombat(units, dungeon.enemies);
+      
+      // 应用战斗结果
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          military: {
+            ...state.gameState.military,
+            units: state.gameState.military.units.map(unit => {
+              const combatUnit = units.find(u => u.id === unit.id);
+              if (combatUnit) {
+                const casualties = result.playerCasualties.find(c => c.unitId === unit.id)?.casualties || 0;
+                return { ...unit, count: Math.max(0, unit.count - casualties) };
+              }
+              return unit;
+            })
+          },
+          resources: result.victory ? {
+            ...state.gameState.resources,
+            ...dungeon.rewards
+          } : state.gameState.resources
+        }
+      }));
+      
+      return result;
+    },
+
+    getDiscoveredLocations: () => {
+      const { gameState } = get();
+      return gameState.exploration.discoveredLocations;
+    },
+
+    getExplorationHistory: () => {
+      const { gameState } = get();
+      return gameState.exploration.explorationHistory;
+    },
+
+    addDiscoveredLocation: (location: any) => {
+      set((state) => {
+        const newDiscoveredLocations = { ...state.gameState.exploration.discoveredLocations };
+        
+        if (location.type === 'dungeon') {
+          newDiscoveredLocations.dungeons = [...newDiscoveredLocations.dungeons, location];
+        } else if (location.type === 'country') {
+          newDiscoveredLocations.countries = [...newDiscoveredLocations.countries, location];
+        } else if (location.type === 'event') {
+          newDiscoveredLocations.events = [...newDiscoveredLocations.events, location];
+        }
+        
+        return {
+          gameState: {
+            ...state.gameState,
+            exploration: {
+              ...state.gameState.exploration,
+              discoveredLocations: newDiscoveredLocations
+            }
+          }
+        };
+      });
+    },
+
+    addExplorationRecord: (record: any) => {
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          exploration: {
+            ...state.gameState.exploration,
+            explorationHistory: [...state.gameState.exploration.explorationHistory, record]
+          }
+        }
+      }));
     },
   }),
   {

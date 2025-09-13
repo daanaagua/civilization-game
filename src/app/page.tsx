@@ -9,14 +9,23 @@ import { TabNavigation } from '@/components/layout/TabNavigation';
 import { OverviewPanel } from '@/components/features/OverviewPanel';
 import TechnologyTab from '@/components/features/technology-tab';
 import { BuildingTab } from '@/components/features/building-tab';
+import { MilitaryTab } from '@/components/features/military-tab';
+import { ExplorationTab } from '@/components/features/exploration-tab';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
   const gameStartTime = useGameStore(state => state.gameStartTime);
   const loadGame = useGameStore(state => state.loadGame);
   const initializePersistence = useGameStore(state => state.initializePersistence);
+  const gameState = useGameStore(state => state);
   const [activeTab, setActiveTab] = useState('overview');
   const [isInitialized, setIsInitialized] = useState(false);
+  
+  // 更新游戏状态的函数
+  const handleUpdateGameState = (updates: any) => {
+    // 这里可以根据需要实现状态更新逻辑
+    console.log('Game state updates:', updates);
+  };
   
   // 启动游戏循环
   useGameLoop();
@@ -66,21 +75,9 @@ export default function Home() {
       case 'technology':
         return <TechnologyTab />;
       case 'military':
-        return (
-          <div className="bg-gray-800 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">⚔️</div>
-            <h2 className="text-2xl font-bold mb-2">军队系统</h2>
-            <p className="text-gray-400">军队功能开发中，敬请期待...</p>
-          </div>
-        );
+        return <MilitaryTab gameState={gameState} onUpdateGameState={handleUpdateGameState} />;
       case 'exploration':
-        return (
-          <div className="bg-gray-800 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">🔍</div>
-            <h2 className="text-2xl font-bold mb-2">探索系统</h2>
-            <p className="text-gray-400">探索功能开发中，敬请期待...</p>
-          </div>
-        );
+        return <ExplorationTab gameState={gameState} onUpdateGameState={handleUpdateGameState} />;
       case 'characters':
         return (
           <div className="bg-gray-800 rounded-lg p-6 text-center">

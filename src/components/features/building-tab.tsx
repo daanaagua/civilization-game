@@ -304,7 +304,7 @@ export function BuildingTab() {
                             >
                               <Minus className="w-4 h-4" />
                             </Button>
-                            <span className="px-3 py-1 bg-gray-100 rounded text-center min-w-[3rem]">
+                            <span className="px-3 py-1 bg-gray-800 text-white rounded text-center min-w-[3rem]">
                               {buildQuantity}
                             </span>
                             <Button

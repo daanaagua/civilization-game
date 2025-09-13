@@ -236,6 +236,36 @@ export interface GameState {
   recentEvents: NonPauseEvent[]; // 最近的不暂停事件（用于显示）
   // currentPausingEvent 已被 activeEvents 替代
   
+  // 军队系统
+  military: {
+    units: import('../types/military').MilitaryUnit[];
+    trainingQueue: import('../types/military').TrainingQueue[];
+    availableUnitTypes: string[];
+    isTraining: boolean;
+  };
+  
+  // 探索系统
+  exploration: {
+    discoveredLocations: {
+      dungeons: string[];
+      countries: string[];
+      events: string[];
+    };
+    explorationHistory: {
+      id: string;
+      timestamp: number;
+      units: { unitType: string; count: number }[];
+      result: 'success' | 'failure';
+      discovery?: {
+        type: 'dungeon' | 'country' | 'event' | 'resource';
+        id: string;
+        name: string;
+      };
+      casualties: number;
+      description: string;
+    }[];
+  };
+  
   // 游戏设置
   settings: GameSettings;
 }
