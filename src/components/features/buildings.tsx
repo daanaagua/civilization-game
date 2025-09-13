@@ -94,9 +94,9 @@ const BuildingCard = ({ building, count, onBuild, canAfford }: BuildingCardProps
       {canAssignWorkers && (
         <div className="mb-4">
           <h4 className="text-xs font-medium text-stone-500 mb-2">人口分配</h4>
-          <div className="flex items-center justify-between bg-stone-50 p-3 rounded-lg">
+          <div className="flex items-center justify-between bg-gray-800 p-3 rounded-lg text-white">
             <div className="flex items-center gap-2">
-              <Users size={16} className="text-stone-600" />
+              <Users size={16} className="text-white" />
               <span className="text-sm font-medium">
                 {assignedWorkers}/{maxWorkers * count}
               </span>
