@@ -192,6 +192,7 @@ interface GameStore {
   // 游戏控制方法
   startGame: () => void;
   pauseGame: () => void;
+  resumeGame: () => void;
   togglePause: () => void;
   resetGame: () => void;
   updateGameTime: (deltaTime: number) => void;
@@ -461,6 +462,20 @@ export const useGameStore = create<GameStore>()(persist(
       }));
     },
     
+    resumeGame: () => {
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          isPaused: false
+        },
+        isRunning: true,
+        lastUpdateTime: Date.now()
+      }));
+      
+      // 计算资源速率
+      get().calculateResourceRates();
+    },
+
     togglePause: () => {
       set((state) => {
         const newPausedState = !state.gameState.isPaused;
