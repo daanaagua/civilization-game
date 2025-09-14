@@ -110,7 +110,7 @@ const BuildingsPanel = () => {
               <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
                 <h3 className="text-lg font-semibold text-green-400 mb-3 flex items-center gap-2">
                   <Shield className="h-5 w-5" />
-                  稳定度效果 ({gameState.stability})
+                  稳定度效果 ({gameState.stability.toFixed(1)})
                 </h3>
                 <p className="text-gray-300 mb-2">{getStabilityEffect(gameState.stability)}</p>
                 <div className="text-sm text-gray-400">
@@ -125,7 +125,7 @@ const BuildingsPanel = () => {
                 <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
                   <h3 className="text-lg font-semibold text-red-400 mb-3 flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5" />
-                    腐败度效果 ({gameState.corruption}%)
+                    腐败度效果 ({gameState.corruption})
                   </h3>
                   <p className="text-gray-300 mb-2">{getCorruptionEffect(gameState.corruption)}</p>
                   <div className="text-sm text-gray-400">

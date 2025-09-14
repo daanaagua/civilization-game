@@ -72,12 +72,12 @@ export default function Home() {
   useEffect(() => {
     const unresolvedChoiceEvents = getUnresolvedChoiceEvents();
     
-    // 如果没有未解决的选择事件，且游戏被暂停，则恢复游戏
-    if (unresolvedChoiceEvents.length === 0 && gameState.gameState.isPaused && isInitialized) {
-      // 检查是否是因为选择事件而暂停的（这里简化处理）
-      resumeGame();
+    // 只有当游戏正在运行且有选择事件时才暂停，解决后不自动恢复
+    // 用户需要手动点击恢复按钮来继续游戏
+    if (unresolvedChoiceEvents.length > 0 && !gameState.gameState.isPaused && isInitialized) {
+      pauseGame();
     }
-  }, [events, getUnresolvedChoiceEvents, gameState.gameState.isPaused, isInitialized, resumeGame]);
+  }, [events, getUnresolvedChoiceEvents, gameState.gameState.isPaused, isInitialized, pauseGame]);
   
   // 切换到概览选项卡时清除红点
   useEffect(() => {

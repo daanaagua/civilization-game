@@ -178,7 +178,7 @@ export class EffectsSystem {
     this.addEffect({
       id: 'base_stability',
       name: '稳定度',
-      description: `当前文明的稳定程度：${gameState.stability}%`,
+      description: `当前文明的稳定程度：${gameState.stability}`,
       type: EffectType.STABILITY,
       value: gameState.stability,
       isPercentage: false,
@@ -194,7 +194,7 @@ export class EffectsSystem {
     this.addEffect({
       id: 'base_corruption',
       name: '腐败度',
-      description: `文明内部的腐败程度：${gameState.corruption}%`,
+      description: `文明内部的腐败程度：${gameState.corruption}`,
       type: EffectType.CORRUPTION,
       value: gameState.corruption,
       isPercentage: false,

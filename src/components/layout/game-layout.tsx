@@ -92,7 +92,7 @@ const OverviewPanel = () => {
             <h3 className="font-semibold text-purple-900">稳定度</h3>
           </div>
           <div className="text-2xl font-bold text-purple-900">
-            {gameState.stability}%
+            {gameState.stability.toFixed(2)}
           </div>
           <p className="text-sm text-purple-700 mt-1">部落稳定度</p>
         </div>
@@ -107,7 +107,7 @@ const OverviewPanel = () => {
               <h3 className="font-semibold text-red-900">腐败度</h3>
             </div>
             <div className="text-2xl font-bold text-red-900">
-              {gameState.corruption}%
+              {gameState.corruption}
             </div>
             <p className="text-sm text-red-700 mt-1">官僚腐败度</p>
           </div>
