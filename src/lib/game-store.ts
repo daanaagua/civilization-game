@@ -618,8 +618,11 @@ export const useGameStore = create<GameStore>()(persist(
           const targetStability = calculateTargetStability();
           const stabilityDiff = targetStability - newStability;
           
-          // 每天调整0.01
-          const adjustment = Math.sign(stabilityDiff) * Math.min(Math.abs(stabilityDiff), 0.01 * daysPassed);
+          // 每天调整0.01，但允许实时调整
+          const dailyAdjustmentRate = 0.01; // 每天的调整速率
+          const adjustmentPerSecond = dailyAdjustmentRate / 86400; // 每秒的调整速率
+          const maxAdjustment = adjustmentPerSecond * adjustedDelta;
+          const adjustment = Math.sign(stabilityDiff) * Math.min(Math.abs(stabilityDiff), maxAdjustment);
           newStability += adjustment;
 
           newStability = Math.max(0, Math.min(100, newStability));
