@@ -117,7 +117,7 @@ export function Sidebar({}: SidebarProps) {
                  <div className="flex items-center">
                    <span>稳定度</span>
                  </div>
-                 <span className="font-bold">{stability.toFixed(2)}%</span>
+                 <span className="font-bold">{stability.toFixed(2)}</span>
                </div>
             </StatusDetailsTooltip>
             
@@ -129,7 +129,7 @@ export function Sidebar({}: SidebarProps) {
                  <div className="flex items-center">
                    <span>腐败度</span>
                  </div>
-                 <span className="font-bold">{corruption}%</span>
+                 <span className="font-bold">{corruption}</span>
                </div>
             </StatusDetailsTooltip>
           </div>
