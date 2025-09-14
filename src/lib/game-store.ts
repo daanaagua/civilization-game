@@ -551,84 +551,83 @@ export const useGameStore = create<GameStore>()(persist(
           // 腐败度增长
           const corruptionIncrease = get().calculateCorruptionIncrease();
           newCorruption = Math.max(0, Math.min(100, state.gameState.corruption + corruptionIncrease * daysPassed));
-        
-          // 稳定度变化
-          const calculateTargetStability = () => {
-            const { resources, technologies } = state.gameState;
-            
-            // 基础稳定度 = 50
-            let baseStability = 50;
-            
-            // 政治制度加成
-            let politicalBonus = 0;
-            if (technologies['tribal_organization']?.researched) {
-              politicalBonus += 5; // 部落组织
-            }
-            if (technologies['monarchy']?.researched) {
-              politicalBonus += 15; // 君主制
-            }
-            if (technologies['feudalism']?.researched) {
-              politicalBonus += 5; // 分封制
-            }
-            if (technologies['centralization']?.researched) {
-              politicalBonus += 5; // 集权制
-            }
-            
-            // 人口规模影响
-            const population = resources.population;
-            const researchedTechCount = Object.values(technologies).filter(tech => tech.researched).length;
-            const softLimit = 10 * (1 + researchedTechCount * 0.1); // 软性上限
-            
-            let populationPenalty = 0;
-            if (population > softLimit * 3.0) {
-              populationPenalty = -40;
-            } else if (population > softLimit * 2.5) {
-              populationPenalty = -30;
-            } else if (population > softLimit * 2.0) {
-              populationPenalty = -25;
-            } else if (population > softLimit * 1.5) {
-              populationPenalty = -20;
-            } else if (population > softLimit * 1.2) {
-              populationPenalty = -15;
-            }
-            
-            // 资源充足度影响（简化版本）
-            const foodSufficiency = (resources.food / Math.max(1, population * 2)) * 100; // 假设每人需要2食物
-            let resourceBonus = 0;
-            if (foodSufficiency > 150) {
-              resourceBonus = 8;
-            } else if (foodSufficiency >= 100) {
-              resourceBonus = 4;
-            } else if (foodSufficiency >= 80) {
-              resourceBonus = 0;
-            } else if (foodSufficiency >= 50) {
-              resourceBonus = -12;
-            } else {
-              resourceBonus = -30;
-            }
-            
-            // 计算目标稳定度
-            const targetStability = Math.max(0, Math.min(100, 
-              baseStability + politicalBonus + populationPenalty + resourceBonus - newCorruption // 使用更新后的腐败度
-            ));
-            
-            return targetStability;
-          };
-
-          const targetStability = calculateTargetStability();
-          const stabilityDiff = targetStability - newStability;
-          
-          // 每天调整0.01，但允许实时调整
-          const dailyAdjustmentRate = 0.01; // 每天的调整速率
-          const adjustmentPerSecond = dailyAdjustmentRate / 86400; // 每秒的调整速率
-          const maxAdjustment = adjustmentPerSecond * adjustedDelta;
-          const adjustment = Math.sign(stabilityDiff) * Math.min(Math.abs(stabilityDiff), maxAdjustment);
-          newStability += adjustment;
-
-          newStability = Math.max(0, Math.min(100, newStability));
-          // 使用更精确的舍入方法，保留两位小数
-          newStability = Math.round(newStability * 100) / 100;
         }
+        
+        // 稳定度变化（每次更新都执行）
+        const calculateTargetStability = () => {
+          const { resources, technologies } = state.gameState;
+          
+          // 基础稳定度 = 50
+          let baseStability = 50;
+          
+          // 政治制度加成
+          let politicalBonus = 0;
+          if (technologies['tribal_organization']?.researched) {
+            politicalBonus += 5; // 部落组织
+          }
+          if (technologies['monarchy']?.researched) {
+            politicalBonus += 15; // 君主制
+          }
+          if (technologies['feudalism']?.researched) {
+            politicalBonus += 5; // 分封制
+          }
+          if (technologies['centralization']?.researched) {
+            politicalBonus += 5; // 集权制
+          }
+          
+          // 人口规模影响
+          const population = resources.population;
+          const researchedTechCount = Object.values(technologies).filter(tech => tech.researched).length;
+          const softLimit = 10 * (1 + researchedTechCount * 0.1); // 软性上限
+          
+          let populationPenalty = 0;
+          if (population > softLimit * 3.0) {
+            populationPenalty = -40;
+          } else if (population > softLimit * 2.5) {
+            populationPenalty = -30;
+          } else if (population > softLimit * 2.0) {
+            populationPenalty = -25;
+          } else if (population > softLimit * 1.5) {
+            populationPenalty = -20;
+          } else if (population > softLimit * 1.2) {
+            populationPenalty = -15;
+          }
+          
+          // 资源充足度影响（简化版本）
+          const foodSufficiency = (resources.food / Math.max(1, population * 2)) * 100; // 假设每人需要2食物
+          let resourceBonus = 0;
+          if (foodSufficiency > 150) {
+            resourceBonus = 8;
+          } else if (foodSufficiency >= 100) {
+            resourceBonus = 4;
+          } else if (foodSufficiency >= 80) {
+            resourceBonus = 0;
+          } else if (foodSufficiency >= 50) {
+            resourceBonus = -12;
+          } else {
+            resourceBonus = -30;
+          }
+          
+          // 计算目标稳定度
+          const targetStability = Math.max(0, Math.min(100, 
+            baseStability + politicalBonus + populationPenalty + resourceBonus - newCorruption // 使用更新后的腐败度
+          ));
+          
+          return targetStability;
+        };
+
+        const targetStability = calculateTargetStability();
+        const stabilityDiff = targetStability - newStability;
+        
+        // 游戏中每天调整0.01，游戏中1天=现实0.5秒，所以现实1秒调整0.02
+        const dailyAdjustmentRate = 0.01; // 游戏中每天的调整速率
+        const adjustmentPerSecond = 0.02; // 现实中每秒的调整速率（游戏1天=0.5秒，所以1秒=0.02调整）
+        const maxAdjustment = adjustmentPerSecond * adjustedDelta;
+        const adjustment = Math.sign(stabilityDiff) * Math.min(Math.abs(stabilityDiff), maxAdjustment);
+        newStability += adjustment;
+
+        newStability = Math.max(0, Math.min(100, newStability));
+        // 不在每次更新时进行舍入，保留高精度以便逐步累积；显示层再格式化数值
 
         // 更新游戏统计数据
         state.gameState.statistics.totalPlayTime += adjustedDelta;
