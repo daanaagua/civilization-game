@@ -439,7 +439,7 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-400">稳定度: </span>
-              <span className="text-white font-semibold">{gameState.stability}</span>
+              <span className="text-white font-semibold">{gameState.stability.toFixed(2)}</span>
             </div>
             <div>
               <span className="text-gray-400">腐败度: </span>

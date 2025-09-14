@@ -28,7 +28,7 @@ export function StabilityPanel() {
       
       <div className="text-center">
         <div className="text-2xl font-bold mb-2">
-          {stability.toFixed(1)}/{maxStability}
+          {stability.toFixed(2)}/{maxStability}
         </div>
         
         <div className="w-full bg-gray-700 rounded-full h-3 mb-3">

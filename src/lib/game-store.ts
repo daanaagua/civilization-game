@@ -646,15 +646,17 @@ export const useGameStore = create<GameStore>()(persist(
         
         const targetStability = calculateTargetStability();
         
-        // 平滑过渡到目标稳定度（每秒调整10%的差值）
+        // 平滑过渡到目标稳定度（每游戏日0.1%的速度）
         const stabilityDiff = targetStability - newStability;
-        if (Math.abs(stabilityDiff) > 0.1) {
-          const adjustmentRate = 10.0; // 每秒调整10%的差值
-          const maxAdjustment = Math.abs(stabilityDiff) * adjustmentRate * adjustedDelta;
+        if (Math.abs(stabilityDiff) > 0.01) {
+          // 每游戏日0.1%的调整速度
+          const adjustmentPerDay = 0.1; // 每天0.1%
+          const adjustmentPerSecond = adjustmentPerDay / 86400; // 转换为每秒
+          const maxAdjustment = adjustmentPerSecond * adjustedDelta;
           const adjustment = Math.sign(stabilityDiff) * Math.min(Math.abs(stabilityDiff), maxAdjustment);
           newStability = Math.max(0, Math.min(100, newStability + adjustment));
-          // 保留一位小数
-          newStability = Math.round(newStability * 10) / 10;
+          // 使用更精确的舍入方法，保留两位小数
+          newStability = Math.round(newStability * 100) / 100;
         }
         
         // 计算资源上限
