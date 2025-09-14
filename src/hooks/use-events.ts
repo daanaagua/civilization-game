@@ -123,6 +123,7 @@ export function useEvents() {
           ...event,
           isRead: true,
           isResolved: true,
+          selectedChoiceId: choiceId,
           consequences: selectedChoice?.consequences || []
         };
       }

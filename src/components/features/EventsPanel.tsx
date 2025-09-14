@@ -41,6 +41,7 @@ export interface GameEvent {
   consequences?: string[]; // 事件后果
   isRead?: boolean; // 是否已读
   isResolved?: boolean; // 是否已处理
+  selectedChoiceId?: string; // 已选择的选项ID
   icon?: string;
   category?: string; // 事件分类
 }
@@ -54,7 +55,8 @@ interface EventItemProps {
 }
 
 function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: EventItemProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  // 选择事件默认展开，通知事件默认不展开
+  const [isExpanded, setIsExpanded] = useState(event.type === EventType.CHOICE && !event.isResolved);
   const gameState = useGameStore(state => state.gameState);
 
   const getPriorityColor = (priority: EventPriority) => {
@@ -135,9 +137,10 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
             {event.description}
           </p>
           
-          {event.type === EventType.CHOICE && event.choices && !event.isResolved && (
+          {event.type === EventType.CHOICE && event.choices && (
             <div className="space-y-2">
-              {isExpanded || !isCompact ? (
+              {!event.isResolved ? (
+                // 未解决的选择事件 - 显示所有选项（默认展开）
                 <>
                   <div className="text-xs text-gray-400 mb-2">请选择你的行动：</div>
                   <div className="space-y-1">
@@ -167,16 +170,26 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
                   </div>
                 </>
               ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsExpanded(true);
-                  }}
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                >
-                  <HelpCircle size={12} />
-                  查看选项
-                </button>
+                // 已解决的选择事件 - 只显示已选择的选项
+                event.selectedChoiceId && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-400 mb-2">已选择的行动：</div>
+                    {(() => {
+                      const selectedChoice = event.choices.find(choice => choice.id === event.selectedChoiceId);
+                      return selectedChoice ? (
+                        <div className="p-2 rounded border border-green-600 bg-green-900/20 text-white">
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-400">✓</span>
+                            <span className="text-sm">{selectedChoice.text}</span>
+                          </div>
+                          {selectedChoice.description && (
+                            <p className="text-xs text-gray-400 mt-1 ml-6">{selectedChoice.description}</p>
+                          )}
+                        </div>
+                      ) : null;
+                    })()} 
+                  </div>
+                )
               )}
             </div>
           )}

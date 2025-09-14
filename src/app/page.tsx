@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { useGameLoop } from '@/hooks/use-game-loop';
+import { useEvents } from '@/hooks/use-events';
 import { GameHeader } from '@/components/layout/GameHeader';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TabNavigation } from '@/components/layout/TabNavigation';
@@ -13,15 +14,25 @@ import { MilitaryTab } from '@/components/features/military-tab';
 import { ExplorationTab } from '@/components/features/exploration-tab';
 import { CharacterTab } from '@/components/features/character-tab';
 import { DiplomacyTab } from '@/components/features/diplomacy-tab';
+import { EventNotificationToast } from '@/components/ui/event-notification-toast';
+import { EventType } from '@/components/features/EventsPanel';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
   const gameStartTime = useGameStore(state => state.gameStartTime);
   const loadGame = useGameStore(state => state.loadGame);
   const initializePersistence = useGameStore(state => state.initializePersistence);
+  const pauseGame = useGameStore(state => state.pauseGame);
+  const resumeGame = useGameStore(state => state.resumeGame);
   const gameState = useGameStore(state => state);
   const [activeTab, setActiveTab] = useState('overview');
   const [isInitialized, setIsInitialized] = useState(false);
+  const [currentNotificationEvent, setCurrentNotificationEvent] = useState(null);
+  const [hasUnreadEvents, setHasUnreadEvents] = useState(false);
+  const [lastEventCount, setLastEventCount] = useState(0);
+  
+  // 使用事件系统
+  const { events, getUnresolvedChoiceEvents } = useEvents();
   
   // 更新游戏状态的函数
   const handleUpdateGameState = (updates: any) => {
@@ -31,6 +42,49 @@ export default function Home() {
   
   // 启动游戏循环
   useGameLoop();
+  
+  // 监听新事件并显示通知
+  useEffect(() => {
+    if (events.length > lastEventCount && isInitialized) {
+      // 有新事件
+      const newEvents = events.slice(0, events.length - lastEventCount);
+      const latestEvent = newEvents[0];
+      
+      if (latestEvent) {
+        // 显示通知浮框
+        setCurrentNotificationEvent(latestEvent);
+        
+        // 如果不在概览选项卡，显示红点
+        if (activeTab !== 'overview') {
+          setHasUnreadEvents(true);
+        }
+        
+        // 如果是选择事件，强制暂停游戏
+        if (latestEvent.type === EventType.CHOICE) {
+          pauseGame();
+        }
+      }
+    }
+    setLastEventCount(events.length);
+  }, [events.length, lastEventCount, isInitialized, activeTab, pauseGame]);
+  
+  // 监听选择事件的解决状态
+  useEffect(() => {
+    const unresolvedChoiceEvents = getUnresolvedChoiceEvents();
+    
+    // 如果没有未解决的选择事件，且游戏被暂停，则恢复游戏
+    if (unresolvedChoiceEvents.length === 0 && gameState.gameState.isPaused && isInitialized) {
+      // 检查是否是因为选择事件而暂停的（这里简化处理）
+      resumeGame();
+    }
+  }, [events, getUnresolvedChoiceEvents, gameState.gameState.isPaused, isInitialized, resumeGame]);
+  
+  // 切换到概览选项卡时清除红点
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      setHasUnreadEvents(false);
+    }
+  }, [activeTab]);
   
   // 初始化游戏和持久化功能
   useEffect(() => {
@@ -103,7 +157,11 @@ export default function Home() {
       <GameHeader />
       
       {/* 选项卡导航 */}
-      <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabNavigation 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab}
+        hasUnreadEvents={hasUnreadEvents}
+      />
       
       {/* 主要游戏区域 */}
       <div className="flex">
@@ -115,6 +173,17 @@ export default function Home() {
           {renderContent()}
         </main>
       </div>
+      
+      {/* 事件通知浮框 */}
+      <EventNotificationToast
+        event={currentNotificationEvent}
+        onClose={() => setCurrentNotificationEvent(null)}
+        onViewEvent={() => {
+          setActiveTab('overview');
+          setCurrentNotificationEvent(null);
+          setHasUnreadEvents(false);
+        }}
+      />
     </div>
   );
 }

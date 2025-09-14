@@ -5,6 +5,7 @@ import { Home, Building, Beaker, Sword, Users, Map, Search } from 'lucide-react'
 interface TabNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  hasUnreadEvents?: boolean;
 }
 
 const menuItems = [
@@ -17,7 +18,7 @@ const menuItems = [
   { id: 'diplomacy', label: '外交', icon: Map, description: '与其他文明交往' },
 ];
 
-export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
+export function TabNavigation({ activeTab, onTabChange, hasUnreadEvents = false }: TabNavigationProps) {
   return (
     <nav className="bg-gray-800 border-b border-gray-700">
       <div className="flex overflow-x-auto">
@@ -30,7 +31,7 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={`
-                flex items-center space-x-2 px-6 py-4 whitespace-nowrap transition-colors border-b-2
+                flex items-center space-x-2 px-6 py-4 whitespace-nowrap transition-colors border-b-2 relative
                 ${isActive 
                   ? 'bg-gray-700 text-white border-blue-500' 
                   : 'text-gray-300 hover:bg-gray-700 hover:text-white border-transparent'
@@ -40,6 +41,10 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
             >
               <Icon size={18} />
               <span className="text-sm font-medium">{item.label}</span>
+              {/* 红点标记 - 仅在概览选项卡且有未读事件时显示 */}
+              {item.id === 'overview' && hasUnreadEvents && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-800"></div>
+              )}
             </button>
           );
         })}
