@@ -24,7 +24,7 @@ const initialGameState: GameState = {
   civilizationName: '原始部落',
   currentAge: 'stone',
   gameTime: 0,
-  isPaused: true,
+  isPaused: false,
   
   // 时间系统状态
   timeSystem: {
