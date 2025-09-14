@@ -550,32 +550,6 @@ export const useGameStore = create<GameStore>()(persist(
         if (daysPassed > 0) {
           const corruptionIncrease = get().calculateCorruptionIncrease();
           newCorruption = Math.max(0, Math.min(100, state.gameState.corruption + corruptionIncrease * daysPassed));
-          
-          // 腐败度对稳定度的影响
-          if (newCorruption > 50) {
-            const stabilityChange = newCorruption > 80 ? -3 * daysPassed : -1 * daysPassed;
-            newStability = Math.max(0, Math.min(100, state.gameState.stability + stabilityChange));
-          }
-          
-          // 人口规模对稳定度的影响
-          const population = state.gameState.resources.population;
-          let populationStabilityChange = 0;
-          
-          if (population <= 3) {
-            // 小规模人口：稳定度缓慢下降
-            populationStabilityChange = -0.5 * daysPassed;
-          } else if (population <= 10) {
-            // 中等人口：稳定度稳定
-            populationStabilityChange = 0;
-          } else if (population <= 25) {
-            // 较大人口：稳定度缓慢上升
-            populationStabilityChange = 0.3 * daysPassed;
-          } else {
-            // 大规模人口：稳定度下降（管理困难）
-            populationStabilityChange = -0.8 * daysPassed;
-          }
-          
-          newStability = Math.max(0, Math.min(100, newStability + populationStabilityChange));
         }
         
         // 更新游戏统计数据
