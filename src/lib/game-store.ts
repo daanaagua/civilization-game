@@ -484,7 +484,9 @@ export const useGameStore = create<GameStore>()(persist(
             ...state.gameState,
             isPaused: newPausedState
           },
-          isRunning: newPausedState ? false : true
+          // 游戏开始后，isRunning应该始终为true，只通过isPaused控制暂停状态
+          isRunning: true,
+          lastUpdateTime: newPausedState ? state.lastUpdateTime : Date.now()
         };
       });
     },

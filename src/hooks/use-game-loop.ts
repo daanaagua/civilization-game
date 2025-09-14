@@ -7,6 +7,7 @@ import { useGameStore } from '@/lib/game-store';
  */
 export const useGameLoop = () => {
   const isRunning = useGameStore(state => state.isRunning);
+  const isPaused = useGameStore(state => state.gameState.isPaused);
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(Date.now());
   
@@ -15,7 +16,7 @@ export const useGameLoop = () => {
       const currentTime = Date.now();
       const deltaTime = (currentTime - lastTimeRef.current) / 1000; // 转换为秒
       
-      if (isRunning && deltaTime > 0) {
+      if (isRunning && !isPaused && deltaTime > 0) {
         // 直接从store获取最新的updateGameTime函数
         useGameStore.getState().updateGameTime(deltaTime);
       }
@@ -31,7 +32,7 @@ export const useGameLoop = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isRunning]);
+  }, [isRunning, isPaused]);
   
   // 空格键快捷键监听
   useEffect(() => {
