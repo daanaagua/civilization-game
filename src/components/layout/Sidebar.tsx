@@ -117,7 +117,7 @@ export function Sidebar({}: SidebarProps) {
                  <div className="flex items-center">
                    <span>稳定度</span>
                  </div>
-                 <span className="font-bold">{stability}%</span>
+                 <span className="font-bold">{stability}</span>
                </div>
             </StatusDetailsTooltip>
             
