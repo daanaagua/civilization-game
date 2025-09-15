@@ -119,7 +119,7 @@ export function BuildingTab() {
   return (
     <div className="space-y-6">
       {/* 建筑统计概览 */}
-      <Card>
+      <Card className="bg-transparent shadow-none border-0">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building className="w-5 h-5" />
@@ -129,28 +129,28 @@ export function BuildingTab() {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
+              <div className="text-2xl font-bold text-white">
                 {managementState.statistics.totalBuildings}
               </div>
-              <div className="text-sm text-gray-600">总建筑数</div>
+              <div className="text-sm text-gray-500">总建筑数</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold text-white">
                 {managementState.workerAssignment.assignedWorkers}
               </div>
-              <div className="text-sm text-gray-600">已分配工人</div>
+              <div className="text-sm text-gray-500">已分配工人</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
+              <div className="text-2xl font-bold text-white">
                 {managementState.workerAssignment.availableWorkers}
               </div>
-              <div className="text-sm text-gray-600">可用工人</div>
+              <div className="text-sm text-gray-500">可用工人</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
+              <div className="text-2xl font-bold text-white">
                 {Object.keys(managementState.statistics.totalProduction).length}
               </div>
-              <div className="text-sm text-gray-600">生产资源种类</div>
+              <div className="text-sm text-gray-500">生产资源种类</div>
             </div>
           </div>
         </CardContent>
@@ -160,19 +160,17 @@ export function BuildingTab() {
 
       {/* 建筑管理主界面 */}
       <Tabs value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as BuildingCategory)}>
-        <TabsList className="grid w-full grid-cols-6 gap-2 p-2 rounded-xl bg-gray-100/40 dark:bg-gray-800/60 border border-gray-200/30 dark:border-gray-700/60">
+        <TabsList className="grid w-full grid-cols-6 gap-1 p-0 bg-transparent border-0">
           {Object.entries(BUILDING_CATEGORIES).map(([category, config]) => {
             const Icon = categoryIcons[category as BuildingCategory];
             const count = managementState.statistics.buildingsByCategory[category as BuildingCategory];
             
             return (
-              <TabsTrigger key={category} value={category} className="flex flex-col items-center gap-1 px-3 py-2 rounded-full border border-transparent data-[state=active]:border-white/20 data-[state=active]:bg-white/10 hover:bg-white/5 transition-colors">
+              <TabsTrigger key={category} value={category} className="flex items-center justify-center gap-2 px-2 py-2 rounded-md text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-200 data-[state=active]:text-white data-[state=active]:border-white">
                 <Icon className="w-4 h-4" />
                 <span className="text-xs">{config.name}</span>
                 {count > 0 && (
-                  <Badge variant="secondary" className="text-xs px-1 py-0 rounded-full bg-white/5 border border-white/10">
-                    {count}
-                  </Badge>
+                  <span className="text-[10px] text-gray-500">{count}</span>
                 )}
               </TabsTrigger>
             );
@@ -180,19 +178,15 @@ export function BuildingTab() {
         </TabsList>
 
         {Object.keys(BUILDING_CATEGORIES).map(category => (
-          <TabsContent key={category} value={category} className="space-y-4">
-            <div className="grid gap-4">
+          <TabsContent key={category} value={category} className="space-y-3">
+            <div className="grid gap-3">
               {/* 分类描述 */}
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-sm text-gray-600">
-                    {BUILDING_CATEGORIES[category as BuildingCategory].description}
-                  </p>
-                </CardContent>
-              </Card>
+              <p className="text-sm text-gray-500">
+                {BUILDING_CATEGORIES[category as BuildingCategory].description}
+              </p>
 
               {/* 可建造建筑列表 */}
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-2 gap-3">
                 {categoryBuildings.map(building => {
                   const costResult = buildingSystem.calculateBuildingCost(building.id, buildQuantity);
                   const canBuild = buildingSystem.canBuildBuilding(building.id, buildQuantity);
@@ -200,44 +194,41 @@ export function BuildingTab() {
                   const buildLimit = managementState.buildLimits[building.id];
                   
                   return (
-                    <Card key={building.id} className="relative">
-                      <CardHeader className="pb-3">
+                    <Card key={building.id} className="relative bg-transparent shadow-none border border-white/10">
+                      <CardHeader className="py-3">
                         <div className="flex justify-between items-start">
                           <div>
-                            <CardTitle className="text-lg">{building.name}</CardTitle>
-                            <p className="text-sm text-gray-600 mt-1">{building.description}</p>
+                            <CardTitle className="text-base">{building.name}</CardTitle>
+                            <p className="text-sm text-gray-500 mt-1">{building.description}</p>
                           </div>
-                          <Badge 
-                            variant="outline" 
-                            className="rounded-full border border-white/15 bg-white/5 text-gray-200"
-                          >
+                          <span className="text-xs text-gray-500">
                             {BUILDING_CATEGORIES[building.category].name}
-                          </Badge>
+                          </span>
                         </div>
                       </CardHeader>
                       
-                      <CardContent className="space-y-4">
+                      <CardContent className="space-y-3">
                         {/* 建筑信息 */}
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
                           <div>
-                            <span className="text-gray-600">建造时间:</span>
+                            <span className="text-gray-500">建造时间:</span>
                             <span className="ml-2 font-medium">
                               {BuildingUtils.formatBuildTime(building.buildTime)}
                             </span>
                           </div>
                           <div>
-                            <span className="text-gray-600">最大工人:</span>
+                            <span className="text-gray-500">最大工人:</span>
                             <span className="ml-2 font-medium">{building.maxWorkers}</span>
                           </div>
                           {currentCount > 0 && (
                             <div>
-                              <span className="text-gray-600">已建造:</span>
+                              <span className="text-gray-500">已建造:</span>
                               <span className="ml-2 font-medium">{currentCount}</span>
                             </div>
                           )}
                           {buildLimit && (
                             <div>
-                              <span className="text-gray-600">建造限制:</span>
+                              <span className="text-gray-500">建造限制:</span>
                               <span className="ml-2 font-medium">
                                 {buildLimit.current}/{buildLimit.maximum}
                               </span>
@@ -255,7 +246,7 @@ export function BuildingTab() {
                               const hasEnough = currentAmount >= totalCost;
                               
                               return (
-                                <div key={resource} className={`text-sm ${hasEnough ? 'text-emerald-500' : 'text-rose-400'}`}>
+                                <div key={resource} className={`text-sm ${hasEnough ? 'text-white' : 'text-gray-500'}`}>
                                   {totalCost} {resource}
                                 </div>
                               );
@@ -266,10 +257,10 @@ export function BuildingTab() {
                         {/* 生产效果 */}
                         {building.production && building.production.length > 0 && (
                           <div>
-                            <h4 className="font-medium mb-2">储存效果</h4>
+                            <h4 className="font-medium mb-2">生产效果</h4>
                             <div className="grid grid-cols-2 gap-2">
                               {building.production.map(prod => (
-                                <div key={prod.resource} className="text-sm text-green-600">
+                                <div key={prod.resource} className="text-sm text-gray-300">
                                   +{prod.baseRate} {prod.resource}/工人
                                 </div>
                               ))}
@@ -283,7 +274,7 @@ export function BuildingTab() {
                             <h4 className="font-medium mb-2">储存效果</h4>
                             <div className="grid grid-cols-2 gap-2">
                               {building.storage.map((storage, index) => (
-                                <div key={index} className="text-sm text-blue-600">
+                                <div key={index} className="text-sm text-gray-300">
                                   +{storage.capacity}{storage.isPercentage ? '%' : ''} {storage.resource === 'all' ? '全部资源' : storage.resource}
                                 </div>
                               ))}
@@ -304,7 +295,7 @@ export function BuildingTab() {
                             >
                               <Minus className="w-4 h-4" />
                             </Button>
-                            <span className="px-3 py-1 bg-gray-800 text-white rounded text-center min-w-[3rem]">
+                            <span className="px-3 py-1 border border-white/10 rounded text-center min-w-[3rem]">
                               {buildQuantity}
                             </span>
                             <Button
@@ -327,7 +318,7 @@ export function BuildingTab() {
                           </Button>
                           
                           {!canBuild.canBuild && (
-                            <div className="text-xs text-rose-400">
+                            <div className="text-xs text-gray-500">
                               {canBuild.reasons.join(', ')}
                             </div>
                           )}
@@ -339,7 +330,7 @@ export function BuildingTab() {
               </div>
 
               {categoryBuildings.length === 0 && (
-                <Card>
+                <Card className="bg-transparent shadow-none border border-white/10">
                   <CardContent className="pt-6 text-center text-gray-500">
                     <Info className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p>该分类下暂无可建造的建筑</p>
@@ -354,7 +345,7 @@ export function BuildingTab() {
 
       {/* 已建造建筑管理 */}
       {Object.keys(managementState.buildings).length > 0 && (
-        <Card>
+        <Card className="bg-transparent shadow-none border border-white/10">
           <CardHeader>
             <CardTitle>建筑管理</CardTitle>
           </CardHeader>
@@ -367,24 +358,24 @@ export function BuildingTab() {
                 const productionResult = buildingSystem.calculateBuildingProduction(instance.id);
                 
                 return (
-                  <Card key={instance.id} className="border-l-4 border-l-blue-500">
+                  <Card key={instance.id} className="bg-transparent shadow-none border border-white/10">
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h4 className="font-medium">{building.name}</h4>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-gray-500">
                             数量: {instance.count || 1} | 等级: {instance.level}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
                           {instance.status === 'building' && (
-                            <Badge variant="outline" className="text-orange-600">
+                            <Badge variant="outline" className="text-gray-400">
                               <Clock className="w-3 h-3 mr-1" />
                               建造中
                             </Badge>
                           )}
                           {instance.status === 'completed' && (
-                            <Badge variant="outline" className="text-green-600">
+                            <Badge variant="outline" className="text-gray-400">
                               <CheckCircle className="w-3 h-3 mr-1" />
                               已完成
                             </Badge>
@@ -417,7 +408,7 @@ export function BuildingTab() {
                               >
                                 <Minus className="w-4 h-4" />
                               </Button>
-                              <span className="px-3 py-1 bg-gray-800 text-white rounded text-center min-w-[3rem]">
+                              <span className="px-3 py-1 border border-white/10 rounded text-center min-w-[3rem]">
                                 {instance.assignedWorkers}
                               </span>
                               <Button
@@ -428,7 +419,7 @@ export function BuildingTab() {
                               >
                                 <Plus className="w-4 h-4" />
                               </Button>
-                              <span className="text-sm text-gray-600">/ {building.maxWorkers}</span>
+                              <span className="text-sm text-gray-500">/ {building.maxWorkers}</span>
                             </div>
                           </div>
 
@@ -439,8 +430,8 @@ export function BuildingTab() {
                               <div className="space-y-1">
                                 {productionResult.production.map(prod => (
                                   <div key={prod.resource} className="text-sm">
-                                    <span className="text-green-600">+{prod.actualRate.toFixed(1)}</span>
-                                    <span className="text-gray-600 ml-1">{prod.resource}</span>
+                                    <span className="text-gray-300">+{prod.actualRate.toFixed(1)}</span>
+                                    <span className="text-gray-500 ml-1">{prod.resource}</span>
                                     <span className="text-gray-500 ml-1">({(prod.efficiency * 100).toFixed(0)}% 效率)</span>
                                   </div>
                                 ))}
