@@ -160,17 +160,17 @@ export function BuildingTab() {
 
       {/* 建筑管理主界面 */}
       <Tabs value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as BuildingCategory)}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-6 gap-2 p-2 rounded-xl bg-gray-100/40 dark:bg-gray-800/60 border border-gray-200/30 dark:border-gray-700/60">
           {Object.entries(BUILDING_CATEGORIES).map(([category, config]) => {
             const Icon = categoryIcons[category as BuildingCategory];
             const count = managementState.statistics.buildingsByCategory[category as BuildingCategory];
             
             return (
-              <TabsTrigger key={category} value={category} className="flex flex-col gap-1 p-2">
+              <TabsTrigger key={category} value={category} className="flex flex-col items-center gap-1 px-3 py-2 rounded-full border border-transparent data-[state=active]:border-white/20 data-[state=active]:bg-white/10 hover:bg-white/5 transition-colors">
                 <Icon className="w-4 h-4" />
                 <span className="text-xs">{config.name}</span>
                 {count > 0 && (
-                  <Badge variant="secondary" className="text-xs px-1 py-0">
+                  <Badge variant="secondary" className="text-xs px-1 py-0 rounded-full bg-white/5 border border-white/10">
                     {count}
                   </Badge>
                 )}
@@ -209,7 +209,7 @@ export function BuildingTab() {
                           </div>
                           <Badge 
                             variant="outline" 
-                            className={`${categoryColors[building.category]} text-white border-none`}
+                            className="rounded-full border border-white/15 bg-white/5 text-gray-200"
                           >
                             {BUILDING_CATEGORIES[building.category].name}
                           </Badge>
@@ -255,7 +255,7 @@ export function BuildingTab() {
                               const hasEnough = currentAmount >= totalCost;
                               
                               return (
-                                <div key={resource} className={`text-sm ${hasEnough ? 'text-green-600' : 'text-red-600'}`}>
+                                <div key={resource} className={`text-sm ${hasEnough ? 'text-emerald-500' : 'text-rose-400'}`}>
                                   {totalCost} {resource}
                                 </div>
                               );
@@ -266,7 +266,7 @@ export function BuildingTab() {
                         {/* 生产效果 */}
                         {building.production && building.production.length > 0 && (
                           <div>
-                            <h4 className="font-medium mb-2">生产效果</h4>
+                            <h4 className="font-medium mb-2">储存效果</h4>
                             <div className="grid grid-cols-2 gap-2">
                               {building.production.map(prod => (
                                 <div key={prod.resource} className="text-sm text-green-600">
@@ -327,7 +327,7 @@ export function BuildingTab() {
                           </Button>
                           
                           {!canBuild.canBuild && (
-                            <div className="text-xs text-red-600">
+                            <div className="text-xs text-rose-400">
                               {canBuild.reasons.join(', ')}
                             </div>
                           )}

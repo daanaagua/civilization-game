@@ -7,8 +7,10 @@ import { AllEffectsModal } from '@/components/ui/AllEffectsModal';
 
 // 格式化效果值显示
 function formatValue(value: number, isPercentage: boolean): string {
-  const formattedValue = value > 0 ? `+${value}` : `${value}`;
-  return isPercentage ? `${formattedValue}%` : formattedValue;
+  const rounded = Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+  const fixed = rounded.toFixed(2);
+  const signed = rounded > 0 ? `+${fixed}` : fixed; // 负数自动带 -
+  return isPercentage ? `${signed}%` : signed;
 }
 
 // 计算稳定度对游戏机制的影响（根据stability.md设计文档）
@@ -198,8 +200,34 @@ function EffectTooltip({ effect, position }: EffectTooltipProps) {
   if (!effect) return null;
 
   const formatValue = (value: number, isPercentage: boolean) => {
-    const formattedValue = value > 0 ? `+${value}` : `${value}`;
-    return isPercentage ? `${formattedValue}%` : formattedValue;
+    const rounded = Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+    const fixed = rounded.toFixed(2);
+    const signed = rounded > 0 ? `+${fixed}` : fixed;
+    return isPercentage ? `${signed}%` : signed;
+  };
+
+  // 事件类效果：在浮框中展示剩余时间
+  const getEventRemainingText = () => {
+    const src: any = (effect as any).source || {};
+    if (src.type !== 'event') return null;
+
+    // 尝试从全局状态读取对应临时效果的剩余时间
+    try {
+      // 动态引入以避免循环依赖
+      const { useGameStore } = require('@/lib/game-store');
+      const { getRemainingDays } = require('@/lib/temporary-effects');
+      const gameState = useGameStore.getState().gameState;
+      const list = gameState.temporaryEffects || [];
+      const matched = list.find((e: any) => e.id === (effect as any).id);
+      if (!matched) return null;
+      const daysFloat = getRemainingDays(matched, gameState.gameTime);
+      const days = Math.max(0, Math.ceil(daysFloat));
+      if (days >= 1) return `剩余${days}天`;
+      const hours = Math.max(0, Math.ceil(daysFloat * 24));
+      return `剩余约${hours}小时`;
+    } catch (e) {
+      return null;
+    }
   };
 
   // 根据效果类型获取详细影响说明
@@ -263,6 +291,12 @@ function EffectTooltip({ effect, position }: EffectTooltipProps) {
         </span>
       </div>
       
+      {/* 事件剩余时间 */}
+      {(() => {
+        const txt = getEventRemainingText();
+        return txt ? <div className="text-xs text-gray-400 mb-2">{txt}</div> : null;
+      })()}
+      
       {getEffectDetails()}
       
       <div className="mt-2 pt-2 border-t border-gray-700">
@@ -307,18 +341,23 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
 
   // 按类型分组效果，确保鲁棒性
   const groupedEffects = effects.reduce((acc, effect) => {
-    // 创建更稳定的分组键，处理各种可能的效果来源
-    const sourceType = (effect as any).sourceType || effect.type || 'unknown';
-    const sourceId = (effect as any).sourceId || 'default';
+    // 统一读取来源（兼容旧结构与新结构）
+    const src: any = (effect as any).source || {};
+    const sourceType = src.type || (effect as any).sourceType || effect.type || 'unknown';
+    const sourceId = src.id || (effect as any).sourceId || (effect as any).id || 'default';
     const effectType = effect.type || 'unknown';
-    const key = `${effectType}_${sourceType}_${sourceId}`;
+
+    // 事件类：每个事件独立成标签，使用效果自身 id 作为唯一键，避免与同类合并
+    const key = sourceType === 'event'
+      ? `event_${(effect as any).id || sourceId}`
+      : `${effectType}_${sourceType}_${sourceId}`;
     
     if (!acc[key]) {
       acc[key] = [];
     }
     acc[key].push(effect);
     return acc;
-  }, {} as Record<string, Effect[]>);
+  }, {} as Record<string, Effect[]>)
 
   const [showAllEffects, setShowAllEffects] = useState(false);
 

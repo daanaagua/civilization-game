@@ -54,13 +54,8 @@ export const useEffects = () => {
     const usePercentage = Math.abs(percentageTotal) >= Math.abs(absoluteTotal);
     const value = usePercentage ? percentageTotal : absoluteTotal;
 
-    // 计算剩余时间文本（优先按“个月”显示）
-    const remainingDays = getRemainingDays(te, gameTime);
-    const months = Math.ceil(remainingDays / 30);
-    const durationText = months >= 1 ? `持续${months}个月` : remainingDays > 0 ? `剩余约${Math.ceil(remainingDays * 24)}小时` : '已过期';
-
-    // 自定义标签名称：如【春季溪流充沛】持续四个月
-    const displayName = `【${te.name}】${durationText}`;
+    // 标签仅显示事件名
+    const displayName = te.name;
 
     return {
       id: te.id,
@@ -74,7 +69,8 @@ export const useEffects = () => {
         id: te.source,
         name: te.name,
       },
-      duration: months >= 1 ? months : undefined,
+      // 将剩余时间放到 tooltip（EffectTooltip）里处理，这里不展示
+      duration: undefined,
       icon: te.icon ?? '✨',
       // 提供 EffectsPanel 的显示覆写
       displayName,
