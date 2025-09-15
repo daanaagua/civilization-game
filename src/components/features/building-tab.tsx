@@ -118,45 +118,25 @@ export function BuildingTab() {
 
   return (
     <div className="space-y-6">
-      {/* 建筑统计概览 */}
-      <Card className="bg-transparent shadow-none border-0">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building className="w-5 h-5" />
-            建筑概览
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white">
-                {managementState.statistics.totalBuildings}
-              </div>
-              <div className="text-sm text-gray-500">总建筑数</div>
+      {/* 建筑统计概览 - 精简为单行三项 */}
+      <Card className="bg-transparent shadow-none border-0 p-0">
+        <CardContent className="p-0">
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-semibold">{managementState.statistics.totalBuildings}</span>
+              <span className="text-gray-500">总建筑数</span>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white">
-                {managementState.workerAssignment.assignedWorkers}
-              </div>
-              <div className="text-sm text-gray-500">已分配工人</div>
+            <div className="flex items-center gap-2">
+              <span className="text-white font-semibold">{managementState.workerAssignment.assignedWorkers}</span>
+              <span className="text-gray-500">已分配工人</span>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white">
-                {managementState.workerAssignment.availableWorkers}
-              </div>
-              <div className="text-sm text-gray-500">可用工人</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white">
-                {Object.keys(managementState.statistics.totalProduction).length}
-              </div>
-              <div className="text-sm text-gray-500">生产资源种类</div>
+            <div className="flex items-center gap-2">
+              <span className="text-white font-semibold">{managementState.workerAssignment.availableWorkers}</span>
+              <span className="text-gray-500">盈余人口</span>
             </div>
           </div>
         </CardContent>
       </Card>
-
-
 
       {/* 建筑管理主界面 */}
       <Tabs value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as BuildingCategory)}>
@@ -176,14 +156,13 @@ export function BuildingTab() {
             );
           })}
         </TabsList>
+        {/* Tabs 与下方建筑卡片之间的分割线 */}
+        <div className="h-px bg-white/10 my-3" />
 
         {Object.keys(BUILDING_CATEGORIES).map(category => (
           <TabsContent key={category} value={category} className="space-y-3">
             <div className="grid gap-3">
-              {/* 分类描述 */}
-              <p className="text-sm text-gray-500">
-                {BUILDING_CATEGORIES[category as BuildingCategory].description}
-              </p>
+              {/* 分类描述移除 */}
 
               {/* 可建造建筑列表 */}
               <div className="grid md:grid-cols-2 gap-3">
@@ -199,7 +178,7 @@ export function BuildingTab() {
                         <div className="flex justify-between items-start">
                           <div>
                             <CardTitle className="text-base">{building.name}</CardTitle>
-                            <p className="text-sm text-gray-500 mt-1">{building.description}</p>
+                            {/* 建筑描述移除 */}
                           </div>
                           <span className="text-xs text-gray-500">
                             {BUILDING_CATEGORIES[building.category].name}
