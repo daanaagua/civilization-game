@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GameEvent, EventType, EventPriority, EventChoice } from '@/components/features/EventsPanel';
-import { EventSystemManager, createEventSystem } from '@/lib/event-system';
+import { EventSystemManager, createEventSystem, EVENT_SYSTEM_VERSION } from '@/lib/event-system';
 import { useGameStore } from '@/lib/game-store';
+import { addTemporaryEffect, createTemporaryEffectFromEventChoice } from '@/lib/temporary-effects';
 
 // 历史事件存储键
 const EVENTS_STORAGE_KEY = 'civilization-game-events-history';
@@ -66,9 +67,16 @@ function loadEventsFromStorage(): { events: GameEvent[], eventIdCounter: number 
 export function useEvents() {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [eventIdCounter, setEventIdCounter] = useState(1);
-  const [eventSystem, setEventSystem] = useState<EventSystemManager | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const gameState = useGameStore(state => state.gameState);
+  // 新增：从设置读取事件轮询间隔（毫秒），默认 1000ms
+  const pollInterval = useGameStore(state => state.gameState?.settings?.eventsPollIntervalMs ?? 1000);
+  // 新增：调试日志开关
+  const eventsDebugEnabled = useGameStore(state => !!state.gameState?.settings?.eventsDebugEnabled);
+  // 事件系统实例持久化（避免重建导致触发状态丢失）
+  const eventSystemRef = useRef<EventSystemManager | null>(null);
+  // 记录事件系统版本，支持在 HMR 或逻辑升级后安全重建实例
+  const eventSystemVersionRef = useRef<number>(0);
 
   // 初始化时加载历史事件
   useEffect(() => {
@@ -116,6 +124,8 @@ export function useEvents() {
 
   // 处理选择事件
   const handleChoice = useCallback((eventId: string, choiceId: string) => {
+    const { gameState, updateEffectsSystem, calculateResourceRates } = useGameStore.getState();
+    
     setEvents(prev => prev.map(event => {
       if (event.id === eventId && event.type === EventType.CHOICE) {
         const selectedChoice = event.choices?.find(choice => choice.id === choiceId);
@@ -130,13 +140,75 @@ export function useEvents() {
       return event;
     }));
     
-    // 这里可以添加选择后果的处理逻辑
+    // 处理选择后果的逻辑
     const event = events.find(e => e.id === eventId);
     const choice = event?.choices?.find(c => c.id === choiceId);
     
-    if (choice?.consequences) {
-      // 可以触发相应的游戏状态变化
-      console.log(`事件选择结果:`, choice.consequences);
+    if (choice && gameState) {
+      const newGameState = { ...gameState };
+      
+      // 1. 消耗资源
+      if (choice.requirements?.resourceCost) {
+        Object.entries(choice.requirements.resourceCost).forEach(([resourceKey, cost]) => {
+          const currentAmount = newGameState.resources[resourceKey as keyof typeof newGameState.resources] || 0;
+          (newGameState.resources as any)[resourceKey] = Math.max(0, currentAmount - cost);
+        });
+      }
+      
+      // 2. 应用即时效果
+      if (choice.consequences) {
+        choice.consequences.forEach(consequence => {
+          switch (consequence.type) {
+            case 'resource':
+              if (newGameState.resources[consequence.target as keyof typeof newGameState.resources] !== undefined) {
+                (newGameState.resources as any)[consequence.target] = 
+                  Math.max(0, (newGameState.resources[consequence.target as keyof typeof newGameState.resources] || 0) + consequence.value);
+              }
+              break;
+            case 'stability':
+              newGameState.stability = Math.max(0, Math.min(100, newGameState.stability + consequence.value));
+              break;
+          }
+        });
+      }
+      
+      // 3. 添加临时效果
+      if (choice.effects && choice.effectType === 'buff' && choice.duration && choice.duration > 0) {
+        const temporaryEffect = createTemporaryEffectFromEventChoice(
+          choice.id,
+          event?.id || 'unknown',
+          event?.title || '未知事件',
+          choice.effects,
+          choice.duration,
+          newGameState
+        );
+        if (temporaryEffect) {
+          addTemporaryEffect(newGameState, temporaryEffect);
+        }
+      }
+      
+      // 更新游戏状态（替换原先不存在的 updateGameState 调用）
+      useGameStore.setState((state) => ({
+        gameState: newGameState,
+      }));
+      
+      // 更新效果系统并重算资源速率，避免显示不同步
+      try {
+        updateEffectsSystem();
+      } catch (e) {
+        console.warn('updateEffectsSystem 调用失败:', e);
+      }
+      try {
+        calculateResourceRates();
+      } catch (e) {
+        console.warn('calculateResourceRates 调用失败:', e);
+      }
+      
+      console.log(`事件选择结果:`, {
+        resourceCost: choice.requirements?.resourceCost,
+        consequences: choice.consequences,
+        effects: choice.effects
+      });
     }
   }, [events]);
 
@@ -178,33 +250,50 @@ export function useEvents() {
     return events.filter(event => event.priority === priority);
   }, [events]);
 
-  // 初始化事件系统
+  // 初始化/重建事件系统（在版本变化时重建）
   useEffect(() => {
-    if (gameState) {
-      const newEventSystem = createEventSystem(gameState);
-      setEventSystem(newEventSystem);
+    if (gameState && (!eventSystemRef.current || eventSystemVersionRef.current !== EVENT_SYSTEM_VERSION)) {
+      eventSystemRef.current = createEventSystem(gameState);
+      eventSystemVersionRef.current = EVENT_SYSTEM_VERSION;
+      console.log(`[Events] 事件系统实例已创建/重建，版本: ${EVENT_SYSTEM_VERSION}`);
+    }
+  }, [gameState]);
+
+  // gameState 变化时更新事件系统内部引用，但不重建实例
+  useEffect(() => {
+    if (eventSystemRef.current && gameState) {
+      eventSystemRef.current.updateGameState(gameState);
     }
   }, [gameState]);
 
   // 定期检查和生成事件
   useEffect(() => {
-    if (!eventSystem) return;
-
+    if (eventsDebugEnabled) {
+      console.log(`[Events] setInterval: pollIntervalMs=${pollInterval}, paused=${gameState.isPaused}`);
+    }
     const interval = setInterval(() => {
       // 清理过期事件
       cleanupExpiredEvents();
       
       // 只有在游戏未暂停时才生成新事件
-      if (!gameState.isPaused) {
-        const newEvents = eventSystem.checkAndGenerateEvents();
+      if (!gameState.isPaused && eventSystemRef.current) {
+        const newEvents = eventSystemRef.current.checkAndGenerateEvents();
         newEvents.forEach(eventData => {
           addEvent(eventData);
         });
+        if (eventsDebugEnabled && newEvents.length > 0) {
+          console.log(`[Events] generated ${newEvents.length} events at ${new Date().toLocaleTimeString()}`);
+        }
       }
-    }, 60000); // 每分钟检查一次
+    }, pollInterval); // 使用设置中的轮询间隔
 
-    return () => clearInterval(interval);
-  }, [eventSystem, cleanupExpiredEvents, addEvent, gameState.isPaused]);
+    return () => {
+      if (eventsDebugEnabled) {
+        console.log('[Events] clearInterval for poll loop');
+      }
+      clearInterval(interval);
+    };
+  }, [cleanupExpiredEvents, addEvent, gameState.isPaused, pollInterval, eventsDebugEnabled]);
 
   // 定期清理过期事件
   useEffect(() => {
@@ -231,7 +320,7 @@ export function useEvents() {
     getEventsByType,
     getEventsByPriority,
     clearAllEvents,
-    eventSystem,
+    eventSystem: eventSystemRef.current,
     isLoaded
   };
 }

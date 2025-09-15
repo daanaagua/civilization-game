@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { formatNumber, formatTime } from '@/utils/format';
 import { 
@@ -90,6 +90,7 @@ export const ExplorationPanel = () => {
   const { gameState, addResources, spendResources, getUnitCount } = useGameStore();
   const [activeMissions, setActiveMissions] = useState<ExplorationMission[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const isPaused = useGameStore(state => state.gameState.isPaused);
 
   // 获取可用侦察兵数量
   const getAvailableScouts = () => {
@@ -181,11 +182,12 @@ export const ExplorationPanel = () => {
     });
   };
 
-  // 定期检查任务状态
-  useState(() => {
+  // 定期检查任务状态（暂停时不运行）
+  useEffect(() => {
+    if (isPaused) return;
     const interval = setInterval(checkMissions, 1000);
     return () => clearInterval(interval);
-  });
+  }, [isPaused, activeMissions]);
 
   const availableScouts = getAvailableScouts();
   const totalScouts = getUnitCount('scout');

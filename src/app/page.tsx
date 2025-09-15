@@ -25,41 +25,49 @@ export default function Home() {
   const pauseGame = useGameStore(state => state.pauseGame);
   const resumeGame = useGameStore(state => state.resumeGame);
   const gameState = useGameStore(state => state);
-  const [activeTab, setActiveTab] = useState('overview');
+  // 新增：订阅设置值与对应的 setter，确保受控组件实时更新
+  const pollIntervalMs = useGameStore(state => state.gameState.settings.eventsPollIntervalMs);
+  const setPollIntervalMs = useGameStore(state => state.setEventsPollIntervalMs);
+  const eventsDebugEnabled = useGameStore(state => state.gameState.settings.eventsDebugEnabled);
+  const setEventsDebugEnabled = useGameStore(state => state.setEventsDebugEnabled);
+  // 使用全局的 activeTab 与 setActiveTab，避免与其它组件（如 GameHeader）脱节
+  const activeTab = useGameStore(state => state.uiState.activeTab);
+  const setActiveTab = useGameStore(state => state.setActiveTab);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentNotificationEvent, setCurrentNotificationEvent] = useState(null);
   const [hasUnreadEvents, setHasUnreadEvents] = useState(false);
   const [lastEventCount, setLastEventCount] = useState(0);
   
-  // 使用事件系统
-  const { events, getUnresolvedChoiceEvents } = useEvents();
-  
-  // 更新游戏状态的函数
-  const handleUpdateGameState = (updates: any) => {
-    // 这里可以根据需要实现状态更新逻辑
-    console.log('Game state updates:', updates);
-  };
+  // 使用事件系统（单例来源）
+  const { events, markAsRead, handleChoice, getUnresolvedChoiceEvents, clearAllEvents } = useEvents();
   
   // 启动游戏循环
   useGameLoop();
+
+  // 监听 GAME_RESET 清空历史事件与UI提示
+  useEffect(() => {
+    const handler = () => {
+      try {
+        clearAllEvents();
+      } catch (e) {
+        console.warn('清空事件时出错:', e);
+      }
+      setCurrentNotificationEvent(null);
+      setHasUnreadEvents(false);
+      setLastEventCount(0);
+    };
+    window.addEventListener('GAME_RESET' as any, handler as any);
+    return () => window.removeEventListener('GAME_RESET' as any, handler as any);
+  }, [clearAllEvents]);
   
   // 监听新事件并显示通知
   useEffect(() => {
     if (events.length > lastEventCount && isInitialized) {
-      // 有新事件
       const newEvents = events.slice(0, events.length - lastEventCount);
       const latestEvent = newEvents[0];
-      
       if (latestEvent) {
-        // 显示通知浮框
         setCurrentNotificationEvent(latestEvent);
-        
-        // 如果不在概览选项卡，显示红点
-        if (activeTab !== 'overview') {
-          setHasUnreadEvents(true);
-        }
-        
-        // 如果是选择事件，强制暂停游戏
+        if (activeTab !== 'overview') setHasUnreadEvents(true);
         if (latestEvent.type === EventType.CHOICE) {
           pauseGame();
         }
@@ -68,17 +76,25 @@ export default function Home() {
     setLastEventCount(events.length);
   }, [events.length, lastEventCount, isInitialized, activeTab, pauseGame]);
   
-  // 监听选择事件的解决状态
+  // 监听选择事件的解决状态，解决后允许用户继续
   useEffect(() => {
     const unresolvedChoiceEvents = getUnresolvedChoiceEvents();
-    
-    // 只有当游戏正在运行且有选择事件时才暂停，解决后不自动恢复
-    // 用户需要手动点击恢复按钮来继续游戏
     if (unresolvedChoiceEvents.length > 0 && !gameState.gameState.isPaused && isInitialized) {
       pauseGame();
     }
+    // 如果没有未解决的选择事件且当前是暂停状态，则不强制保持暂停
+    // 让用户点击继续按钮可以恢复
   }, [events, getUnresolvedChoiceEvents, gameState.gameState.isPaused, isInitialized, pauseGame]);
-  
+
+  // 新增：当当前通知事件被解决或从列表中移除时，自动关闭通知浮窗
+  useEffect(() => {
+    if (!currentNotificationEvent) return;
+    const latest = events.find(e => e.id === currentNotificationEvent.id);
+    // 事件被移除或已解决 -> 关闭通知
+    if (!latest || (latest.type === EventType.CHOICE && latest.isResolved)) {
+      setCurrentNotificationEvent(null);
+    }
+  }, [events, currentNotificationEvent]);
   // 切换到概览选项卡时清除红点
   useEffect(() => {
     if (activeTab === 'overview') {
@@ -89,22 +105,17 @@ export default function Home() {
   // 初始化游戏和持久化功能
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // 等待一个tick确保persist中间件已经恢复状态
       const timer = setTimeout(() => {
-        // 尝试加载保存的游戏状态
         const loaded = loadGame();
         if (loaded) {
           console.log('成功加载保存的游戏状态');
         } else {
           console.log('使用默认游戏状态');
         }
-        
-        // 初始化持久化功能（自动保存）
         initializePersistence();
         setIsInitialized(true);
         console.log('游戏初始化完成 - 每10秒自动保存');
-      }, 100); // 稍微增加延迟确保persist完全恢复
-
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [loadGame, initializePersistence]);
@@ -125,29 +136,84 @@ export default function Home() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <OverviewPanel />;
+        return <OverviewPanel events={events} onMarkAsRead={markAsRead} onChoiceSelect={handleChoice} />;
       case 'buildings':
         return <BuildingTab />;
       case 'technology':
         return <TechnologyTab />;
       case 'military':
-        return <MilitaryTab gameState={gameState} onUpdateGameState={handleUpdateGameState} />;
+        return <MilitaryTab gameState={gameState} onUpdateGameState={() => {}} />;
       case 'exploration':
-        return <ExplorationTab gameState={gameState} onUpdateGameState={handleUpdateGameState} />;
+        return <ExplorationTab gameState={gameState} onUpdateGameState={() => {}} />;
       case 'characters':
         return <CharacterTab />;
       case 'diplomacy':
-        return <DiplomacyTab gameState={gameState} onUpdateGameState={handleUpdateGameState} />;
+        return <DiplomacyTab gameState={gameState} onUpdateGameState={() => {}} />;
       case 'settings':
         return (
-          <div className="bg-gray-800 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">⚙️</div>
-            <h2 className="text-2xl font-bold mb-2">游戏设置</h2>
-            <p className="text-gray-400">设置功能开发中，敬请期待...</p>
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-3xl">⚙️</div>
+              <div>
+                <h2 className="text-2xl font-bold">游戏设置</h2>
+                <p className="text-gray-400 text-sm">调整事件系统与运行参数</p>
+              </div>
+            </div>
+
+            {/* 事件轮询频率设置 */}
+            <div className="mb-8">
+              <label htmlFor="poll-interval" className="block text-sm font-medium text-gray-300 mb-2">
+                事件轮询频率（毫秒）
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  id="poll-interval"
+                  type="range"
+                  min={200}
+                  max={10000}
+                  step={100}
+                  value={pollIntervalMs}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setPollIntervalMs(Number.isFinite(v) ? v : 1000);
+                  }}
+                  className="w-full accent-amber-500"
+                />
+                <input
+                  type="number"
+                  min={200}
+                  max={10000}
+                  step={100}
+                  value={pollIntervalMs}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setPollIntervalMs(Number.isFinite(v) ? v : 1000);
+                  }}
+                  className="w-28 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right"
+                />
+                <span className="text-gray-400 text-sm">200 - 10000</span>
+              </div>
+              <p className="text-gray-400 text-xs mt-2">数值越小，检查频率越高（更实时，略增开销）；数值越大，检查频率越低（更省电）。</p>
+            </div>
+
+            {/* 事件调试日志开关 */}
+            <div className="mb-4">
+              <label htmlFor="events-debug" className="inline-flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  id="events-debug"
+                  type="checkbox"
+                  checked={eventsDebugEnabled}
+                  onChange={(e) => setEventsDebugEnabled(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm text-gray-300">启用事件系统调试日志</span>
+              </label>
+              <p className="text-gray-400 text-xs mt-1">开启后将输出境内事件触发计算（概率、时间间隔）与实际触发记录，便于排查问题。</p>
+            </div>
           </div>
         );
       default:
-        return <OverviewPanel />;
+        return <OverviewPanel events={events} onMarkAsRead={markAsRead} onChoiceSelect={handleChoice} />;
     }
   };
 

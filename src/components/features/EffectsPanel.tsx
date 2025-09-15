@@ -94,21 +94,51 @@ function getStabilityEffects(stability: number): Array<{name: string, value: str
   return effects;
 }
 
-// 计算腐败度对游戏机制的影响
+// 计算腐败度对游戏机制的影响（严格按照 corruption.md）
 function getCorruptionEffects(corruption: number): Array<{name: string, value: string}> {
-  const taxEfficiency = Math.max(-50, -corruption);
-  const buildingCost = Math.min(50, corruption);
-  const researchSpeed = Math.max(-30, -corruption * 0.5);
-  const tradeIncome = Math.max(-40, -corruption * 0.8);
-  const armyMaintenance = Math.min(30, corruption * 0.6);
+  const items: Array<{name: string, value: string}> = [];
 
-  return [
-    { name: '税收效率', value: `${taxEfficiency}%` },
-    { name: '建筑成本', value: `+${buildingCost}%` },
-    { name: '科技研发速度', value: `${researchSpeed}%` },
-    { name: '贸易收益', value: `${tradeIncome}%` },
-    { name: '军队维护费', value: `+${armyMaintenance}%` }
-  ];
+  // 资源效率（所有资源产出）
+  let productionPenalty = 0;
+  if (corruption >= 26 && corruption <= 50) productionPenalty = -10;
+  else if (corruption >= 51 && corruption <= 75) productionPenalty = -25;
+  else if (corruption >= 76 && corruption <= 90) productionPenalty = -40;
+  else if (corruption >= 91) productionPenalty = -60;
+  if (productionPenalty !== 0) {
+    items.push({ name: '资源产出', value: `${productionPenalty}%` });
+  }
+
+  // 建筑建造成本
+  let buildingCostIncrease = 0;
+  if (corruption >= 51 && corruption <= 75) buildingCostIncrease = 20;
+  else if (corruption >= 76 && corruption <= 90) buildingCostIncrease = 50;
+  else if (corruption >= 91) buildingCostIncrease = 100;
+  if (buildingCostIncrease !== 0) {
+    items.push({ name: '建筑建造成本', value: `+${buildingCostIncrease}%` });
+  }
+
+  // 稳定度（直接扣除腐败度点数）
+  if (corruption > 0) {
+    items.push({ name: '稳定度', value: `-${Math.floor(corruption)}` });
+  }
+
+  // 外交影响
+  if (corruption > 60) {
+    items.push({ name: '外交关系改善速度', value: `-50%` });
+  }
+  if (corruption > 80) {
+    items.push({ name: '其他文明信任度', value: `-20%` });
+  }
+
+  // 科技影响（较高阈值覆盖较低阈值）
+  let researchPenalty = 0;
+  if (corruption > 85) researchPenalty = -50;
+  else if (corruption > 70) researchPenalty = -30;
+  if (researchPenalty !== 0) {
+    items.push({ name: '科技研究速度', value: `${researchPenalty}%` });
+  }
+
+  return items;
 }
 
 // 效果标签组件
@@ -323,8 +353,8 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
             name: firstEffect.name || '未知效果',
             type: firstEffect.type || EffectType.STABILITY,
             isPercentage: isStabilityOrCorruption ? false : (firstEffect.isPercentage !== undefined ? firstEffect.isPercentage : true),
-            // 直接在这里控制显示，稳定度和腐败度只显示名称
-            displayName: isStabilityOrCorruption ? firstEffect.name : `${firstEffect.name}: ${formatValue(totalValue, firstEffect.isPercentage)}`
+            // 若原效果携带自定义 displayName（如事件临时效果标签），则优先使用，不要覆盖
+            displayName: (firstEffect as any).displayName ?? (isStabilityOrCorruption ? firstEffect.name : `${firstEffect.name}: ${formatValue(totalValue, firstEffect.isPercentage)}`)
           };
           
           return (

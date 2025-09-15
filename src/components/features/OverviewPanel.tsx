@@ -3,13 +3,17 @@
 import { PopulationPanel } from './PopulationPanel';
 import { GameStatsPanel } from './GameStatsPanel';
 import { EffectsPanel } from './EffectsPanel';
-import { EventsPanel } from './EventsPanel';
+import { EventsPanel, type GameEvent } from './EventsPanel';
 import { useEffects } from '@/hooks/use-effects';
-import { useEvents } from '@/hooks/use-events';
 
-export function OverviewPanel() {
+export interface OverviewPanelProps {
+  events: GameEvent[];
+  onMarkAsRead: (eventId: string) => void;
+  onChoiceSelect: (eventId: string, choiceId: string) => void;
+}
+
+export function OverviewPanel({ events, onMarkAsRead, onChoiceSelect }: OverviewPanelProps) {
   const { activeEffects } = useEffects();
-  const { events, markAsRead, handleChoice } = useEvents();
   
   return (
     <div className="space-y-6">
@@ -27,8 +31,8 @@ export function OverviewPanel() {
       {/* 事件面板 */}
       <EventsPanel 
         events={events}
-        onMarkAsRead={markAsRead}
-        onChoiceSelect={handleChoice}
+        onMarkAsRead={onMarkAsRead}
+        onChoiceSelect={onChoiceSelect}
       />
       
       {/* 主要信息面板 */}

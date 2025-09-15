@@ -3,13 +3,17 @@
 import { GameState } from '@/types/game';
 import { GameEvent, EventType, EventPriority } from '@/components/features/EventsPanel';
 
+// 新增：事件系统版本号，用于在 Hook 中检测并重建实例以适配行为变更
+export const EVENT_SYSTEM_VERSION = 2;
+
 // 事件触发状态接口
 interface EventTriggerState {
-  lastDomesticEventTime: number;
-  lastCharacterEventTime: Record<string, number>; // 每个人物的上次事件时间
-  lastAdventureTime: number;
+  lastDomesticEventGameTime: number; // 以“游戏内秒”为单位记录上次境内事件发生的游戏时间
+  lastCharacterEventTime: Record<string, number>; // 每个人物的上次事件时间（毫秒）
+  lastAdventureTime: number; // 上次冒险事件时间（毫秒）
   discoveredDungeons: string[];
   scoutingPoints: number; // 当前侦察点数
+  firstDomesticEventTriggered?: boolean; // 是否已经触发过首个境内事件
 }
 
 // 境内随机事件定义（严格按照events.md）
@@ -27,13 +31,32 @@ const DOMESTIC_EVENTS = {
         id: 'sell_surplus',
         text: '出售多余粮食',
         description: '获得200货币',
-        consequences: ['currency:+200']
+        consequences: [{ type: 'resource', target: 'currency', value: 200 }],
+        requirements: {
+          unlockedResources: ['currency'],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'store_food',
         text: '储存粮食',
         description: '未来三个月食物产出增加20%',
-        consequences: ['food_production:+20%', 'duration:3_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'food',
+          modifier: 0.2,
+          duration: 90
+        },
+        effectType: 'buff',
+        duration: 90
       }
     ]
   },
@@ -51,13 +74,26 @@ const DOMESTIC_EVENTS = {
         id: 'use_treasury',
         text: '动用国库安抚民心',
         description: '支出300货币',
-        consequences: ['currency:-300']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['currency'],
+          resourceCost: { currency: 300 }
+        },
+        effects: null,
+        effectType: 'immediate'
       },
       {
         id: 'rationing',
         text: '实行配给制',
         description: '民众不满导致稳定度-5',
-        consequences: ['stability:-5']
+        consequences: [{ type: 'stability', target: 'stability', value: -5 }],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -75,13 +111,37 @@ const DOMESTIC_EVENTS = {
         id: 'irrigation',
         text: '疏浚河道灌溉农田',
         description: '食物产量+15%持续四个月',
-        consequences: ['food_production:+15%', 'duration:4_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'food',
+          modifier: 0.15,
+          duration: 120
+        },
+        effectType: 'buff',
+        duration: 120
       },
       {
-        id: 'water_mill',
-        text: '利用急流驱动原始水磨',
-        description: '工具制作速度+10%持续六个月',
-        consequences: ['tool_production:+10%', 'duration:6_months']
+        id: 'water_mills',
+        text: '修建水车磨坊',
+        description: '货币+100，未来两个月产能+10%',
+        consequences: [{ type: 'resource', target: 'currency', value: 100 }],
+        requirements: {
+          unlockedResources: ['currency'],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'tools',
+          modifier: 0.1,
+          duration: 60
+        },
+        effectType: 'mixed',
+        duration: 60
       }
     ]
   },
@@ -99,19 +159,40 @@ const DOMESTIC_EVENTS = {
         id: 'organize_extermination',
         text: '组织灭蝗',
         description: '消耗1空闲人力，挽回损失',
-        consequences: ['idle_population:-1', 'crop_loss:prevented']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: { population: 1 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'herbal_smoke',
         text: '使用草药烟熏驱赶',
         description: '花费200木材',
-        consequences: ['wood:-200']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: { wood: 200 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'ignore',
         text: '不予理睬',
         description: '一年内稳定度-5',
-        consequences: ['stability:-5', 'duration:1_year']
+        consequences: [{ type: 'stability', target: 'stability', value: -5 }],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -129,13 +210,32 @@ const DOMESTIC_EVENTS = {
         id: 'distribute_fur',
         text: '分发兽皮御寒',
         description: '花费120布革',
-        consequences: ['leather:-120']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['leather'],
+          resourceCost: { leather: 120 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'increase_fires',
         text: '增加火堆取暖',
         description: '三个月内木材生产-30%',
-        consequences: ['wood_production:-30%', 'duration:3_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'wood',
+          modifier: -0.3,
+          duration: 90
+        },
+        effectType: 'buff',
+        duration: 90
       }
     ]
   },
@@ -153,13 +253,27 @@ const DOMESTIC_EVENTS = {
         id: 'reinforce_dikes',
         text: '加固堤坝排水',
         description: '投入2人口空闲劳动力',
-        consequences: ['idle_population:-2']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: { population: 2 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'ignore',
         text: '不予理睬',
         description: '一年内稳定度-5',
-        consequences: ['stability:-5', 'duration:1_year']
+        consequences: [{ type: 'stability', target: 'stability', value: -5 }],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -177,13 +291,36 @@ const DOMESTIC_EVENTS = {
         id: 'expand_winter_crops',
         text: '扩大冬种面积',
         description: '食物增加{目前储存量的20%}',
-        consequences: ['food:+20%_of_current']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_percentage',
+          target: 'food',
+          modifier: 0.2
+        },
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'fallow_land',
         text: '休耕恢复地力',
         description: '三个月内食物产出+25%',
-        consequences: ['food_production:+25%', 'duration:3_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'food',
+          modifier: 0.25,
+          duration: 90
+        },
+        effectType: 'buff',
+        duration: 90
       }
     ]
   },
@@ -201,19 +338,44 @@ const DOMESTIC_EVENTS = {
         id: 'weave_mats',
         text: '编织草席遮挡',
         description: '耗费100木材，保护作物',
-        consequences: ['wood:-100', 'crop_protection:true']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['wood'],
+          resourceCost: { wood: 100 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'distribute_masks',
         text: '发放面罩',
         description: '每人消耗1单位布革',
-        consequences: ['leather:-{population}']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['leather'],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_per_population',
+          target: 'leather',
+          modifier: -1
+        },
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'ignore',
         text: '不予理睬',
         description: '一年内稳定度-5',
-        consequences: ['stability:-5', 'duration:1_year']
+        consequences: [{ type: 'stability', target: 'stability', value: -5 }],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -231,13 +393,37 @@ const DOMESTIC_EVENTS = {
         id: 'large_scale_fishing',
         text: '大规模捕捞销售',
         description: '一次性获得250货币，但三个月内食物减产10%',
-        consequences: ['currency:+250', 'food_production:-10%', 'duration:3_months']
+        consequences: [{ type: 'resource', target: 'currency', value: 250 }],
+        requirements: {
+          unlockedResources: ['currency'],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'food',
+          modifier: -0.1,
+          duration: 90
+        },
+        effectType: 'mixed',
+        duration: 90
       },
       {
         id: 'fishing_ban',
         text: '设立禁渔期养护',
         description: '三个月内食物+15%',
-        consequences: ['food_production:+15%', 'duration:3_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'food',
+          modifier: 0.15,
+          duration: 90
+        },
+        effectType: 'buff',
+        duration: 90
       }
     ]
   },
@@ -255,13 +441,35 @@ const DOMESTIC_EVENTS = {
         id: 'organize_firefighting',
         text: '组织灭火队伍',
         description: '投入1空闲人力，木材储量减少10%',
-        consequences: ['idle_population:-1', 'wood:-10%']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: { population: 1 }
+        },
+        effects: {
+          type: 'resource_percentage',
+          target: 'wood',
+          modifier: -0.1
+        },
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'control_burn',
         text: '控制燃烧范围',
         description: '牺牲边缘林区，木材储量减少30%',
-        consequences: ['wood:-30%']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_percentage',
+          target: 'wood',
+          modifier: -0.3
+        },
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -279,13 +487,37 @@ const DOMESTIC_EVENTS = {
         id: 'develop_bathing',
         text: '开发温泉沐浴',
         description: '半年内每月+40货币收入，吸引游客',
-        consequences: ['currency_income:+40', 'duration:6_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['currency'],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_income',
+          target: 'currency',
+          modifier: 40,
+          duration: 180
+        },
+        effectType: 'buff',
+        duration: 180
       },
       {
         id: 'pottery_firing',
         text: '用于陶器烧制',
         description: '三个月内工具生产速度+20%',
-        consequences: ['tool_production:+20%', 'duration:3_months']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: {
+          type: 'resource_production',
+          target: 'tools',
+          modifier: 0.2,
+          duration: 90
+        },
+        effectType: 'buff',
+        duration: 90
       }
     ]
   },
@@ -303,19 +535,40 @@ const DOMESTIC_EVENTS = {
         id: 'pay_compensation',
         text: '花钱弭平灾祸',
         description: '花费200货币',
-        consequences: ['currency:-200']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['currency'],
+          resourceCost: { currency: 200 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'pray',
         text: '祈祷',
         description: '祈求神明保佑，-50信仰',
-        consequences: ['faith:-50']
+        consequences: [],
+        requirements: {
+          unlockedResources: ['faith'],
+          resourceCost: { faith: 50 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'ignore',
         text: '不予理睬',
         description: '一年内稳定度-5',
-        consequences: ['stability:-5', 'duration:1_year']
+        consequences: [{ type: 'stability', target: 'stability', value: -5 }],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -333,13 +586,27 @@ const DOMESTIC_EVENTS = {
         id: 'build_reed_marsh',
         text: '建造人工芦苇荡吸引',
         description: '投资100木材，一年内稳定度+5',
-        consequences: ['wood:-100', 'stability:+5', 'duration:1_year']
+        consequences: [{ type: 'stability', target: 'stability', value: 5 }],
+        requirements: {
+          unlockedResources: ['wood'],
+          resourceCost: { wood: 100 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'hunting_opportunity',
         text: '利用机会狩猎采集',
         description: '一次性获得120食物',
-        consequences: ['food:+120']
+        consequences: [{ type: 'resource', target: 'food', value: 120 }],
+        requirements: {
+          unlockedResources: ['food'],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   },
@@ -357,13 +624,27 @@ const DOMESTIC_EVENTS = {
         id: 'dig_deep_well',
         text: '集体挖掘深井',
         description: '一次性花费2空闲人口解决供水',
-        consequences: ['idle_population:-2', 'water_supply:restored']
+        consequences: [],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: { population: 2 }
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       },
       {
         id: 'water_rationing',
         text: '实施节水措施',
         description: '民众用水受限，稳定度-5',
-        consequences: ['stability:-5']
+        consequences: [{ type: 'stability', target: 'stability', value: -5 }],
+        requirements: {
+          unlockedResources: [],
+          resourceCost: {}
+        },
+        effects: null,
+        effectType: 'immediate',
+        duration: 0
       }
     ]
   }
@@ -561,11 +842,12 @@ export class EventSystemManager {
   constructor(gameState: GameState) {
     this.gameState = gameState;
     this.triggerState = {
-      lastDomesticEventTime: 0,
+      lastDomesticEventGameTime: 0,
       lastCharacterEventTime: {},
       lastAdventureTime: 0,
       discoveredDungeons: [],
-      scoutingPoints: 0
+      scoutingPoints: 0,
+      firstDomesticEventTriggered: false
     };
   }
 
@@ -573,16 +855,45 @@ export class EventSystemManager {
     this.gameState = gameState;
   }
 
-  shouldTriggerDomesticEvent(currentTime: number): boolean {
-    const timeSinceLastEvent = currentTime - this.triggerState.lastDomesticEventTime;
-    const minInterval = 5 * 60 * 1000; // 最少5分钟间隔
-    const maxInterval = 15 * 60 * 1000; // 最多15分钟间隔
-    
-    if (timeSinceLastEvent < minInterval) return false;
-    
-    // 随机概率，时间越长概率越高
-    const probability = Math.min((timeSinceLastEvent - minInterval) / (maxInterval - minInterval), 1) * 0.3;
-    return Math.random() < probability;
+  // 修正：以“游戏年数”而非“现实时间”作为境内事件的触发间隔依据
+  shouldTriggerDomesticEvent(currentGameTimeSec: number): boolean {
+    const debug = !!this.gameState?.settings?.eventsDebugEnabled;
+    // 若尚未触发过首个境内事件，则强制 5 年门槛（1 年 = 180 秒）
+    const secondsPerYear = 180;
+    const firstEventGateYears = 5;
+    if (!this.triggerState.firstDomesticEventTriggered) {
+      const gateSeconds = firstEventGateYears * secondsPerYear;
+      if (currentGameTimeSec < gateSeconds) {
+        if (debug) {
+          console.log(`[Events][Domestic] gate not passed: current=${currentGameTimeSec.toFixed(1)}s, gate=${gateSeconds}s`);
+        }
+        return false;
+      }
+    }
+
+    // 计算距上次境内事件的“游戏时间”间隔
+    const last = this.triggerState.lastDomesticEventGameTime || 0;
+    const timeSinceLastEventSec = currentGameTimeSec - last;
+
+    const oneYearSeconds = 180; // 1 年 = 180 游戏秒
+    const minIntervalSec = 1 * oneYearSeconds; // 最少 1 年
+    const maxIntervalSec = 3 * oneYearSeconds; // 最多 3 年
+
+    if (timeSinceLastEventSec < minIntervalSec) {
+      if (debug) {
+        console.log(`[Events][Domestic] below min interval: last=${last.toFixed(1)}s, now=${currentGameTimeSec.toFixed(1)}s, delta=${timeSinceLastEventSec.toFixed(1)}s, min=${minIntervalSec}s`);
+      }
+      return false;
+    }
+
+    // 概率在 [1, 3] 年区间从 0 线性增长到上限 0.3
+    const probability = Math.min((timeSinceLastEventSec - minIntervalSec) / (maxIntervalSec - minIntervalSec), 1) * 0.3;
+    const roll = Math.random();
+    const decision = roll < probability;
+    if (debug) {
+      console.log(`[Events][Domestic] check: last=${last.toFixed(1)}s, now=${currentGameTimeSec.toFixed(1)}s, delta=${timeSinceLastEventSec.toFixed(1)}s, min=${minIntervalSec}s, max=${maxIntervalSec}s, p=${probability.toFixed(3)}, roll=${roll.toFixed(3)}, trigger=${decision}`);
+    }
+    return decision;
   }
 
   shouldTriggerCharacterEvent(characterId: string, currentTime: number): boolean {
@@ -597,18 +908,18 @@ export class EventSystemManager {
   }
 
   shouldTriggerAdventureEvent(currentTime: number): boolean {
-    // 只有在有侦察兵或冒险家进行冒险时才可能触发
-    const hasActiveAdventure = this.gameState.characters?.some(char => 
-      (char.type === 'scout' || char.type === 'adventurer') && char.isActive
-    );
-    
+    // 只有在有任职人物时才可能触发冒险事件（当前无 scout/adventurer 概念）
+    const cs = this.gameState.characterSystem;
+    const activeIds = cs ? (Object.values(cs.activeCharacters || {}) as (string | null)[]).filter(Boolean) as string[] : [];
+    const hasActiveAdventure = activeIds.length > 0;
+
     if (!hasActiveAdventure) return false;
-    
+
     const timeSinceLastEvent = currentTime - this.triggerState.lastAdventureTime;
     const minInterval = 3 * 60 * 1000; // 最少3分钟间隔
-    
+
     if (timeSinceLastEvent < minInterval) return false;
-    
+
     return Math.random() < 0.2;
   }
 
@@ -617,7 +928,14 @@ export class EventSystemManager {
     const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)];
     
     if (this.checkEventRequirements(randomEvent.requirements)) {
-      this.triggerState.lastDomesticEventTime = Date.now();
+      // 使用游戏时间（秒）记录上次触发点
+      this.triggerState.lastDomesticEventGameTime = this.gameState.gameTime;
+      if (!this.triggerState.firstDomesticEventTriggered) {
+        this.triggerState.firstDomesticEventTriggered = true;
+      }
+      if (this.gameState?.settings?.eventsDebugEnabled) {
+        console.log(`[Events][Domestic] generated: ${randomEvent.id}`);
+      }
       return {
         ...randomEvent,
         id: `${randomEvent.id}_${Date.now()}`,
@@ -694,12 +1012,14 @@ export class EventSystemManager {
     
     // 检查侦察兵/冒险家要求
     if (requirements.scouts) {
-      const scouts = this.gameState.characters?.filter(char => char.type === 'scout').length || 0;
+      // 角色系统暂无“scout”类型，按0处理
+      const scouts = 0;
       if (requirements.scouts.min && scouts < requirements.scouts.min) return false;
     }
-    
+
     if (requirements.adventurers) {
-      const adventurers = this.gameState.characters?.filter(char => char.type === 'adventurer').length || 0;
+      // 角色系统暂无“adventurer”类型，按0处理
+      const adventurers = 0;
       if (requirements.adventurers.min && adventurers < requirements.adventurers.min) return false;
     }
     
@@ -710,23 +1030,24 @@ export class EventSystemManager {
     const currentTime = Date.now();
     const newEvents: GameEvent[] = [];
     
-    // 检查境内事件
-    if (this.shouldTriggerDomesticEvent(currentTime)) {
+    // 检查境内事件（基于游戏时间：1 年 = 180 游戏秒）
+    if (this.shouldTriggerDomesticEvent(this.gameState.gameTime)) {
       const event = this.generateDomesticEvent();
       if (event) newEvents.push(event);
     }
     
-    // 检查人物事件
-    if (this.gameState.characters) {
-      for (const character of this.gameState.characters) {
+    // 检查人物事件（基于现实时间）
+    const cs = this.gameState.characterSystem;
+    if (cs && cs.allCharacters) {
+      for (const character of Object.values(cs.allCharacters)) {
         if (this.shouldTriggerCharacterEvent(character.id, currentTime)) {
-          const event = this.generateCharacterEvent(character.type);
+          const event = this.generateCharacterEvent(character.id);
           if (event) newEvents.push(event);
         }
       }
     }
     
-    // 检查冒险事件
+    // 检查冒险事件（基于现实时间）
     if (this.shouldTriggerAdventureEvent(currentTime)) {
       const event = this.generateAdventureEvent();
       if (event) newEvents.push(event);

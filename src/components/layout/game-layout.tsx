@@ -222,7 +222,13 @@ const OverviewPanel = () => {
 };
 
 const SettingsPanel = () => {
-  const { gameState, isRunning, togglePause, startGame, resetGame, saveGame } = useGameStore();
+  const isRunning = useGameStore(state => state.isRunning);
+  const isPaused = useGameStore(state => state.gameState.isPaused);
+  const gameState = useGameStore(state => state.gameState);
+  const togglePause = useGameStore(state => state.togglePause);
+  const startGame = useGameStore(state => state.startGame);
+  const resetGame = useGameStore(state => state.resetGame);
+  const saveGame = useGameStore(state => state.saveGame);
   const [showInheritanceShop, setShowInheritanceShop] = useState(false);
   
   return (
@@ -261,7 +267,7 @@ const SettingsPanel = () => {
           <button
             onClick={!isRunning ? startGame : togglePause}
             className={`w-full btn flex items-center justify-center gap-2 ${
-              !isRunning || gameState.isPaused ? 'btn-primary' : 'bg-amber-600 text-white hover:bg-amber-700'
+              !isRunning || isPaused ? 'btn-primary' : 'bg-amber-600 text-white hover:bg-amber-700'
             }`}
           >
             {!isRunning ? (
@@ -269,7 +275,7 @@ const SettingsPanel = () => {
                 <Play size={16} />
                 开始游戏
               </>
-            ) : gameState.isPaused ? (
+            ) : isPaused ? (
               <>
                 <Play size={16} />
                 继续游戏

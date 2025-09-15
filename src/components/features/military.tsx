@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { formatNumber } from '@/utils/format';
 import { 
@@ -137,6 +137,7 @@ export const MilitaryPanel = () => {
   const { gameState, spendResources, canAfford, getBuildingCount, army, addUnit, getUnitCount } = useGameStore();
   const [trainingQueue, setTrainingQueue] = useState<TrainingQueue[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+  const isPaused = useGameStore(state => state.gameState.isPaused);
 
   // 检查是否可以训练单位
   const canTrainUnit = (unitType: string) => {
@@ -208,11 +209,12 @@ export const MilitaryPanel = () => {
     });
   };
 
-  // 定期检查训练状态
-  useState(() => {
+  // 定期检查训练状态（暂停时不运行）
+  useEffect(() => {
+    if (isPaused) return;
     const interval = setInterval(checkTraining, 1000);
     return () => clearInterval(interval);
-  });
+  }, [isPaused, trainingQueue]);
 
   // 计算军队总战力
   const getTotalPower = () => {

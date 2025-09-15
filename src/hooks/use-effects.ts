@@ -25,15 +25,72 @@ interface EffectsBySource {
   effects: EffectDisplayInfo[];
 }
 
+// 引入临时效果工具以获取活跃临时效果和剩余时间
+import { getActiveTemporaryEffects, getRemainingDays, TemporaryEffect } from '@/lib/temporary-effects';
+
 export const useEffects = () => {
   const { getActiveEffects, getEffectsByType, getEffectsBySource, calculateEffectTotal } = useGameStore();
   // 订阅effectsVersion用于触发重渲染
   const effectsVersion = useGameStore((s) => s.effectsVersion);
+  // 订阅 gameTime 以便让临时效果的剩余时间在UI上实时更新
+  const gameTime = useGameStore((s) => s.gameState.gameTime);
+  const gameState = useGameStore((s) => s.gameState);
 
-  // 获取所有活跃效果
+  // 将单个临时效果映射为一个可在 EffectsPanel 中展示的伪 Effect
+  const mapTemporaryEffectToEffect = (te: TemporaryEffect): Effect & { displayName?: string } => {
+    // 统计百分比与绝对值修饰（按事件级整合）
+    let percentageTotal = 0;
+    let absoluteTotal = 0;
+
+    for (const m of te.effects) {
+      if (m.type === 'percentage') {
+        percentageTotal += m.value; // m.value 已是百分比（如 15 表示+15%）
+      } else {
+        absoluteTotal += m.value;
+      }
+    }
+
+    // 以百分比优先作为展示（更贴近“产量+15%”）
+    const usePercentage = Math.abs(percentageTotal) >= Math.abs(absoluteTotal);
+    const value = usePercentage ? percentageTotal : absoluteTotal;
+
+    // 计算剩余时间文本（优先按“个月”显示）
+    const remainingDays = getRemainingDays(te, gameTime);
+    const months = Math.ceil(remainingDays / 30);
+    const durationText = months >= 1 ? `持续${months}个月` : remainingDays > 0 ? `剩余约${Math.ceil(remainingDays * 24)}小时` : '已过期';
+
+    // 自定义标签名称：如【春季溪流充沛】持续四个月
+    const displayName = `【${te.name}】${durationText}`;
+
+    return {
+      id: te.id,
+      name: te.name,
+      description: te.description,
+      type: EffectType.RESOURCE_PRODUCTION,
+      value: Number(value.toFixed(2)),
+      isPercentage: usePercentage,
+      source: {
+        type: EffectSourceType.EVENT,
+        id: te.source,
+        name: te.name,
+      },
+      duration: months >= 1 ? months : undefined,
+      icon: te.icon ?? '✨',
+      // 提供 EffectsPanel 的显示覆写
+      displayName,
+    } as unknown as Effect & { displayName?: string };
+  };
+
+  // 获取所有活跃效果（系统效果 + 临时事件效果）
   const activeEffects = useMemo(() => {
-    return getActiveEffects();
-  }, [getActiveEffects, effectsVersion]);
+    const systemEffects = getActiveEffects();
+
+    // 将活跃临时效果映射为展示用效果
+    const activeTemporary = getActiveTemporaryEffects(gameState).map(mapTemporaryEffectToEffect);
+
+    // 合并后返回：将事件类效果排在前面以提升可见度
+    return [...activeTemporary, ...systemEffects];
+  }, [getActiveEffects, effectsVersion, gameTime, gameState]);
 
   // 获取效果显示信息
   const getEffectDisplayInfo = (effect: Effect): EffectDisplayInfo => {

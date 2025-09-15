@@ -208,6 +208,9 @@ export interface GameState {
   // Buff系统
   buffs: Record<string, Buff>;
 
+  // 临时效果系统
+  temporaryEffects: import('../lib/temporary-effects').TemporaryEffect[];
+
   // 事件系统
   activeEvents: ActiveEvent[]; // 当前活跃的暂停事件
   events: GameEventInstance[]; // 历史事件记录（包括已处理的暂停事件和不暂停事件）
@@ -273,6 +276,8 @@ export interface GameSettings {
   soundEnabled: boolean;
   animationsEnabled: boolean;
   gameSpeed: number; // 游戏速度倍数
+  eventsPollIntervalMs: number; // 事件轮询频率（毫秒），默认 1000ms，可在设置中调整
+  eventsDebugEnabled: boolean; // 事件系统调试日志开关（默认关闭）
 }
 
 // 游戏事件

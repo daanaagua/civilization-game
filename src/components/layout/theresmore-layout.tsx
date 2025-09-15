@@ -791,7 +791,14 @@ const MainContent = () => {
 
 // 侧边栏组件
 const Sidebar = () => {
-  const { gameState, isRunning, togglePause, startGame, isPaused, clickResource, showRebirthConfirmation, maxPopulation } = useGameStore();
+  const isRunning = useGameStore(state => state.isRunning);
+  const isPaused = useGameStore(state => state.gameState.isPaused);
+  const gameState = useGameStore(state => state.gameState);
+  const togglePause = useGameStore(state => state.togglePause);
+  const startGame = useGameStore(state => state.startGame);
+  const clickResource = useGameStore(state => state.clickResource);
+  const showRebirthConfirmation = useGameStore(state => state.showRebirthConfirmation);
+  const maxPopulation = useGameStore(state => state.maxPopulation);
   const { resources } = gameState;
 
   // 稳定度效果计算

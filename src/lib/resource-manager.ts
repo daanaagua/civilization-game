@@ -5,6 +5,7 @@
 
 import { Resources, ResourceLimits } from '@/types/game';
 import { BUILDINGS } from './game-data';
+import { applyTemporaryEffects } from './temporary-effects';
 
 // 资源变化事件类型
 export interface ResourceChangeEvent {
@@ -279,6 +280,49 @@ export class ResourceManager {
       }
     }
 
+    // 应用临时效果修饰符
+    Object.keys(rates).forEach(resourceKey => {
+      const key = resourceKey as keyof Resources;
+      if (rates[key] !== undefined) {
+        const originalRate = rates[key]!;
+        const modifiedRate = applyTemporaryEffects(gameState, `${resourceKey}_production`, originalRate);
+        
+        if (modifiedRate !== originalRate) {
+          const difference = modifiedRate - originalRate;
+          rates[key] = modifiedRate;
+
+          // 解析命中该资源的临时效果，用于更清晰的来源说明
+          const active = (gameState.temporaryEffects || []).filter((e: any) => gameState.gameTime < e.startTime + e.duration);
+          const labels: string[] = [];
+          for (const e of active) {
+            for (const m of (e.effects || [])) {
+              if (m.target === `${resourceKey}_production`) {
+                if (m.type === 'percentage') {
+                  const sign = m.value > 0 ? '+' : '';
+                  labels.push(`${e.name} ${sign}${m.value}% 生产速度`);
+                } else {
+                  const sign = m.value > 0 ? '+' : '';
+                  labels.push(`${e.name} ${sign}${m.value}/s`);
+                }
+              }
+            }
+          }
+          const label = labels.length > 0 ? labels.join('，') : '临时效果';
+          
+          // 仅在贡献在显示精度下非零时展示
+          const displayThreshold = 0.005;
+          if (details[key] && Math.abs(difference) >= displayThreshold) {
+            details[key]!.push({
+              source: label,
+              rate: difference,
+              color: difference > 0 ? 'text-blue-400' : 'text-purple-400',
+              category: 'other'
+            });
+          }
+        }
+      }
+    });
+    
     this.resourceRates = rates;
     this.rateDetails = details;
   }

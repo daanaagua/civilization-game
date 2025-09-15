@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useGameStore } from '@/lib/game-store';
 import { MilitaryUnit, UnitType, TrainingQueue } from '../../types/military';
 import { MilitarySystem } from '../../lib/military-system';
 import { getUnitType, getAvailableUnitTypes } from '../../lib/military-data';
@@ -25,6 +26,7 @@ interface MilitaryTabProps {
 export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) {
   const [militarySystem] = useState(() => new MilitarySystem());
   const [trainingAmounts, setTrainingAmounts] = useState<Record<string, number>>({});
+  const isPaused = useGameStore(state => state.gameState.isPaused);
 
   // 获取已研究的科技
   const researchedTechs = gameState.technologies ? 
@@ -100,8 +102,9 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
     }
   };
   
-  // 更新训练进度
+  // 更新训练进度（暂停时不运行）
   useEffect(() => {
+    if (isPaused) return;
     const interval = setInterval(() => {
       const now = Date.now();
       let hasUpdates = false;
@@ -134,7 +137,7 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [trainingQueue, currentUnits, gameState.population, militarySystem, onUpdateGameState]);
+  }, [trainingQueue, currentUnits, gameState.population, militarySystem, onUpdateGameState, isPaused]);
   
   return (
     <div className="space-y-6">

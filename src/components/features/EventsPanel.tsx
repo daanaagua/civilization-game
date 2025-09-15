@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, History, AlertCircle, HelpCircle, ChevronRight, X } from 'lucide-react';
 import { useGameStore } from '@/lib/game-store';
+import { checkChoiceAvailability, getResourceDisplayName } from '@/lib/event-utils';
 
 // 事件类型枚举
 export enum EventType {
@@ -24,8 +25,13 @@ export interface EventChoice {
   text: string;
   description?: string;
   consequences?: string[];
-  requirements?: string[];
+  requirements?: {
+    unlockedResources?: string[]; // 需要解锁的资源
+    resourceCost?: Record<string, number>; // 资源消耗需求
+  };
   disabled?: boolean;
+  effectType?: 'immediate' | 'buff' | 'mixed'; // 效果类型
+  duration?: number; // buff效果持续时间（天）
 }
 
 // 事件接口
@@ -144,29 +150,41 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
                 <>
                   <div className="text-xs text-gray-400 mb-2">请选择你的行动：</div>
                   <div className="space-y-1">
-                    {event.choices.map((choice) => (
-                      <button
-                        key={choice.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleChoiceSelect(choice.id);
-                        }}
-                        disabled={choice.disabled}
-                        className={`w-full text-left p-2 rounded border transition-colors ${
-                          choice.disabled
-                            ? 'border-gray-600 bg-gray-800 text-gray-500 cursor-not-allowed'
-                            : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">{choice.text}</span>
-                          <ChevronRight size={14} />
-                        </div>
-                        {choice.description && (
-                          <p className="text-xs text-gray-400 mt-1">{choice.description}</p>
-                        )}
-                      </button>
-                    ))}
+                    {event.choices.map((choice) => {
+                      const availability = checkChoiceAvailability(choice, gameState);
+                      const isDisabled = availability.isDisabled || choice.disabled;
+                      
+                      return (
+                        <button
+                          key={choice.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isDisabled) {
+                              handleChoiceSelect(choice.id);
+                            }
+                          }}
+                          disabled={isDisabled}
+                          className={`w-full text-left p-2 rounded border transition-colors ${
+                            isDisabled
+                              ? 'border-gray-600 bg-gray-800 text-gray-500 cursor-not-allowed'
+                              : 'border-gray-600 bg-gray-700 hover:bg-gray-600 text-white'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">
+                              {!availability.isUnlocked ? '【暂未解锁该选项】' : choice.text}
+                            </span>
+                            {!isDisabled && <ChevronRight size={14} />}
+                          </div>
+                          {choice.description && (
+                            <p className="text-xs text-gray-400 mt-1">{choice.description}</p>
+                          )}
+                          {availability.disabledReason && (
+                            <p className="text-xs text-red-400 mt-1">{availability.disabledReason}</p>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               ) : (

@@ -18,21 +18,25 @@ const formatTime = (seconds: number): string => {
   return `${hours}小时${minutes}分`;
 };
 
-const formatNumber = (num: number, decimals: number = 1): string => {
-  if (num < 1000) {
-    return num.toFixed(decimals === 0 ? 0 : Math.min(decimals, 1));
+const formatNumber = (num?: number | null, decimals: number = 1): string => {
+  const n = Number(num ?? 0);
+  const d = Number.isFinite(decimals) ? Math.max(0, Math.floor(decimals)) : 1;
+  if (!Number.isFinite(n)) return '0';
+
+  if (n < 1000) {
+    return n.toFixed(d === 0 ? 0 : Math.min(d, 1));
   }
   
   const units = ['', 'K', 'M', 'B', 'T', 'Q'];
   let unitIndex = 0;
-  let value = num;
+  let value = n;
   
   while (value >= 1000 && unitIndex < units.length - 1) {
     value /= 1000;
     unitIndex++;
   }
   
-  return `${value.toFixed(decimals)}${units[unitIndex]}`;
+  return `${value.toFixed(d)}${units[unitIndex]}`;
 };
 
 export function GameStatsPanel() {
@@ -55,7 +59,7 @@ export function GameStatsPanel() {
     },
     {
       label: '当前世代',
-      value: `第${statistics.currentGeneration}代`,
+      value: `第${statistics.currentGeneration ?? 1}代`,
       icon: '🏛️',
     },
     {
@@ -65,17 +69,17 @@ export function GameStatsPanel() {
     },
     {
       label: '已建建筑',
-      value: Object.values(statistics.totalBuildingsBuilt).reduce((sum, count) => sum + count, 0),
+      value: Object.values(statistics.totalBuildingsBuilt || {}).reduce((sum, count) => sum + (Number(count) || 0), 0),
       icon: '🏗️',
     },
     {
       label: '研发科技',
-      value: statistics.totalTechnologiesResearched,
+      value: statistics.totalTechnologiesResearched ?? 0,
       icon: '🔬',
     },
     {
       label: '解锁成就',
-      value: statistics.totalAchievementsUnlocked,
+      value: statistics.totalAchievementsUnlocked ?? 0,
       icon: '🏆',
     },
   ];

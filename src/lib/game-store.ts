@@ -9,9 +9,10 @@ import { BuildingSystem, BuildingUtils } from './building-system';
 import { TECHNOLOGIES, getTechnologyPrerequisites, canResearchTechnology } from './technology-data';
 import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
-import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced } from '@/lib/enhanced-persistence';
+import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced, clearAllSaveData } from '@/lib/enhanced-persistence';
 import { ResourceManager, initializeResourceManager, getResourceManager } from './resource-manager';
 import { globalEffectsSystem, Effect, EffectType, EffectSourceType } from './effects-system';
+import { cleanupExpiredEffects } from './temporary-effects';
 import { MilitarySystem } from './military-system';
 import { ExplorationSystem } from './exploration-system';
 import { CombatSystem } from './combat-system';
@@ -105,6 +106,9 @@ const initialGameState: GameState = {
   
   buffs: {},
 
+  // 临时效果系统
+  temporaryEffects: [],
+
   // 事件系统
   activeEvents: [], // 当前活跃的暂停事件
   events: [], // 历史事件记录
@@ -146,6 +150,8 @@ const initialGameState: GameState = {
     soundEnabled: true,
     animationsEnabled: true,
     gameSpeed: 1,
+    eventsPollIntervalMs: 1000,
+    eventsDebugEnabled: false,
   },
 
   // 统计数据
@@ -345,6 +351,10 @@ interface GameStore {
 
   // 游戏速度控制
   setGameSpeed: (speed: number) => void;
+  // 事件轮询频率控制
+  setEventsPollIntervalMs: (ms: number) => void;
+  // 事件调试日志开关
+  setEventsDebugEnabled: (enabled: boolean) => void;
 
   // 效果系统
   effectsVersion: number;
@@ -458,7 +468,8 @@ export const useGameStore = create<GameStore>()(persist(
           ...state.gameState,
           isPaused: true
         },
-        isRunning: false
+        // 不修改 isRunning，保持开始状态，由 isPaused 控制暂停
+        lastUpdateTime: state.lastUpdateTime
       }));
     },
     
@@ -468,7 +479,7 @@ export const useGameStore = create<GameStore>()(persist(
           ...state.gameState,
           isPaused: false
         },
-        isRunning: true,
+        // 不强制修改 isRunning，保持其语义：是否已开始
         lastUpdateTime: Date.now()
       }));
       
@@ -492,15 +503,35 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     resetGame: () => {
-      // 从永久成就存储中恢复成就
-      let preservedAchievements: Array<{ id: string; unlockedAt: number }> = [];
+      // 完全重置：不保留任何成就/存档/事件
       if (typeof window !== 'undefined') {
-        preservedAchievements = useAchievementStore.getState().getAllAchievements();
+        try {
+          // 清理增强存档
+          try {
+            clearAllSaveData();
+          } catch (e) {
+            // 兜底：即使函数不可用也继续清理下面的键
+          }
+          // 旧版键清理
+          localStorage.removeItem('civilization-game-storage');
+          localStorage.removeItem('civilization-achievements-storage');
+          // 事件历史清理（use-events.ts 使用的键）
+          localStorage.removeItem('civilization-game-events-history');
+        } catch (err) {
+          console.error('重置时清理本地存储失败:', err);
+        }
+      }
+
+      // 清空成就（内存与持久化）
+      try {
+        const achievementStore = useAchievementStore.getState();
+        achievementStore.clearAchievements();
+      } catch (e) {
+        console.warn('清空成就失败（可能未初始化成就存储）：', e);
       }
       
       const newGameState = { 
-        ...initialGameState,
-        achievements: preservedAchievements // 保留已解锁的成就
+        ...initialGameState
       };
       
       set({
@@ -516,18 +547,24 @@ export const useGameStore = create<GameStore>()(persist(
       // 重置并初始化效果系统
       globalEffectsSystem.clear();
       globalEffectsSystem.updateFromGameState(newGameState);
-      // 增加版本以触发UI刷新
       set((s) => ({ ...s, effectsVersion: s.effectsVersion + 1 }));
       
       // 计算初始资源速率
       get().calculateResourceRates();
       
       get().resetTimeSystem();
+
+      // 通知前端 Hook（如 useEvents）清空自身状态
+      if (typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('GAME_RESET'));
+        } catch {}
+      }
     },
     
     updateGameTime: (deltaTime: number) => {
       const { gameState, isRunning } = get();
-      if (!isRunning) return;
+      if (!isRunning || gameState.isPaused) return;
       
       const gameSpeed = gameState.settings.gameSpeed;
       const adjustedDelta = deltaTime * gameSpeed;
@@ -540,6 +577,11 @@ export const useGameStore = create<GameStore>()(persist(
       const newGameTime = gameState.gameTime + adjustedDelta;
       const newDays = Math.floor(newGameTime / 86400);
       const daysPassed = newDays - oldDays;
+      
+      // 清理过期的临时效果
+      if (daysPassed > 0) {
+        cleanupExpiredEffects(gameState);
+      }
       
       // 获取腐败度效率影响
       const corruptionEfficiency = get().getCorruptionEfficiency();
@@ -631,8 +673,20 @@ export const useGameStore = create<GameStore>()(persist(
         newStability = Math.max(0, Math.min(100, newStability));
         // 不在每次更新时进行舍入，保留高精度以便逐步累积；显示层再格式化数值
 
-        // 更新游戏统计数据
-        state.gameState.statistics.totalPlayTime += adjustedDelta;
+        // 更新游戏统计数据（兼容旧存档）
+        const prevStats = state.gameState.statistics || {
+          totalPlayTime: 0,
+          totalResourcesCollected: {},
+          totalBuildingsBuilt: {},
+          totalTechnologiesResearched: 0,
+          totalEventsTriggered: 0,
+          totalAchievementsUnlocked: 0,
+          currentGeneration: 1,
+        };
+        const updatedStatistics = {
+          ...prevStats,
+          totalPlayTime: (prevStats.totalPlayTime || 0) + adjustedDelta,
+        };
         
         // 计算资源上限
         const calculateResourceLimits = () => {
@@ -715,6 +769,7 @@ export const useGameStore = create<GameStore>()(persist(
             stability: newStability,
             resourceLimits,
             resources: updatedResources,
+            statistics: updatedStatistics,
           },
         };
       });
@@ -2797,7 +2852,44 @@ export const useGameStore = create<GameStore>()(persist(
         ...state,
         gameState: {
           ...state.gameState,
+          // 兼容旧字段：同步根级 gameSpeed
           gameSpeed: speed,
+          // 正确更新设置中的速度
+          settings: {
+            ...state.gameState.settings,
+            gameSpeed: speed,
+          },
+        },
+      }));
+    },
+
+    // 事件轮询频率控制（200ms - 10000ms）
+    setEventsPollIntervalMs: (ms) => {
+      set((state) => {
+        const clamped = Math.max(200, Math.min(10000, Math.floor(ms)));
+        return {
+          ...state,
+          gameState: {
+            ...state.gameState,
+            settings: {
+              ...state.gameState.settings,
+              eventsPollIntervalMs: clamped,
+            },
+          },
+        };
+      });
+    },
+
+    // 事件调试日志开关
+    setEventsDebugEnabled: (enabled) => {
+      set((state) => ({
+        ...state,
+        gameState: {
+          ...state.gameState,
+          settings: {
+            ...state.gameState.settings,
+            eventsDebugEnabled: !!enabled,
+          },
         },
       }));
     },
@@ -4078,6 +4170,32 @@ export const useGameStore = create<GameStore>()(persist(
         };
       }
       
+      // 确保 statistics 存在（兼容旧存档）
+      if (persistedState?.gameState && !persistedState.gameState.statistics) {
+        persistedState.gameState.statistics = {
+          totalPlayTime: 0,
+          totalResourcesCollected: {},
+          totalBuildingsBuilt: {},
+          totalTechnologiesResearched: 0,
+          totalEventsTriggered: 0,
+          totalAchievementsUnlocked: 0,
+          currentGeneration: 1,
+        };
+      }
+
+      // 回填缺失的设置字段（兼容旧存档）
+      if (persistedState?.gameState) {
+        persistedState.gameState.settings = {
+          autoSave: true,
+          soundEnabled: true,
+          animationsEnabled: true,
+          gameSpeed: persistedState.gameState?.settings?.gameSpeed ?? persistedState.gameState.gameSpeed ?? 1,
+          eventsPollIntervalMs: persistedState.gameState?.settings?.eventsPollIntervalMs ?? 1000,
+          eventsDebugEnabled: persistedState.gameState?.settings?.eventsDebugEnabled ?? false,
+          ...persistedState.gameState.settings,
+        };
+      }
+      
       return persistedState;
     },
     onRehydrateStorage: () => {
@@ -4085,6 +4203,20 @@ export const useGameStore = create<GameStore>()(persist(
         if (state) {
           // 强制设置游戏为暂停状态，无论之前保存的状态如何
           state.gameState.isPaused = true;
+          
+          // 兼容旧存档：若缺少 statistics 则补齐默认值
+          if (!state.gameState.statistics) {
+            state.gameState.statistics = {
+              totalPlayTime: 0,
+              totalResourcesCollected: {},
+              totalBuildingsBuilt: {},
+              totalTechnologiesResearched: 0,
+              totalEventsTriggered: 0,
+              totalAchievementsUnlocked: 0,
+              currentGeneration: 1,
+            };
+          }
+          
           console.log('状态恢复完成 - 强制设置为暂停状态');
         }
       };
