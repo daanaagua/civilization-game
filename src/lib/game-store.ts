@@ -39,7 +39,7 @@ const initialGameState: GameState = {
   
   resources: {
     food: 10,
-    wood: 5,
+    wood: 10,
     stone: 3,
     tools: 0,
     population: 1,
@@ -255,7 +255,7 @@ interface GameStore {
   removeTechnologyEffects: (technologyId: string) => void;
   
   // UI 管理
-  setActiveTab: (tab: GameState['settings'] extends { activeTab: infer T } ? T : never) => void;
+  setActiveTab: (tab: UIState['activeTab']) => void;
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp'>) => void;
   removeNotification: (id: string) => void;
   
@@ -342,7 +342,7 @@ interface GameStore {
 
   // 持久化功能
   saveGame: () => void;
-  loadGame: () => void;
+  loadGame: () => boolean;
   initializePersistence: () => void;
 
   // 统计数据管理
@@ -387,14 +387,13 @@ interface GameStore {
   addExplorationRecord: (record: any) => void;
 
   // 人物系统方法
-  generateCharacter: () => string; // 返回生成的人物ID
+  generateCharacter: () => Character; // 返回生成的人物对象
   appointCharacter: (characterId: string, position: CharacterPosition) => boolean;
-  dismissCharacter: (position: CharacterPosition) => boolean;
-  getActiveCharacters: () => { [position: string]: Character };
+  dismissCharacter: (characterId: string) => boolean;
+  getActiveCharacters: () => Character[];
   getAvailableCharacters: () => Character[];
-  getAllCharacters: () => Character[];
   getCharacterById: (id: string) => Character | undefined;
-  unlockPosition: (position: CharacterPosition) => void;
+  unlockCharacterPosition: (position: CharacterPosition) => void;
   getUnlockedPositions: () => CharacterPosition[];
   updateCharacterHealth: (characterId: string, change: number) => void;
   addCharacterBuff: (characterId: string, buff: any) => void;
@@ -439,6 +438,7 @@ export const useGameStore = create<GameStore>()(persist(
     
     get maxPopulation() {
       // 0住房时有一个免费人口，之后每个住房容纳一个人口
+      // 人口上限 = 住房资源 + 1（0住房时给予1点基础人口容量）
       return get().gameState.resources.housing + 1;
     },
     
@@ -457,6 +457,33 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 初始化资源管理器
       get().initializeResourceManager();
+      
+      // 启动时根据已有建筑重算住房容量并钳制人口
+      (() => {
+        const s = get().gameState;
+        let totalHousing = 0;
+        Object.values(s.buildings).forEach((b: any) => {
+          const def = getBuildingDefinition(b.buildingId);
+          const eff = def?.effects || [];
+          totalHousing += eff
+            .filter((e: any) => e.type === 'population_capacity')
+            .reduce((sum: number, e: any) => sum + (e.value || 0), 0);
+        });
+        set((state) => {
+          const cap = totalHousing + 1;
+          const newPop = Math.min(state.gameState.resources.population, cap);
+          return {
+            gameState: {
+              ...state.gameState,
+              resources: {
+                ...state.gameState.resources,
+                housing: totalHousing,
+                population: newPop,
+              },
+            },
+          };
+        });
+      })();
       
       // 计算初始资源速率
       get().calculateResourceRates();
@@ -1128,8 +1155,28 @@ export const useGameStore = create<GameStore>()(persist(
         return false; // 已经在研究其他科技
       }
       
-      if (!get().spendResearchPoints(technology.cost.researchPoints || 0)) {
+      // 成本处理：支持普通资源与研究点并存
+      const cost = technology.cost || {};
+      const hasRP = typeof cost.researchPoints === 'number' && cost.researchPoints > 0;
+      const basicCost: any = { ...cost };
+      delete basicCost.researchPoints;
+      // 先校验负担能力
+      if (Object.keys(basicCost).length > 0 && !get().canAfford(basicCost)) {
         return false;
+      }
+      if (hasRP && get().gameState.resources.researchPoints < (cost.researchPoints as number)) {
+        return false;
+      }
+      // 扣除成本
+      if (Object.keys(basicCost).length > 0) {
+        if (!get().spendResources(basicCost)) {
+          return false;
+        }
+      }
+      if (hasRP) {
+        if (!get().spendResearchPoints(cost.researchPoints as number)) {
+          return false;
+        }
       }
       
       set((state) => ({
@@ -1287,6 +1334,15 @@ export const useGameStore = create<GameStore>()(persist(
           ],
         },
       }));
+      
+      // 向全局派发通知事件，供事件系统桥接到 UI Toast
+      if (typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('GAME_NOTIFICATION', { detail: { ...notification, id, timestamp } }));
+        } catch (e) {
+          // ignore
+        }
+      }
       
       // 自动移除通知
       if (notification.duration) {
@@ -1690,8 +1746,8 @@ export const useGameStore = create<GameStore>()(persist(
         return;
       }
       
-      // 基础条件：必须有空余住房和食物
-      const availableHousing = resources.housing - resources.population;
+      // 基础条件：必须有空余住房和食物（人口上限 = housing + 1）
+      const availableHousing = (resources.housing + 1) - resources.population;
       if (availableHousing <= 0 || resources.food <= 0) {
         return;
       }
@@ -1754,8 +1810,9 @@ export const useGameStore = create<GameStore>()(persist(
       const { gameState } = get();
       const { resources } = gameState;
       
-      // 检查住房限制
-      if (resources.population > resources.housing && resources.housing > 0) {
+      // 检查住房限制（人口上限 = housing + 1）
+      const populationCap = resources.housing + 1;
+      if (resources.population > populationCap) {
         get().updateStability(-5);
         get().addNotification({
           type: 'warning',
@@ -1765,8 +1822,8 @@ export const useGameStore = create<GameStore>()(persist(
       }
       
       // 检查食物供应
-      const foodPerPerson = resources.food / resources.population;
-      if (foodPerPerson < 1) {
+      const foodPerPerson = resources.population > 0 ? (resources.food / resources.population) : 0;
+      if (resources.population > 0 && foodPerPerson < 1) {
         get().updateStability(-3);
         get().addNotification({
           type: 'error',
@@ -3122,12 +3179,21 @@ export const useGameStore = create<GameStore>()(persist(
         upgrades: []
       };
       
+      // 根据建筑效果提升住房资源（用于计算人口上限）
+      const __housingIncrease = (buildingDef.effects || [])
+        .filter(e => e.type === 'population_capacity')
+        .reduce((sum, e) => sum + (e.value || 0), 0);
+
       set((state) => ({
         gameState: {
           ...state.gameState,
           buildings: {
             ...state.gameState.buildings,
             [instanceId]: newBuilding
+          },
+          resources: {
+            ...state.gameState.resources,
+            housing: (state.gameState.resources.housing || 0) + __housingIncrease,
           }
         }
       }));
@@ -3157,13 +3223,29 @@ export const useGameStore = create<GameStore>()(persist(
       // 移除建筑
       const newBuildings = { ...gameState.buildings };
       delete newBuildings[instanceId];
+
+      // 折算住房容量减少
+      const __def = getBuildingDefinition(building.buildingId);
+      const __housingDecrease = (__def?.effects || [])
+        .filter(e => e.type === 'population_capacity')
+        .reduce((sum, e) => sum + (e.value || 0), 0);
       
-      set((state) => ({
-        gameState: {
-          ...state.gameState,
-          buildings: newBuildings
-        }
-      }));
+      set((state) => {
+        const newHousing = Math.max(0, (state.gameState.resources.housing || 0) - __housingDecrease);
+        const newCap = newHousing + 1;
+        const newPopulation = Math.min(state.gameState.resources.population, newCap);
+        return {
+          gameState: {
+            ...state.gameState,
+            buildings: newBuildings,
+            resources: {
+              ...state.gameState.resources,
+              housing: newHousing,
+              population: newPopulation,
+            }
+          }
+        };
+      });
       
       // 重新计算资源生产率
       get().calculateResourceRates();
@@ -3365,7 +3447,12 @@ export const useGameStore = create<GameStore>()(persist(
       }
       
       // 检查科技前置条件
-      if (!isBuildingUnlocked(buildingId, gameState.technologies)) {
+      const researchedTechs = new Set(
+        Object.entries(gameState.technologies)
+          .filter(([_, tech]) => tech.researched)
+          .map(([id]) => id)
+      );
+      if (!isBuildingUnlocked(buildingId, researchedTechs)) {
         return { canBuild: false, reason: '需要先研究相关科技' };
       }
       

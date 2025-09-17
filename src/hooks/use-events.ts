@@ -266,6 +266,34 @@ export function useEvents() {
     }
   }, [gameState]);
 
+  // 订阅来自全局的通知事件，将其转换为非选择事件并纳入事件流
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<any>;
+      const data = custom.detail || {};
+      // 映射 Notification -> GameEvent
+      const priorityMap: Record<string, EventPriority> = {
+        info: EventPriority.LOW,
+        success: EventPriority.MEDIUM,
+        warning: EventPriority.HIGH,
+        error: EventPriority.URGENT,
+      };
+      const type: EventType = EventType.NOTIFICATION;
+      const eventData = {
+        title: data.title || '通知',
+        description: data.message || '',
+        type,
+        priority: priorityMap[data.type] ?? EventPriority.LOW,
+        duration: data.duration ?? 5000,
+        icon: data.type === 'success' ? '✅' : data.type === 'warning' ? '⚠️' : data.type === 'error' ? '⛔' : 'ℹ️',
+        category: 'notification',
+      } as Omit<GameEvent, 'id' | 'timestamp'>;
+      addEvent(eventData);
+    };
+    window.addEventListener('GAME_NOTIFICATION' as any, handler as any);
+    return () => window.removeEventListener('GAME_NOTIFICATION' as any, handler as any);
+  }, [addEvent]);
+
   // 定期检查和生成事件
   useEffect(() => {
     if (eventsDebugEnabled) {

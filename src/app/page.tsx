@@ -15,11 +15,11 @@ import { ExplorationTab } from '@/components/features/exploration-tab';
 import { CharacterTab } from '@/components/features/character-tab';
 import { DiplomacyTab } from '@/components/features/diplomacy-tab';
 import { EventNotificationToast } from '@/components/ui/event-notification-toast';
-import { EventType } from '@/components/features/EventsPanel';
+import { EventType, type GameEvent } from '@/components/features/EventsPanel';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
-  const gameStartTime = useGameStore(state => state.gameStartTime);
+  // 移除不存在的 gameStartTime 选择器
   const loadGame = useGameStore(state => state.loadGame);
   const initializePersistence = useGameStore(state => state.initializePersistence);
   const pauseGame = useGameStore(state => state.pauseGame);
@@ -34,7 +34,7 @@ export default function Home() {
   const activeTab = useGameStore(state => state.uiState.activeTab);
   const setActiveTab = useGameStore(state => state.setActiveTab);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [currentNotificationEvent, setCurrentNotificationEvent] = useState(null);
+  const [currentNotificationEvent, setCurrentNotificationEvent] = useState<GameEvent | null>(null);
   const [hasUnreadEvents, setHasUnreadEvents] = useState(false);
   const [lastEventCount, setLastEventCount] = useState(0);
   
@@ -142,13 +142,35 @@ export default function Home() {
       case 'technology':
         return <TechnologyTab />;
       case 'military':
-        return <MilitaryTab gameState={gameState} onUpdateGameState={() => {}} />;
+        return (
+          <MilitaryTab
+            gameState={{
+              resources: (gameState.gameState.resources as unknown) as Record<string, number>,
+              population: gameState.gameState.resources.population,
+              maxPopulation: gameState.gameState.resourceLimits.population,
+              military: gameState.gameState.military,
+              technologies: gameState.gameState.technologies,
+            }}
+            onUpdateGameState={() => {}}
+          />
+        );
       case 'exploration':
-        return <ExplorationTab gameState={gameState} onUpdateGameState={() => {}} />;
+        return (
+          <ExplorationTab
+            gameState={{
+              resources: (gameState.gameState.resources as unknown) as Record<string, number>,
+              population: gameState.gameState.resources.population,
+              maxPopulation: gameState.gameState.resourceLimits.population,
+              military: gameState.gameState.military,
+              exploration: gameState.gameState.exploration,
+            }}
+            onUpdateGameState={() => {}}
+          />
+        );
       case 'characters':
         return <CharacterTab />;
       case 'diplomacy':
-        return <DiplomacyTab gameState={gameState} onUpdateGameState={() => {}} />;
+        return <DiplomacyTab gameState={gameState.gameState} onUpdateGameState={() => {}} />;
       case 'settings':
         return (
           <div className="bg-gray-800 rounded-lg p-6">

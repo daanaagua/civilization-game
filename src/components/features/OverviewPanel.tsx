@@ -1,6 +1,5 @@
 'use client';
 
-import { PopulationPanel } from './PopulationPanel';
 import { GameStatsPanel } from './GameStatsPanel';
 import { EffectsPanel } from './EffectsPanel';
 import { EventsPanel, type GameEvent } from './EventsPanel';
@@ -35,17 +34,9 @@ export function OverviewPanel({ events, onMarkAsRead, onChoiceSelect }: Overview
         onChoiceSelect={onChoiceSelect}
       />
       
-      {/* 主要信息面板 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 左列 */}
-        <div className="space-y-6">
-          <PopulationPanel />
-        </div>
-        
-        {/* 右列 */}
-        <div className="space-y-6">
-          <GameStatsPanel />
-        </div>
+      {/* 主要信息面板：移除人口面板，统一在侧边栏展示人口 */}
+      <div className="space-y-6">
+        <GameStatsPanel />
       </div>
       
       {/* 游戏提示 */}

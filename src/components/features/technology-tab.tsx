@@ -31,8 +31,20 @@ interface TechnologyCardProps {
 
 function TechnologyCard({ technology, canResearch, isResearching, onStartResearch }: TechnologyCardProps) {
   const gameState = useGameStore((state) => state.gameState);
-  const researchProgress = gameState.technologies[technology.id]?.researchProgress || 0;
+  const currentResearch = gameState.researchState?.currentResearch;
   const isResearched = gameState.technologies[technology.id]?.researched || false;
+  const researchProgressPercent =
+    isResearching && currentResearch
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            (currentResearch.progress /
+              (gameState.technologies[technology.id]?.researchTime || 1)) *
+              100
+          )
+        )
+      : 0;
   
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -135,10 +147,10 @@ function TechnologyCard({ technology, canResearch, isResearching, onStartResearc
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs font-medium text-gray-700">进度</span>
               <span className="text-xs text-gray-600">
-                {Math.round(researchProgress)}%
+                {Math.round(researchProgressPercent)}%
               </span>
             </div>
-            <Progress value={researchProgress} className="h-1.5" />
+            <Progress value={researchProgressPercent} className="h-1.5" />
           </div>
         )}
         
@@ -177,6 +189,10 @@ export default function TechnologyTab() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
   const currentResearch = gameState.researchState?.currentResearch || null;
+  const currentTech = currentResearch ? gameState.technologies[currentResearch.technologyId] : null;
+  const currentProgressPercent = currentTech
+    ? Math.min(100, Math.max(0, (currentResearch.progress / (currentTech.researchTime || 1)) * 100))
+    : 0;
   const researchPoints = gameState.resources.researchPoints;
   const researchPointsPerSecond = gameState.resourceRates?.researchPoints || 0;
   
@@ -252,16 +268,16 @@ export default function TechnologyTab() {
               </div>
               <div className="flex items-center gap-2 mb-2">
                 <BookOpen className="w-4 h-4 text-blue-600" />
-                <span className="font-medium">{currentResearch.name}</span>
+                <span className="font-medium">{currentTech?.name || ''}</span>
               </div>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm text-gray-600">进度</span>
                 <span className="text-sm text-gray-600">
-                  {Math.round(gameState.technologies[currentResearch.id]?.researchProgress || 0)}%
+                  {Math.round(currentProgressPercent)}%
                 </span>
               </div>
               <Progress 
-                value={gameState.technologies[currentResearch.id]?.researchProgress || 0} 
+                value={currentProgressPercent} 
                 className="h-2" 
               />
             </div>
@@ -296,7 +312,7 @@ export default function TechnologyTab() {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {filteredTechnologies.map((technology) => {
                 const canResearchTech = canResearch(technology.id);
-                const isResearching = currentResearch?.id === technology.id;
+                const isResearching = currentResearch?.technologyId === technology.id;
                 
                 return (
                   <TechnologyCard

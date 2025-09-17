@@ -81,6 +81,9 @@ export interface BuildingInstance {
   id: string; // 实例ID
   buildingId: string; // 建筑定义ID
   
+  // 实例数量（同类建筑的数量汇总）
+  count: number;
+  
   // 建造状态
   status: 'building' | 'completed' | 'upgrading';
   constructionProgress?: number; // 建造进度（0-100）

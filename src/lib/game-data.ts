@@ -258,7 +258,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     researched: false,
     effects: [
       { type: 'resource_multiplier', target: 'food', value: 1.1 },
-      { type: 'unlock_building', target: 'campfire', value: 1 }
+      { type: 'unlock_building', target: 'housing', value: 1 }
     ],
   },
   

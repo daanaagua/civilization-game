@@ -67,6 +67,9 @@ export function BuildingTab() {
   const assignWorkerToBuildingNew = useGameStore(state => state.assignWorkerToBuildingNew);
   const removeWorkerFromBuildingNew = useGameStore(state => state.removeWorkerFromBuildingNew);
   const addNotification = useGameStore(state => state.addNotification);
+  // 新增：使用 GameStore 的统一校验与成本计算，以匹配 20% 递增规则
+  const canConstructBuilding = useGameStore(state => state.canConstructBuilding);
+  const getBuildingConstructionCost = useGameStore(state => state.getBuildingConstructionCost);
   
   const buildingSystem = useMemo(() => new BuildingSystem(gameState), [gameState]);
   const managementState = useMemo(() => buildingSystem.getBuildingManagementState(), [buildingSystem]);
@@ -167,8 +170,9 @@ export function BuildingTab() {
               {/* 可建造建筑列表 */}
               <div className="grid md:grid-cols-2 gap-3">
                 {categoryBuildings.map(building => {
-                  const costResult = buildingSystem.calculateBuildingCost(building.id, buildQuantity);
-                  const canBuild = buildingSystem.canBuildBuilding(building.id, buildQuantity);
+                  // 统一使用 GameStore 的成本与可建造校验
+                  const adjustedCost = getBuildingConstructionCost(building.id) || {} as any;
+                  const canConstruct = canConstructBuilding(building.id);
                   const currentCount = buildingSystem.getBuildingCount(building.id);
                   const buildLimit = managementState.buildLimits[building.id];
                   
@@ -215,18 +219,17 @@ export function BuildingTab() {
                           )}
                         </div>
 
-                        {/* 建造成本 */}
+                        {/* 建造成本（使用 20% 递增后的动态成本） */}
                         <div>
                           <h4 className="font-medium mb-2">建造成本</h4>
                           <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(building.cost).map(([resource, cost]) => {
-                              const totalCost = cost * buildQuantity;
-                              const currentAmount = gameState.resources[resource as keyof typeof gameState.resources];
-                              const hasEnough = currentAmount >= totalCost;
+                            {Object.entries(adjustedCost).map(([resource, cost]) => {
+                              const currentAmount = (gameState.resources as any)[resource];
+                              const hasEnough = currentAmount >= (cost as number);
                               
                               return (
                                 <div key={resource} className={`text-sm ${hasEnough ? 'text-white' : 'text-gray-500'}`}>
-                                  {totalCost} {resource}
+                                  {cost as number} {resource}
                                 </div>
                               );
                             })}
@@ -267,7 +270,7 @@ export function BuildingTab() {
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               onClick={() => setBuildQuantity(Math.max(1, buildQuantity - 1))}
                               disabled={buildQuantity <= 1}
@@ -278,7 +281,7 @@ export function BuildingTab() {
                               {buildQuantity}
                             </span>
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               onClick={() => setBuildQuantity(buildQuantity + 1)}
                               disabled={buildLimit ? buildQuantity >= (buildLimit.maximum - buildLimit.current) : false}
@@ -290,15 +293,15 @@ export function BuildingTab() {
                           <Button
                             className="w-full"
                             onClick={() => handleBuildBuilding(building.id, buildQuantity)}
-                            disabled={!canBuild.canBuild}
+                            disabled={!canConstruct.canBuild}
                           >
                             <Building className="w-4 h-4 mr-2" />
                             建造 {buildQuantity > 1 ? `x${buildQuantity}` : ''}
                           </Button>
                           
-                          {!canBuild.canBuild && (
+                          {!canConstruct.canBuild && (
                             <div className="text-xs text-gray-500">
-                              {canBuild.reasons.join(', ')}
+                              {canConstruct.reason || '无法建造此建筑'}
                             </div>
                           )}
                         </div>
@@ -380,7 +383,7 @@ export function BuildingTab() {
                             <label className="text-sm font-medium mb-2 block">工人分配</label>
                             <div className="flex items-center gap-2">
                               <Button
-                                variant="outline"
+                                variant="secondary"
                                 size="sm"
                                 onClick={() => handleWorkerAssignment(instance.id, Math.max(0, instance.assignedWorkers - 1))}
                                 disabled={instance.assignedWorkers <= 0}
@@ -391,7 +394,7 @@ export function BuildingTab() {
                                 {instance.assignedWorkers}
                               </span>
                               <Button
-                                variant="outline"
+                                variant="secondary"
                                 size="sm"
                                 onClick={() => handleWorkerAssignment(instance.id, Math.min(building.maxWorkers, instance.assignedWorkers + 1))}
                                 disabled={instance.assignedWorkers >= building.maxWorkers || managementState.workerAssignment.availableWorkers <= 0}

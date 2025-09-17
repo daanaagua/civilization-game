@@ -9,6 +9,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { StatusIndicator } from '@/components/ui/status-indicator';
 import { ResourceItem } from '@/components/ui/resource-item';
 import { StatusDetailsTooltip } from '@/components/ui/status-details-tooltip';
+import { BuildingTab } from '@/components/features/building-tab';
 import {
   Users, Clock, Trophy, Zap, Shield, Beaker, Sword, Map,
   Settings, BarChart3, TrendingUp, Star, Gift, AlertTriangle,
@@ -75,107 +76,6 @@ const ResourcesPanel = () => {
           );
         })}
       </div>
-    </div>
-  );
-};
-
-// 建筑面板
-const BuildingsPanel = () => {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-gray-100 mb-4">建筑系统</h2>
-      <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-        <div className="text-center text-gray-400">
-          <div className="text-4xl mb-4">🏗️</div>
-          <p>建筑系统开发中...</p>
-        </div>
-      </div>
-      
-      {/* 详细效果弹窗 */}
-      {showDetailedEffects && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-100">详细效果</h2>
-              <button
-                onClick={() => setShowDetailedEffects(false)}
-                className="text-gray-400 hover:text-gray-200 transition-colors"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              {/* 稳定度详细信息 */}
-              <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
-                <h3 className="text-lg font-semibold text-green-400 mb-3 flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  稳定度效果 ({gameState.stability.toFixed(2)})
-                </h3>
-                <p className="text-gray-300 mb-2">{getStabilityEffect(gameState.stability)}</p>
-                <div className="text-sm text-gray-400">
-                  <p>• 高稳定度(80%+): 人口增长和资源产出获得显著加成</p>
-                  <p>• 中等稳定度(40-79%): 轻微加成或正常状态</p>
-                  <p>• 低稳定度(0-39%): 人口增长和资源产出受到负面影响</p>
-                </div>
-              </div>
-              
-              {/* 腐败度详细信息 */}
-              {gameState.technologies['legal_code']?.researched && (
-                <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
-                  <h3 className="text-lg font-semibold text-red-400 mb-3 flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    腐败度效果 ({gameState.corruption})
-                  </h3>
-                  <p className="text-gray-300 mb-2">{getCorruptionEffect(gameState.corruption)}</p>
-                  <div className="text-sm text-gray-400">
-                    <p>• 低腐败度(0-25%): 无负面影响</p>
-                    <p>• 轻度腐败(26-50%): 资源产出 -10%</p>
-                    <p>• 中度腐败(51-75%): 资源产出 -25%，建筑成本 +20%</p>
-                    <p>• 高度腐败(76-90%): 资源产出 -40%，建筑成本 +50%</p>
-                    <p>• 极度腐败(91-100%): 资源产出 -60%，建筑成本 +100%</p>
-                  </div>
-                </div>
-              )}
-              
-              {/* 所有Buff详细信息 */}
-              {buffSummary.sources.length > 0 && (
-                <div className="bg-gray-900 p-4 rounded-lg border border-gray-700">
-                  <h3 className="text-lg font-semibold text-purple-400 mb-3 flex items-center gap-2">
-                    <Zap className="h-5 w-5" />
-                    所有活跃效果
-                  </h3>
-                  <div className="space-y-3">
-                    {buffSummary.sources.map((source, index) => (
-                      <div key={index} className="bg-gray-800 p-3 rounded-lg border border-gray-600">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-gray-200 font-medium">{source.name}</span>
-                          <span className="text-xs text-gray-400 px-2 py-1 bg-gray-700 rounded">
-                            {source.type === 'technology' ? '科技' : 
-                             source.type === 'building' ? '建筑' : 
-                             source.type === 'character' ? '人物' : 
-                             source.type === 'inheritance' ? '继承' : '其他'}
-                          </span>
-                        </div>
-                        <div className="space-y-1">
-                          {source.buffs.map((buff, buffIndex) => (
-                            <div key={buffIndex} className="text-sm text-gray-300 bg-purple-900/20 px-2 py-1 rounded border border-purple-500/20">
-                              <span className="font-medium text-purple-300">{buff.name}</span>
-                              {buff.description && (
-                                <span className="text-gray-400 ml-2">- {buff.description}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -742,7 +642,7 @@ const MainContent = () => {
       case 'resources':
         return <ResourcesPanel />;
       case 'buildings':
-        return <BuildingsPanel />;
+        return <BuildingTab />;
       case 'technology':
         return <TechnologyPanel />;
       case 'military':
@@ -798,7 +698,10 @@ const Sidebar = () => {
   const startGame = useGameStore(state => state.startGame);
   const clickResource = useGameStore(state => state.clickResource);
   const showRebirthConfirmation = useGameStore(state => state.showRebirthConfirmation);
-  const maxPopulation = useGameStore(state => state.maxPopulation);
+const maxPopulation = useGameStore(state => state.maxPopulation);
+// 新增：从 store 获取可用工人计算方法，并在渲染时使用
+const getAvailableWorkers = useGameStore(state => state.getAvailableWorkers);
+const availableWorkers = getAvailableWorkers();
   const { resources } = gameState;
 
   // 稳定度效果计算
@@ -899,11 +802,11 @@ const Sidebar = () => {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">可用人口</span>
-            <span className="text-sm text-green-400">{formatNumber(gameState.availableWorkers || resources.population, 0)}</span>
+            <span className="text-sm text-green-400">{formatNumber(availableWorkers, 0)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-400">已分配人口</span>
-            <span className="text-sm text-red-400">{formatNumber(resources.population - (gameState.availableWorkers || resources.population), 0)}</span>
+            <span className="text-sm text-red-400">{formatNumber(resources.population - availableWorkers, 0)}</span>
           </div>
         </div>
       </div>

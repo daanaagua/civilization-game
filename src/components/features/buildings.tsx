@@ -37,7 +37,7 @@ interface BuildingCardProps {
 }
 
 const BuildingCard = ({ building, count, onBuild, canAfford }: BuildingCardProps) => {
-  const { gameState, assignWorkerToBuilding, removeWorkerFromBuilding, getAvailableWorkers, isBuildingUnlocked } = useGameStore();
+  const { gameState, assignWorkerToBuilding, removeWorkerFromBuilding, getAvailableWorkers, isBuildingUnlocked, demolishBuilding } = useGameStore();
   const typeConfig = buildingTypeConfig[building.type];
   const TypeIcon = typeConfig.icon;
   

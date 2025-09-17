@@ -228,23 +228,11 @@ export interface GameState {
   // 探索系统
   exploration: {
     discoveredLocations: {
-      dungeons: string[];
-      countries: string[];
-      events: string[];
+      dungeons: import('../types/military').DiscoveredLocation[];
+      countries: import('../types/military').DiscoveredLocation[];
+      events: import('../types/military').DiscoveredLocation[];
     };
-    explorationHistory: {
-      id: string;
-      timestamp: number;
-      units: { unitType: string; count: number }[];
-      result: 'success' | 'failure';
-      discovery?: {
-        type: 'dungeon' | 'country' | 'event' | 'resource';
-        id: string;
-        name: string;
-      };
-      casualties: number;
-      description: string;
-    }[];
+    explorationHistory: import('../types/military').ExplorationResult[];
   };
   
   // 外交系统状态
@@ -336,6 +324,9 @@ export type GameTab =
   | 'technology'
   | 'characters'
   | 'diplomacy'
+  | 'military'
+  | 'exploration'
+  | 'settings'
   | 'achievements';
 
 export interface Notification {

@@ -10,8 +10,9 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     name: '住房',
     description: '基础住房，提供人口容量',
     category: 'housing',
-    cost: { wood: 60, stone: 40, tools: 20 },
+    cost: { wood: 10 },
     buildTime: 30,
+    requiredTechnology: 'fire',
     maxWorkers: 0,
     effects: [
       {
@@ -30,6 +31,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'housing',
     cost: { wood: 120, stone: 80, tools: 50, cloth: 30 },
     buildTime: 50,
+    requiredTechnology: 'large_housing_tech', // 暂未实现的科技，使其长期不可见
     maxWorkers: 0,
     effects: [
       {
@@ -151,6 +153,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'production',
     cost: { wood: 50, stone: 35, tools: 25, cloth: 15 },
     buildTime: 35,
+    requiredTechnology: 'textile_making',
     maxWorkers: 1,
     production: [
       {
@@ -326,6 +329,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 120, stone: 80, tools: 40 },
     buildTime: 50,
+    requiredTechnology: 'wood_processing',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -347,6 +351,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 100, stone: 120, tools: 40 },
     buildTime: 50,
+    requiredTechnology: 'stone_processing',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -368,6 +373,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 150, stone: 100, tools: 60 },
     buildTime: 55,
+    requiredTechnology: 'tool_storage',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -389,6 +395,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 100, stone: 80, tools: 30 },
     buildTime: 45,
+    requiredTechnology: 'food_processing',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -410,6 +417,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 80, stone: 60, tools: 40, cloth: 30 },
     buildTime: 45,
+    requiredTechnology: 'textile_making',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -431,6 +439,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 100, stone: 80, tools: 50, weapons: 40 },
     buildTime: 60,
+    requiredTechnology: 'weapon_storage',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -452,6 +461,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 120, stone: 100, tools: 50, copper: 30 },
     buildTime: 50,
+    requiredTechnology: 'bronze_smelting',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -473,6 +483,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 250, stone: 200, tools: 150, iron: 100 },
     buildTime: 80,
+    requiredTechnology: 'iron_smelting',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -494,6 +505,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 120, stone: 80, tools: 50, livestock: 20 },
     buildTime: 50,
+    requiredTechnology: 'primitive_animal_husbandry',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -515,6 +527,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 200, stone: 150, tools: 100, cloth: 80, horses: 30 },
     buildTime: 70,
+    requiredTechnology: 'horse_taming',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',
@@ -536,6 +549,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     category: 'storage',
     cost: { wood: 300, stone: 250, tools: 200, crystal: 150 },
     buildTime: 110,
+    requiredTechnology: 'crystal_processing',
     maxWorkers: 0,
     buildLimit: {
       type: 'population_based',

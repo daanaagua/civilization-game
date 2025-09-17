@@ -249,7 +249,7 @@ export const TechnologyPanel = () => {
     return tech.category === selectedCategory;
   });
   
-  const currentResearch = gameState.currentResearch;
+  const currentResearch = gameState.researchState?.currentResearch || null;
   
   const handleResearch = (technologyId: string) => {
     const success = startResearch(technologyId);
@@ -291,17 +291,17 @@ export const TechnologyPanel = () => {
             <div 
               className="progress-fill bg-blue-600" 
               style={{ 
-                width: `${(currentResearch.progress / gameState.technologies[currentResearch.technologyId].researchTime) * 100}%` 
+                width: `${(currentResearch.progress / (gameState.technologies[currentResearch.technologyId]?.researchTime || 1)) * 100}%` 
               }}
             />
           </div>
           
           <div className="flex justify-between text-sm text-blue-700">
             <span>
-              {Math.round((currentResearch.progress / gameState.technologies[currentResearch.technologyId].researchTime) * 100)}% 完成
+              {Math.round((currentResearch.progress / (gameState.technologies[currentResearch.technologyId]?.researchTime || 1)) * 100)}% 完成
             </span>
             <span>
-              剩余: {formatTime(gameState.technologies[currentResearch.technologyId].researchTime - currentResearch.progress)}
+              剩余: {formatTime((gameState.technologies[currentResearch.technologyId]?.researchTime || 0) - currentResearch.progress)}
             </span>
           </div>
         </div>

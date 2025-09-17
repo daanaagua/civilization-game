@@ -1,30 +1,42 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Character, CharacterType, HealthStatus } from '../../types/character';
-import { useGameStore } from '../../lib/game-store';
+import { Character, CharacterType, HealthStatus, CharacterPosition } from '../../types/character';
+import { useGameStore } from '@/lib/game-store';
 
 interface CharacterTabProps {
   // 可以添加props如果需要
 }
 
 export function CharacterTab({}: CharacterTabProps) {
-  const { gameState, characterSystem } = useGameStore();
+  const { getActiveCharacters, getAvailableCharacters, calculateCharacterEffects, appointCharacter, dismissCharacter } = useGameStore();
   const [selectedCharacterType, setSelectedCharacterType] = useState<CharacterType | null>(null);
   const [showAppointment, setShowAppointment] = useState(false);
-
-  // 获取在职人物
-  const activeCharacters = characterSystem?.getActiveCharacters() || {};
+ 
+  // 获取在职人物（构建类型到人物的映射，便于现有渲染逻辑）
+  const activeList = (getActiveCharacters?.() || []) as Character[];
+  const activeCharacters: Record<CharacterType, Character | null> = {
+    [CharacterType.RULER]: null,
+    [CharacterType.RESEARCH_LEADER]: null,
+    [CharacterType.FAITH_LEADER]: null,
+    [CharacterType.MAGE_LEADER]: null,
+    [CharacterType.CIVIL_LEADER]: null,
+    [CharacterType.GENERAL]: null,
+    [CharacterType.DIPLOMAT]: null,
+  };
+  activeList.forEach((c: Character) => {
+    activeCharacters[c.type] = c;
+  });
   
   // 获取可用人物
-  const availableCharacters = characterSystem?.getAvailableCharacters() || [];
+  const availableCharacters = (getAvailableCharacters?.() || []) as Character[];
 
-  // 获取人物效果
-  const characterEffects = characterSystem?.calculateCharacterEffects() || [];
+   // 获取人物效果
+   const characterEffects = calculateCharacterEffects?.() || [];
 
-  // 处理任命人物
-  const handleAppointCharacter = (characterId: string) => {
-    if (characterSystem?.appointCharacter(characterId)) {
+  // 处理任命人物（需要职位参数）
+  const handleAppointCharacter = (characterId: string, position: CharacterPosition) => {
+    if (appointCharacter?.(characterId, position)) {
       setShowAppointment(false);
       setSelectedCharacterType(null);
     }
@@ -32,7 +44,7 @@ export function CharacterTab({}: CharacterTabProps) {
 
   // 处理解除职务
   const handleDismissCharacter = (characterId: string) => {
-    characterSystem?.dismissCharacter(characterId);
+    dismissCharacter?.(characterId);
   };
 
   // 获取健康状态显示
@@ -276,7 +288,7 @@ export function CharacterTab({}: CharacterTabProps) {
                       忠诚度: {character.loyalty}%
                     </span>
                     <button
-                      onClick={() => handleAppointCharacter(character.id)}
+                      onClick={() => handleAppointCharacter(character.id, character.position)}
                       className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                     >
                       任命

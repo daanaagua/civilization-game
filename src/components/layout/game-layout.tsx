@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useGameStore } from '@/lib/game-store';
-import { BUILDINGS } from '@/lib/game-data';
+// import { BUILDINGS } from '@/lib/game-data';
 import { ResourcePanel } from '@/components/ui/resource-display';
-import { BuildingsPanel } from '@/components/features/buildings';
+- import { BuildingsPanel } from '@/components/features/buildings';
++ import { BuildingTab } from '@/components/features/building-tab';
 import { TechnologyPanel } from '@/components/features/technology';
 import { CharactersPanel, CharacterRecruitment } from '@/components/features/characters';
 import { ResourcesPanel } from '@/components/features/resources';
@@ -167,9 +168,9 @@ const OverviewPanel = () => {
                 style={{ width: `${(researchedTech / totalTech) * 100}%` }}
               />
             </div>
-            {gameState.currentResearch && (
+            {gameState.researchState?.currentResearch && (
               <div className="text-sm text-purple-600">
-                正在研究: {gameState.technologies[gameState.currentResearch.technologyId]?.name}
+                正在研究: {gameState.technologies[gameState.researchState.currentResearch.technologyId]?.name}
               </div>
             )}
           </div>
@@ -361,7 +362,7 @@ export const GameLayout = () => {
       case 'resources':
         return <ResourcesPanel />;
       case 'buildings':
-        return <BuildingsPanel />;
+        return <BuildingTab />;
       case 'technology':
         return <TechnologyPanel />;
       case 'characters':

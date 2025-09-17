@@ -1,14 +1,16 @@
 'use client';
 
 import { Home, Building, Beaker, Sword, Users, Map, Search } from 'lucide-react';
+import type { GameTab } from '@/types/game';
 
 interface TabNavigationProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
+  activeTab: GameTab;
+  onTabChange: (tab: GameTab) => void;
   hasUnreadEvents?: boolean;
 }
 
-const menuItems = [
+type MenuItem = { id: GameTab; label: string; icon: typeof Home; description: string };
+const menuItems: MenuItem[] = [
   { id: 'overview', label: '概览', icon: Home, description: '游戏总览和基础信息' },
   { id: 'buildings', label: '建筑', icon: Building, description: '建造和管理建筑' },
   { id: 'technology', label: '科技', icon: Beaker, description: '研发科技树' },

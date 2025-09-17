@@ -11,7 +11,7 @@ export default function TestPersistence() {
     gameState,
     uiState,
     army,
-    addResource,
+    addResources,
     saveGame,
     loadGame,
     initializePersistence
@@ -33,7 +33,7 @@ export default function TestPersistence() {
   }, [initializePersistence]);
   
   const handleAddGold = () => {
-    addResource('gold', 100);
+    addResources({ currency: 100 });
     addResult('💰 添加了100金币');
   };
   
@@ -51,8 +51,7 @@ export default function TestPersistence() {
     setIsLoading(true);
     try {
       // 修改一些游戏状态
-      addResource('gold', 1000);
-      addResource('food', 500);
+      addResources({ currency: 1000, food: 500 });
       
       // 直接保存到localStorage
       const success = saveGameState({
@@ -80,7 +79,7 @@ export default function TestPersistence() {
       const savedData = loadGameState();
       if (savedData) {
         addResult('✅ 直接从localStorage加载成功');
-        addResult(`数据: 金币=${savedData.gameState.resources.gold}, 食物=${savedData.gameState.resources.food}`);
+        addResult(`数据: 金币=${savedData.gameState.resources.currency}, 食物=${savedData.gameState.resources.food}`);
       } else {
         addResult('❌ 直接从localStorage加载失败 - 没有找到保存的数据');
       }
@@ -167,7 +166,7 @@ export default function TestPersistence() {
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold mb-4">当前游戏状态</h2>
             <div className="space-y-2 text-sm">
-              <p>金币: {gameState.resources.gold}</p>
+              <p>金币: {gameState.resources.currency}</p>
               <p>食物: {gameState.resources.food}</p>
               <p>木材: {gameState.resources.wood}</p>
               <p>石材: {gameState.resources.stone}</p>

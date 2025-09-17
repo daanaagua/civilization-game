@@ -6,7 +6,7 @@ import { ExplorationSystem } from '../../lib/exploration-system';
 import { CombatSystem } from '../../lib/combat-system';
 import { getUnitType } from '../../lib/military-data';
 import { getDungeonById } from '../../lib/dungeon-data';
-import { useGameStore } from '../../lib/game-store';
+import { useGameStore } from '@/lib/game-store';
 
 interface ExplorationTabProps {
   gameState: {
