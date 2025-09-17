@@ -10,11 +10,14 @@ import { StatusIndicator } from '@/components/ui/status-indicator';
 import { ResourceItem } from '@/components/ui/resource-item';
 import { StatusDetailsTooltip } from '@/components/ui/status-details-tooltip';
 import { BuildingTab } from '@/components/features/building-tab';
+import TechnologyTab from '@/components/features/technology-tab';
 import {
   Users, Clock, Trophy, Zap, Shield, Beaker, Sword, Map,
   Settings, BarChart3, TrendingUp, Star, Gift, AlertTriangle,
   ChevronRight, X, Info
 } from 'lucide-react';
+import { ACHIEVEMENTS } from '@/lib/game-data';
+import { EffectSourceType, EffectType } from '@/lib/effects-system';
 
 // 稳定度效果计算
 const getStabilityEffect = (stability: number): string => {
@@ -134,6 +137,22 @@ const OverviewPanel = () => {
   const [showEventHistory, setShowEventHistory] = useState(false);
   const [showDetailedEffects, setShowDetailedEffects] = useState(false);
 
+  // 使用效果系统聚合需要在 Buff 详情中展示的总和
+  const { getEffectTotal } = useEffects();
+  const buffSummary = {
+    totalEffects: {
+      resourceProduction: getEffectTotal(EffectType.RESOURCE_PRODUCTION),
+      populationGrowth: getEffectTotal(EffectType.POPULATION_GROWTH),
+      researchSpeed: getEffectTotal(EffectType.RESEARCH_SPEED),
+      stability: getEffectTotal(EffectType.STABILITY),
+      corruption: getEffectTotal(EffectType.CORRUPTION),
+      militaryPower: getEffectTotal(EffectType.MILITARY_STRENGTH),
+    },
+  } as const;
+
+  const unlockedAchievementsCount = gameState.achievements.length;
+  const totalAchievementsCount = Object.keys(ACHIEVEMENTS).length;
+
   const stats = [
     {
       name: '游戏时间',
@@ -145,7 +164,7 @@ const OverviewPanel = () => {
     },
     {
       name: '人口',
-      value: formatNumber(gameState.population, 0), // 人口显示为整数
+      value: formatNumber(gameState.resources.population, 0), // 人口显示为整数
       icon: Users,
       color: 'text-green-400',
       bgColor: 'bg-green-900/20',
@@ -153,7 +172,7 @@ const OverviewPanel = () => {
     },
     {
       name: '解锁成就',
-      value: `${gameState.achievements?.filter(a => a.unlocked).length || 0}/${gameState.achievements?.length || 0}`,
+      value: `${unlockedAchievementsCount}/${totalAchievementsCount}`,
       icon: Trophy,
       color: 'text-yellow-400',
       bgColor: 'bg-yellow-900/20',
@@ -273,12 +292,14 @@ const OverviewPanel = () => {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-gray-300 font-medium">{source.sourceName}</span>
                     <span className="text-xs text-gray-400 px-2 py-1 bg-gray-700 rounded">
-                      {source.sourceType === 'technology' ? '科技' : 
-                       source.sourceType === 'building' ? '建筑' : 
-                       source.sourceType === 'character' ? '人物' : 
-                       source.sourceType === 'inheritance' ? '继承' : 
-                       source.sourceType === 'stability' ? '稳定度' :
-                       source.sourceType === 'corruption' ? '腐败度' : '其他'}
+                      {source.sourceType === EffectSourceType.TECHNOLOGY ? '科技' : 
+                       source.sourceType === EffectSourceType.BUILDING ? '建筑' : 
+                       source.sourceType === EffectSourceType.CHARACTER ? '人物' : 
+                       source.sourceType === EffectSourceType.INHERITANCE ? '继承' : 
+                       source.sourceType === EffectSourceType.EVENT ? '事件' :
+                       source.sourceType === EffectSourceType.ARTIFACT ? '神器' :
+                       source.sourceType === EffectSourceType.BASE ? (source.sourceId === 'stability' ? '稳定度' : source.sourceId === 'corruption' ? '腐败度' : '基础') :
+                       '其他'}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -305,25 +326,25 @@ const OverviewPanel = () => {
       {/* 事件栏 */}
       <div className="space-y-4">
         {/* 暂停事件 */}
-        {gameState.pauseEvents && gameState.pauseEvents.length > 0 && (
+        {gameState.activeEvents && gameState.activeEvents.length > 0 && (
           <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4">
             <h3 className="text-lg font-semibold text-red-400 mb-3 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               需要处理的事件
             </h3>
             <div className="space-y-3">
-              {gameState.pauseEvents.map((event) => (
-                <div key={event.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                  <h4 className="font-semibold text-gray-100 mb-2">{event.title}</h4>
-                  <p className="text-gray-300 mb-3">{event.description}</p>
+              {gameState.activeEvents.map((activeEvent) => (
+                <div key={activeEvent.event.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                  <h4 className="font-semibold text-gray-100 mb-2">{activeEvent.event.name}</h4>
+                  <p className="text-gray-300 mb-3">{activeEvent.event.description}</p>
                   <div className="flex flex-wrap gap-2">
-                    {event.choices.map((choice, index) => (
+                    {activeEvent.event.options?.map((option, index) => (
                       <button
                         key={index}
-                        onClick={() => handlePauseEventChoice(event.id, index)}
+                        onClick={() => handlePauseEventChoice(activeEvent.event.id, index)}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                       >
-                        {choice.text}
+                        {option.text}
                       </button>
                     ))}
                   </div>
@@ -360,7 +381,7 @@ const OverviewPanel = () => {
               <div className="p-4 space-y-2 max-h-60 overflow-y-auto">
                 {gameState.recentEvents.map((event) => (
                   <div key={event.id} className="text-sm text-gray-300 p-2 bg-gray-900 rounded">
-                    <span className="text-blue-400">[{formatTime(event.timestamp)}]</span> {event.title}
+                    {event.name}
                   </div>
                 ))}
               </div>
@@ -439,37 +460,40 @@ const OverviewPanel = () => {
             </div>
             
             <div className="space-y-4">
-              {gameState.achievements.map((achievement) => (
-                <div 
-                  key={achievement.id} 
-                  className={`p-4 rounded-lg border ${
-                    achievement.unlocked 
-                      ? 'bg-yellow-900/20 border-yellow-500/50' 
-                      : 'bg-gray-900 border-gray-600'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Trophy className={`h-5 w-5 ${
-                      achievement.unlocked ? 'text-yellow-400' : 'text-gray-500'
-                    }`} />
-                    <div className="flex-1">
-                      <h3 className={`font-semibold ${
-                        achievement.unlocked ? 'text-yellow-400' : 'text-gray-400'
-                      }`}>
-                        {achievement.name}
-                      </h3>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {achievement.description}
-                      </p>
-                      {achievement.unlocked && (
-                        <p className="text-xs text-green-400 mt-2">
-                          ✓ 已解锁
+              {Object.values(ACHIEVEMENTS).map((ach) => {
+                const isUnlocked = gameState.achievements.some(a => a.id === ach.id);
+                return (
+                  <div 
+                    key={ach.id} 
+                    className={`p-4 rounded-lg border ${
+                      isUnlocked 
+                        ? 'bg-yellow-900/20 border-yellow-500/50' 
+                        : 'bg-gray-900 border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Trophy className={`h-5 w-5 ${
+                        isUnlocked ? 'text-yellow-400' : 'text-gray-500'
+                      }`} />
+                      <div className="flex-1">
+                        <h3 className={`font-semibold ${
+                          isUnlocked ? 'text-yellow-400' : 'text-gray-400'
+                        }`}>
+                          {ach.name}
+                        </h3>
+                        <p className="text-sm text-gray-400 mt-1">
+                          {ach.description}
                         </p>
-                      )}
+                        {isUnlocked && (
+                          <p className="text-xs text-green-400 mt-2">
+                            ✓ 已解锁
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -644,7 +668,7 @@ const MainContent = () => {
       case 'buildings':
         return <BuildingTab />;
       case 'technology':
-        return <TechnologyPanel />;
+        return <TechnologyTab />;
       case 'military':
         return <MilitaryPanel />;
       case 'exploration':
@@ -764,7 +788,7 @@ const availableWorkers = getAvailableWorkers();
             value={resources.food}
             limit={gameState.resourceLimits.food}
             rate={gameState.resourceRates.food}
-            tooltipContent={`食物产出详情：\n• 基础产出: +0.1/s\n• 人口消耗: -${(resources.population * 0.1).toFixed(1)}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.05, 0)).toFixed(1)}/s\n\n点击可手动收集食物`}
+            tooltipContent={`食物产出详情：\n• 基础产出: +0.1/s\n• 人口消耗: -${(resources.population * 0.1).toFixed(1)}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, b) => sum + b.count * 0.05, 0)).toFixed(1)}/s\n\n点击可手动收集食物`}
             onClick={() => clickResource('food')}
           />
           <ResourceItem
@@ -772,7 +796,7 @@ const availableWorkers = getAvailableWorkers();
             value={resources.wood}
             limit={gameState.resourceLimits.wood}
             rate={gameState.resourceRates.wood}
-            tooltipContent={`木材产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${(gameState.workerAllocations?.woodcutter || 0) * 0.2}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集木材`}
+            tooltipContent={`木材产出详情：\n• 基础产出: +0.05/s\n• 工人产出: +${((gameState.buildings['logging_camp']?.assignedWorkers || 0) * 0.2).toFixed(2)}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, b) => sum + b.count * 0.03, 0)).toFixed(1)}/s\n\n点击可手动收集木材`}
             onClick={() => clickResource('wood')}
           />
           <ResourceItem
@@ -780,7 +804,7 @@ const availableWorkers = getAvailableWorkers();
             value={resources.stone}
             limit={gameState.resourceLimits.stone}
             rate={gameState.resourceRates.stone}
-            tooltipContent={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${(gameState.workerAllocations?.miner || 0) * 0.15}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, count) => sum + count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料`}
+            tooltipContent={`石料产出详情：\n• 基础产出: +0.03/s\n• 工人产出: +${((gameState.buildings['quarry']?.assignedWorkers || 0) * 0.15).toFixed(2)}/s\n• 建筑加成: +${(Object.values(gameState.buildings).reduce((sum, b) => sum + b.count * 0.02, 0)).toFixed(1)}/s\n\n点击可手动收集石料`}
             onClick={() => clickResource('stone')}
           />
           <ResourceItem
@@ -816,14 +840,18 @@ const availableWorkers = getAvailableWorkers();
         <h2 className="text-sm font-semibold text-gray-300 mb-3">状态</h2>
         <div className="space-y-3">
           <StatusIndicator
-            type="stability"
+            name="稳定度"
             value={gameState.stability}
-            getEffectDescription={getStabilityEffect}
+            maxValue={100}
+            color="green"
+            tooltipContent={`当前稳定度 ${gameState.stability.toFixed(1)}。${getStabilityEffect(gameState.stability)}`}
           />
           <StatusIndicator
-            type="corruption"
+            name="腐败度"
             value={gameState.corruption || 0}
-            getEffectDescription={getCorruptionEffect}
+            maxValue={100}
+            color="red"
+            tooltipContent={`当前腐败度 ${(gameState.corruption || 0).toFixed(1)}。${getCorruptionEffect(gameState.corruption || 0)}`}
           />
         </div>
       </div>

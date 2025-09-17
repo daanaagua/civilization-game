@@ -17,6 +17,16 @@ interface EventsStorageData {
   eventIdCounter: number;
 }
 
+// 兼容两种后果表示：对象形式与字符串形式（如 "dice_check:martial+1d6_vs_8"）
+interface ConsequenceObject {
+  type: string;
+  target?: string;
+  value?: number;
+}
+function isConsequenceObject(c: unknown): c is ConsequenceObject {
+  return typeof c === 'object' && c !== null && 'type' in (c as any);
+}
+
 // 保存历史事件到localStorage
 function saveEventsToStorage(events: GameEvent[], eventIdCounter: number): boolean {
   try {
@@ -145,28 +155,38 @@ export function useEvents() {
     const choice = event?.choices?.find(c => c.id === choiceId);
     
     if (choice && gameState) {
-      const newGameState = { ...gameState };
+      const newGameState = { ...gameState } as any;
       
       // 1. 消耗资源
       if (choice.requirements?.resourceCost) {
         Object.entries(choice.requirements.resourceCost).forEach(([resourceKey, cost]) => {
-          const currentAmount = newGameState.resources[resourceKey as keyof typeof newGameState.resources] || 0;
-          (newGameState.resources as any)[resourceKey] = Math.max(0, currentAmount - cost);
+          const currentAmount = newGameState.resources?.[resourceKey] ?? 0;
+          newGameState.resources[resourceKey] = Math.max(0, currentAmount - cost);
         });
       }
       
-      // 2. 应用即时效果
+      // 2. 应用即时效果（兼容对象与字符串后果）
       if (choice.consequences) {
-        choice.consequences.forEach(consequence => {
+        choice.consequences.forEach((consequence) => {
+          if (!isConsequenceObject(consequence)) {
+            // 暂不处理字符串形式（如骰子判定等），未来可在此解析并应用
+            return;
+          }
+          const delta = Number(consequence.value ?? 0);
           switch (consequence.type) {
             case 'resource':
-              if (newGameState.resources[consequence.target as keyof typeof newGameState.resources] !== undefined) {
-                (newGameState.resources as any)[consequence.target] = 
-                  Math.max(0, (newGameState.resources[consequence.target as keyof typeof newGameState.resources] || 0) + consequence.value);
+              if (consequence.target && newGameState.resources?.[consequence.target] !== undefined) {
+                const curr = Number(newGameState.resources[consequence.target] ?? 0);
+                newGameState.resources[consequence.target] = Math.max(0, curr + delta);
               }
               break;
             case 'stability':
-              newGameState.stability = Math.max(0, Math.min(100, newGameState.stability + consequence.value));
+              if (typeof newGameState.stability === 'number') {
+                newGameState.stability = Math.max(0, Math.min(100, Number(newGameState.stability ?? 0) + delta));
+              }
+              break;
+            default:
+              // 其他类型暂不处理
               break;
           }
         });

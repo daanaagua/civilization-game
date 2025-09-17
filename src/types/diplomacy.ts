@@ -3,6 +3,13 @@
 // 关系等级
 export type RelationshipLevel = 'hostile' | 'neutral' | 'friendly';
 
+// 新增：关系对象，包含数值与战争状态
+export interface Relationship {
+  level: RelationshipLevel;
+  value: number;
+  atWar: boolean;
+}
+
 // 外交行动类型
 export type DiplomaticActionType = 'trade' | 'gift' | 'hire_mercenaries' | 'declare_war';
 
@@ -111,6 +118,47 @@ export interface RaidEvent {
     resources: Partial<MarketPrices>;
   };
   resolved: boolean;
+}
+
+// 新增：最小兼容的国家类型（供前端展示与基础引用）
+export interface Country {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// 新增：赠礼记录（与 UI 与历史记录所需字段对齐）
+export interface GiftRecord {
+  id: string;
+  countryId: string;
+  countryName: string;
+  timestamp: number;
+  // 可选：资源明细，避免引入 Resources 类型导致循环依赖
+  giftDetails?: Record<string, number>;
+  relationshipChange: number;
+}
+
+// 新增：战争记录（与 game-store 写入字段对齐）
+export interface WarRecord {
+  id: string;
+  countryId: string;
+  countryName: string;
+  startDate: number;
+  endDate?: number;
+  isActive: boolean;
+  playerInitiated: boolean;
+}
+
+// 新增：特殊宝物，用于持久化与显示
+export interface SpecialTreasure {
+  id: string;
+  name: string;
+  description: string;
+  effects: {
+    type: string;
+    value: number;
+    description?: string;
+  }[];
 }
 
 // 外交系统状态

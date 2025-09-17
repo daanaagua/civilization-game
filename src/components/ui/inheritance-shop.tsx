@@ -7,9 +7,18 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Star, ShoppingCart, Zap, TrendingUp, Shield, Hammer, Wheat, Users } from 'lucide-react';
+import type { BuffEffect } from '@/types/game';
 
 // 继承点商店物品定义
-const INHERITANCE_ITEMS = [
+const INHERITANCE_ITEMS: Array<{
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  cost: number;
+  maxLevel: number;
+  effects: BuffEffect[];
+}> = [
   {
     id: 'resource_boost',
     name: '资源采集加成',
@@ -199,29 +208,24 @@ export function InheritanceShop() {
                           ) : (
                             <Button 
                               size="sm" 
+                              onClick={() => handlePurchase(item)} 
                               disabled={!canBuy}
-                              onClick={() => handlePurchase(item)}
-                              className={canBuy ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
                             >
-                              {canBuy ? '购买' : '继承点不足'}
+                              购买
                             </Button>
                           )}
                         </div>
                       </div>
+                    </div>
+                    <Separator className="my-3" />
+                    <div className="text-xs text-gray-600">
+                      <span className="font-medium">效果：</span> {item.description}
                     </div>
                   </Card>
                 );
               })}
             </div>
           </ScrollArea>
-          
-          <Separator className="my-4" />
-          
-          <div className="flex justify-center">
-            <Button onClick={handleClose} className="w-32">
-              关闭商店
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>

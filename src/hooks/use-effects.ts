@@ -92,22 +92,20 @@ export const useEffects = () => {
   const getEffectDisplayInfo = (effect: Effect): EffectDisplayInfo => {
     const getSourceName = (sourceType: EffectSourceType, sourceId: string): string => {
       switch (sourceType) {
-        case 'stability':
-          return '稳定度';
-        case 'corruption':
-          return '腐败度';
-        case 'technology':
+        case EffectSourceType.BASE:
+          return '基础';
+        case EffectSourceType.TECHNOLOGY:
           return `科技: ${sourceId}`;
-        case 'building':
+        case EffectSourceType.BUILDING:
           return `建筑: ${sourceId}`;
-        case 'character':
+        case EffectSourceType.CHARACTER:
           return `人物: ${sourceId}`;
-        case 'event':
+        case EffectSourceType.ARTIFACT:
+          return `神器: ${sourceId}`;
+        case EffectSourceType.EVENT:
           return `事件: ${sourceId}`;
-        case 'inheritance':
+        case EffectSourceType.INHERITANCE:
           return `继承: ${sourceId}`;
-        case 'item':
-          return `物品: ${sourceId}`;
         default:
           return sourceId;
       }
@@ -115,24 +113,26 @@ export const useEffects = () => {
 
     const getEffectName = (type: EffectType): string => {
       switch (type) {
-        case 'population_growth':
+        case EffectType.STABILITY:
+          return '稳定度';
+        case EffectType.CORRUPTION:
+          return '腐败度';
+        case EffectType.POPULATION_GROWTH:
           return '人口增长';
-        case 'resource_production':
+        case EffectType.RESOURCE_PRODUCTION:
           return '资源生产';
-        case 'research_speed':
+        case EffectType.RESEARCH_SPEED:
           return '研究速度';
-        case 'building_cost':
+        case EffectType.BUILDING_COST:
           return '建筑成本';
-        case 'military_strength':
+        case EffectType.MILITARY_STRENGTH:
           return '军事力量';
-        case 'trade_efficiency':
-          return '贸易效率';
-        case 'happiness':
-          return '幸福度';
-        case 'corruption_resistance':
-          return '腐败抗性';
+        case EffectType.TRADE_INCOME:
+          return '贸易收入';
+        case EffectType.INHERITANCE:
+          return '继承效果';
         default:
-          return type;
+          return type as unknown as string;
       }
     };
 
@@ -148,9 +148,9 @@ export const useEffects = () => {
       description: getEffectDescription(effect),
       value: effect.value,
       type: effect.type,
-      sourceType: (effect as any).sourceType,
-      sourceId: (effect as any).sourceId,
-      sourceName: (effect as any).source?.name ?? getSourceName((effect as any).sourceType, (effect as any).sourceId),
+      sourceType: effect.source.type,
+      sourceId: effect.source.id,
+      sourceName: effect.source.name ?? getSourceName(effect.source.type, effect.source.id),
       isPositive: effect.value >= 0
     };
   };
@@ -160,14 +160,14 @@ export const useEffects = () => {
     const grouped = new Map<string, EffectsBySource>();
 
     activeEffects.forEach(effect => {
-      const key = `${(effect as any).source?.type ?? (effect as any).sourceType}-${(effect as any).source?.id ?? (effect as any).sourceId}`;
+      const key = `${effect.source.type}-${effect.source.id}`;
       const displayInfo = getEffectDisplayInfo(effect);
 
       if (!grouped.has(key)) {
         grouped.set(key, {
-          sourceType: (effect as any).source?.type ?? (effect as any).sourceType,
-          sourceId: (effect as any).source?.id ?? (effect as any).sourceId,
-          sourceName: displayInfo.sourceName,
+          sourceType: effect.source.type,
+          sourceId: effect.source.id,
+          sourceName: effect.source.name ?? displayInfo.sourceName,
           effects: []
         });
       }

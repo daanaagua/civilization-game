@@ -6,7 +6,7 @@ interface ButtonProps {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
-  variant?: 'primary' | 'secondary' | 'danger' | 'success';
+  variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'default' | 'outline' | 'destructive' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -21,11 +21,16 @@ export function Button({
 }: ButtonProps) {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900';
   
-  const variantClasses = {
+  const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
     primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
     secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500',
     danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
     success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500',
+    // 兼容 shadcn 风格命名
+    default: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
+    outline: 'bg-transparent border border-gray-300 text-gray-800 hover:bg-gray-100 focus:ring-gray-300',
+    destructive: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
+    ghost: 'bg-transparent text-gray-800 hover:bg-gray-100 focus:ring-gray-300',
   };
   
   const sizeClasses = {

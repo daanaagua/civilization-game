@@ -8,7 +8,7 @@ import {
   MapPin, 
   Clock, 
   Users, 
-  Treasure, 
+  Gem, 
   AlertTriangle,
   CheckCircle,
   XCircle,

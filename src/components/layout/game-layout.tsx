@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { useGameStore } from '@/lib/game-store';
-// import { BUILDINGS } from '@/lib/game-data';
+import { BUILDINGS } from '@/lib/game-data';
 import { ResourcePanel } from '@/components/ui/resource-display';
-- import { BuildingsPanel } from '@/components/features/buildings';
-+ import { BuildingTab } from '@/components/features/building-tab';
-import { TechnologyPanel } from '@/components/features/technology';
+import { BuildingTab } from '@/components/features/building-tab';
+import TechnologyTab from '@/components/features/technology-tab';
 import { CharactersPanel, CharacterRecruitment } from '@/components/features/characters';
 import { ResourcesPanel } from '@/components/features/resources';
 import { MilitaryPanel } from '@/components/features/military';
@@ -53,7 +52,7 @@ const OverviewPanel = () => {
   const totalBuildings = Object.values(gameState.buildings).reduce((sum, building) => sum + building.count, 0);
   const researchedTech = Object.values(gameState.technologies).filter(tech => tech.researched).length;
   const totalTech = Object.values(gameState.technologies).length;
-  const activeCharacters = Object.values(gameState.characters).filter(char => char.isActive).length;
+  const activeCharacters = Object.keys(gameState.characterSystem.activeCharacters).length;
   
   return (
     <div className="space-y-6">
@@ -186,12 +185,20 @@ const OverviewPanel = () => {
               <span className="text-stone-600">在职人员</span>
               <span className="font-semibold">{activeCharacters}</span>
             </div>
-            {Object.values(gameState.characters).filter(char => char.isActive).slice(0, 3).map((character) => (
-              <div key={character.id} className="flex justify-between items-center text-sm">
-                <span className="text-stone-500">{character.name}</span>
-                <span className="text-stone-700">Lv.{character.level}</span>
-              </div>
-            ))}
+            {Object.values(gameState.characterSystem.activeCharacters)
+              .filter(Boolean)
+              .slice(0, 3)
+              .map((id) => {
+                const character = gameState.characterSystem.allCharacters[id as string];
+                if (!character) return null;
+                return (
+                  <div key={character.id} className="flex justify-between items-center text-sm">
+                    <span className="text-stone-500">{character.name}</span>
+                    <span className="text-stone-700">忠诚 {character.loyalty}</span>
+                  </div>
+                );
+              })}
+            
           </div>
         </div>
       </div>
@@ -207,7 +214,7 @@ const OverviewPanel = () => {
             {gameState.events.slice(-5).reverse().map((event, index) => (
               <div key={index} className="bg-stone-50 p-3 rounded-lg">
                 <div className="flex justify-between items-start mb-1">
-                  <h4 className="font-medium text-stone-900">{event.title}</h4>
+                  <h4 className="font-medium text-stone-900">{event.name}</h4>
                   <span className="text-xs text-stone-500">
                     {formatTime(gameState.gameTime - event.timestamp)}
                   </span>
@@ -230,10 +237,11 @@ const SettingsPanel = () => {
   const startGame = useGameStore(state => state.startGame);
   const resetGame = useGameStore(state => state.resetGame);
   const saveGame = useGameStore(state => state.saveGame);
-  const [showInheritanceShop, setShowInheritanceShop] = useState(false);
+  const openInheritanceShop = useGameStore(state => state.showInheritanceShop);
   
   return (
     <div className="space-y-6">
+      <InheritanceShop />
       <div className="card">
         <h3 className="font-semibold text-stone-900 mb-4">继承点商店</h3>
         <div className="space-y-4">
@@ -253,7 +261,7 @@ const SettingsPanel = () => {
           </div>
           
           <button
-            onClick={() => setShowInheritanceShop(true)}
+            onClick={openInheritanceShop}
             className="w-full btn bg-purple-600 text-white hover:bg-purple-700 flex items-center justify-center gap-2"
           >
             <Star size={16} />
@@ -311,23 +319,7 @@ const SettingsPanel = () => {
         </div>
       </div>
       
-      {/* 继承点商店弹窗 */}
-      {showInheritanceShop && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-stone-900">继承点商店</h2>
-              <button
-                onClick={() => setShowInheritanceShop(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <InheritanceShop onClose={() => setShowInheritanceShop(false)} />
-          </div>
-        </div>
-      )}
+      {/* 继承点商店弹窗（已由 InheritanceShop 自行控制显示，故移除本地弹窗实现） */}
       
       <div className="card">
         <h3 className="font-semibold text-stone-900 mb-4">游戏信息</h3>
@@ -364,7 +356,7 @@ export const GameLayout = () => {
       case 'buildings':
         return <BuildingTab />;
       case 'technology':
-        return <TechnologyPanel />;
+        return <TechnologyTab />;
       case 'characters':
         return <CharactersPanel />;
       case 'exploration':

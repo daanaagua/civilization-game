@@ -288,23 +288,20 @@ export function CountryCard({
                 ) : (
                   <div className="space-y-2">
                     {mercenaryUnits.map((unit: any) => (
-                      <div key={unit.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                      <div key={unit.id} className="flex items-center justify-between p-2 bg-gray-700 rounded-lg">
                         <div>
-                          <div className="font-medium text-sm">{unit.name}</div>
-                          <div className="text-xs text-gray-500">
-                            攻击: {unit.attack} | 防御: {unit.defense} | 生命: {unit.health}
-                          </div>
+                          <div className="font-medium">{unit.name}</div>
+                          <div className="text-sm text-gray-300">{unit.description}</div>
+                          <div className="text-sm text-gray-400">价格: {unit.cost} 金币</div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">¥{unit.cost}</div>
-                          <Button
-                            size="sm"
-                            onClick={() => onHireMercenary(country.id, unit.id)}
-                            disabled={!canAfford({ gold: unit.cost })}
-                          >
-                            雇佣
-                          </Button>
-                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => onHireMercenary(country.id, unit.id)}
+                          disabled={!canAfford({ currency: unit.cost })}
+                        >
+                          雇佣
+                        </Button>
                       </div>
                     ))}
                   </div>

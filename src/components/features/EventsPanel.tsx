@@ -87,7 +87,7 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
 
   const formatTimestamp = (timestamp: number) => {
     // 使用游戏时间而不是系统时间
-    const gameStartTime = gameState.gameStartTime;
+    const gameStartTime = gameState.timeSystem.startTime;
     const currentGameTime = gameState.gameTime * 1000; // 转换为毫秒
     const eventGameTime = timestamp - gameStartTime; // 事件发生时的游戏时间偏移
     const diff = currentGameTime - eventGameTime; // 游戏时间差

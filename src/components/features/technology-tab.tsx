@@ -85,11 +85,11 @@ function TechnologyCard({ technology, canResearch, isResearching, onStartResearc
         <p className="text-xs text-gray-600 mb-2 line-clamp-2">{technology.description}</p>
         
         {/* 前置条件 */}
-        {technology.prerequisites && technology.prerequisites.length > 0 && (
+        {technology.requires && technology.requires.length > 0 && (
           <div className="mb-2">
             <p className="text-xs font-medium text-gray-700 mb-1">前置:</p>
             <div className="flex flex-wrap gap-1">
-              {technology.prerequisites.slice(0, 2).map((prereq) => {
+              {technology.requires.slice(0, 2).map((prereq) => {
                 const prereqTech = Object.values(TECHNOLOGIES).find(t => t.id === prereq);
                 const isPrereqMet = gameState.technologies[prereq]?.researched;
                 return (
@@ -102,8 +102,8 @@ function TechnologyCard({ technology, canResearch, isResearching, onStartResearc
                   </Badge>
                 );
               })}
-              {technology.prerequisites.length > 2 && (
-                <Badge variant="secondary" className="text-xs px-1.5 py-0.5">+{technology.prerequisites.length - 2}</Badge>
+              {technology.requires.length > 2 && (
+                <Badge variant="secondary" className="text-xs px-1.5 py-0.5">+{technology.requires.length - 2}</Badge>
               )}
             </div>
           </div>
@@ -190,7 +190,7 @@ export default function TechnologyTab() {
   
   const currentResearch = gameState.researchState?.currentResearch || null;
   const currentTech = currentResearch ? gameState.technologies[currentResearch.technologyId] : null;
-  const currentProgressPercent = currentTech
+  const currentProgressPercent = currentTech && currentResearch
     ? Math.min(100, Math.max(0, (currentResearch.progress / (currentTech.researchTime || 1)) * 100))
     : 0;
   const researchPoints = gameState.resources.researchPoints;

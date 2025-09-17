@@ -169,7 +169,9 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
     return factors;
   };
 
-  const factors = statusType === 'stability' ? calculateStabilityFactors() : calculateCorruptionFactors();
+  // Separate arrays to retain precise types instead of a union array
+  const stabilityFactors = calculateStabilityFactors();
+  const corruptionFactors = calculateCorruptionFactors();
   const currentValue = statusType === 'stability' ? stability : corruption;
 
   return (
@@ -187,24 +189,34 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
           <span className="text-gray-400"> / 100</span>
         </div>
         
-        {factors.length > 0 ? (
-          <div className="space-y-1">
-            {factors.map((factor, index) => (
-              <div key={index} className="flex justify-between items-center">
-                <span className="text-gray-300">{factor.source}:</span>
-                <span className={factor.color}>
-                  {statusType === 'stability' ? 
-                    (factor.effect > 0 ? `+${factor.effect}` : factor.effect.toString()) :
-                    factor.effect
-                  }
-                </span>
-              </div>
-            ))}
-          </div>
+        {statusType === 'stability' ? (
+          stabilityFactors.length > 0 ? (
+            <div className="space-y-1">
+              {stabilityFactors.map((factor, index) => (
+                <div key={index} className="flex justify-between items-center">
+                  <span className="text-gray-300">{factor.source}:</span>
+                  <span className={factor.color}>
+                    {factor.effect > 0 ? `+${factor.effect}` : factor.effect.toString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-center">无影响因素</div>
+          )
         ) : (
-          <div className="text-gray-400 text-center">
-            {statusType === 'stability' ? '无影响因素' : '无变化因素'}
-          </div>
+          corruptionFactors.length > 0 ? (
+            <div className="space-y-1">
+              {corruptionFactors.map((factor, index) => (
+                <div key={index} className="flex justify-between items-center">
+                  <span className="text-gray-300">{factor.source}:</span>
+                  <span className={factor.color}>{factor.effect}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-center">无变化因素</div>
+          )
         )}
         
         {statusType === 'stability' && (

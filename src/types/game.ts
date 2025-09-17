@@ -134,7 +134,8 @@ export type TechnologyEffectType =
   | 'research_speed_bonus'      // 研究速度加成
   | 'military_bonus'            // 军事加成
   | 'population_growth_bonus'   // 人口增长加成
-  | 'global_bonus';             // 全局加成
+  | 'global_bonus'              // 全局加成
+  | 'resource_multiplier';      // 资源倍率（与现有实现保持一致）
 
 export interface TechnologyUnlock {
   type: 'building' | 'character' | 'resource' | 'upgrade';
@@ -200,7 +201,7 @@ export interface GameState {
   corruption: number;
   
   // 成就
-  achievements: string[];
+  achievements: Array<{ id: string; unlockedAt: number }>; 
   
   // 继承点系统
   inheritancePoints: number;
@@ -247,6 +248,12 @@ export interface GameState {
     specialTreasures: import('../types/diplomacy').SpecialTreasure[];
     raidEvents: import('../types/diplomacy').RaidEvent[];
   };
+  
+  // ——— 新增：全局统计与时间信息（与 store 保持一致）———
+  statistics: import('./index').GameStatistics; // 游戏统计数据
+  gameStartTime: number; // 游戏开始时间戳（用于统计播放时长等）
+  lastUpdateTime: number; // 上次更新的时间戳
+  gameSpeed: number; // 顶层游戏速度（与设置中的倍数区分用途）
   
   // 游戏设置
   settings: GameSettings;

@@ -11,17 +11,20 @@ interface ResourceCardProps {
 }
 
 const ResourceCard = ({ resourceType, value, rate }: ResourceCardProps) => {
-  const { manualCollectResource, isPaused } = useGameStore();
+  const { clickResource, isPaused } = useGameStore();
   const config = resourceConfig[resourceType];
   const Icon = config.icon;
   
   const handleClick = () => {
     if (config.clickable) {
-      manualCollectResource(resourceType);
+      // 仅允许三种基础资源进行点击收集
+      if (resourceType === 'food' || resourceType === 'wood' || resourceType === 'stone') {
+        clickResource(resourceType);
+      }
     }
   };
   
-  const isClickable = config.clickable && !isPaused;
+  const isClickable = config.clickable && !isPaused && (resourceType === 'food' || resourceType === 'wood' || resourceType === 'stone');
   
   return (
     <div 
@@ -34,7 +37,7 @@ const ResourceCard = ({ resourceType, value, rate }: ResourceCardProps) => {
       title={
         config.clickable 
           ? !isPaused 
-            ? `点击增加1个${config.name}` 
+            ? (resourceType === 'food' || resourceType === 'wood' || resourceType === 'stone' ? `点击增加1个${config.name}` : `${config.name}不可手动收集`)
             : `游戏已暂停，无法收集${config.name}`
           : config.description
       }
@@ -44,7 +47,7 @@ const ResourceCard = ({ resourceType, value, rate }: ResourceCardProps) => {
           <Icon size={20} />
         </div>
         <h3 className={`font-semibold ${config.color}`}>{config.name}</h3>
-        {config.clickable && (
+        {isClickable && (
           <span className="text-xs text-gray-500 ml-auto">可点击</span>
         )}
       </div>

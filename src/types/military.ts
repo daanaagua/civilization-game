@@ -91,23 +91,35 @@ export interface CombatResult {
 }
 
 // 探索相关类型
+export interface ExplorationEvent {
+  id: string;
+  type: 'random' | 'resource';
+  title: string;
+  description: string;
+  effects?: any;
+  timestamp: number;
+}
+
 export interface ExplorationResult {
-  type: 'dungeon' | 'nation' | 'event' | 'nothing';
-  id?: string;
-  name?: string;
-  description?: string;
-  discovered: boolean;
+  success: boolean;
+  explorationUnits: MilitaryUnit[];
+  discovery?: DiscoveredLocation;
+  event?: ExplorationEvent;
+  casualties?: Record<string, number>;
+  timestamp: number;
+  description: string;
 }
 
 export interface DiscoveredLocation {
   id: string;
-  type: 'dungeon' | 'nation';
+  type: 'dungeon' | 'country' | 'event';
   name: string;
   description: string;
   difficulty?: number;
   rewards?: ResourceCost;
   enemies?: EnemyUnit[];
   discoveredAt: number;
+  data?: any;
 }
 
 export interface EnemyUnit {

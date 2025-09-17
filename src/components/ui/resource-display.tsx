@@ -1,7 +1,7 @@
 'use client';
 
 import { useGameStore } from '@/lib/game-store';
-import { Resources } from '@/types/game';
+import { Resources, ResourceRates } from '@/types/game';
 import { formatNumber } from '@/utils/format';
 import { Tooltip } from './tooltip';
 import { ResourceDetailsTooltip } from './resource-details-tooltip';
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 interface ResourceDisplayProps {
-  resource: keyof Resources;
+  resource: keyof typeof resourceConfig; // 仅限支持在本组件中展示的资源键，避免索引越界
   showRate?: boolean;
   className?: string;
 }
@@ -71,7 +71,11 @@ const resourceConfig = {
     borderColor: 'border-slate-600',
     description: '人口居住的容量限制。通过建造居住建筑增加住房容量。',
   },
-};
+} as const;
+
+type ResourceKey = keyof typeof resourceConfig;
+// 仅用于生产速率的资源键（housing 没有生产速率）
+type RateResourceKey = Extract<ResourceKey, keyof ResourceRates>;
 
 export const ResourceDisplay = ({ resource, showRate = false, className = '' }: ResourceDisplayProps) => {
   const { gameState } = useGameStore();
@@ -79,16 +83,15 @@ export const ResourceDisplay = ({ resource, showRate = false, className = '' }: 
   
   const config = resourceConfig[resource];
   const Icon = config.icon;
-  const amount = resources[resource];
-  const rate = resourceRates[resource as keyof typeof resourceRates] || 0;
-  const limit = resourceLimits[resource];
+  const amount = resources[resource as keyof Resources];
+  const rate = resource === 'housing' ? 0 : (resourceRates[resource as RateResourceKey] ?? 0);
+  const limit = resourceLimits[resource as keyof Resources];
   
   return (
     <Tooltip 
       content={
-        <ResourceDetailsTooltip resource={resource} />
-      } 
-      position="right"
+        <ResourceDetailsTooltip resource={resource as ResourceKey} />
+      }
     >
       <div className={`flex items-center gap-2 p-3 rounded-lg border ${config.bgColor} ${config.borderColor} ${className} cursor-help`}>
         <div className={`p-2 rounded-md ${config.color} bg-slate-700`}>
@@ -131,7 +134,7 @@ export const ResourceDisplay = ({ resource, showRate = false, className = '' }: 
 
 // 资源面板组件
 export const ResourcePanel = () => {
-  const resources: (keyof Resources)[] = ['food', 'wood', 'stone', 'tools', 'population', 'housing'];
+  const resources: ResourceKey[] = ['food', 'wood', 'stone', 'tools', 'population', 'housing'];
   
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

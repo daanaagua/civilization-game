@@ -21,7 +21,7 @@ export class ExplorationSystem {
   hasExplorationUnits(units: MilitaryUnit[]): boolean {
     return units.some(unit => {
       const unitType = getUnitType(unit.typeId);
-      return unitType?.isExplorationUnit && unit.count > 0 && unit.status === 'defending';
+      return unitType?.isExplorer && unit.count > 0 && unit.status === 'defending';
     });
   }
   
@@ -29,7 +29,7 @@ export class ExplorationSystem {
   getAvailableExplorationUnits(units: MilitaryUnit[]): MilitaryUnit[] {
     return units.filter(unit => {
       const unitType = getUnitType(unit.typeId);
-      return unitType?.isExplorationUnit && unit.count > 0 && unit.status === 'defending';
+      return unitType?.isExplorer && unit.count > 0 && unit.status === 'defending';
     });
   }
   
@@ -68,7 +68,7 @@ export class ExplorationSystem {
     
     units.forEach(unit => {
       const unitType = getUnitType(unit.typeId);
-      if (unitType?.isExplorationUnit && unit.count > 0) {
+      if (unitType?.isExplorer && unit.count > 0) {
         // 冒险家比侦察兵有更高的探索能力
         const basePower = unitType.name === '冒险家' ? 0.8 : 0.6;
         const moraleBonus = (unit.currentMorale || unitType.baseStats.morale) / unitType.baseStats.morale;
@@ -318,7 +318,7 @@ export class ExplorationSystem {
     // 检查是否有非探索单位可以参战
     const combatUnits = availableUnits.filter(unit => {
       const unitType = getUnitType(unit.typeId);
-      return !unitType?.isExplorationUnit && unit.count > 0 && unit.status === 'defending';
+      return !unitType?.isExplorer && unit.count > 0 && unit.status === 'defending';
     });
     
     return combatUnits.length > 0;

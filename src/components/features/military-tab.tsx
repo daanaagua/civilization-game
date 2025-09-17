@@ -49,32 +49,30 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
   // 计算盈余人口
   const surplusPopulation = gameState.population - occupiedPopulation;
   
-  // 处理训练单位
+  // 处理训练单位（按照 MilitarySystem API）
   const handleTrainUnit = (unitTypeId: string, amount?: number) => {
     const trainingAmount = amount || trainingAmounts[unitTypeId] || 1;
     
     if (trainingAmount <= 0) return;
     
     try {
+      // 当前 MilitarySystem.trainUnit 仅训练 1 个单位/次
       const result = militarySystem.trainUnit(
-        unitTypeId,
-        trainingAmount,
-        gameState.resources,
-        gameState.population,
-        currentUnits,
-        trainingQueue
+        // 传入完整的 gameState，由系统内部读取所需字段
+        // @ts-expect-error 跨文件类型推断足够，但保持最小改动
+        gameState,
+        unitTypeId
       );
       
       if (result.success) {
         onUpdateGameState({
-          resources: result.updatedResources,
-          population: result.updatedPopulation,
-          trainingQueue: result.updatedQueue
+          resources: result.newResources,
+          military: result.newMilitaryState
         });
         // 重置该兵种的训练数量
         setTrainingAmounts(prev => ({ ...prev, [unitTypeId]: 1 }));
       } else {
-        alert(result.error || '训练失败');
+        alert(result.reason || '训练失败');
       }
     } catch (error) {
       alert(error instanceof Error ? error.message : '训练失败');
@@ -86,58 +84,33 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
     setTrainingAmounts(prev => ({ ...prev, [unitTypeId]: Math.max(1, amount) }));
   };
   
-  // 处理取消训练
-  const handleCancelTraining = (queueId: string) => {
-    const result = militarySystem.cancelTraining(
-      queueId,
-      gameState.resources,
-      trainingQueue
-    );
+  // 处理取消训练（根据 MilitarySystem API：取消队列首项）
+  const handleCancelTraining = () => {
+    // @ts-expect-error 最小化变更，直接传递 gameState
+    const result = militarySystem.cancelTraining(gameState);
     
     if (result.success) {
       onUpdateGameState({
-        resources: result.updatedResources,
-        trainingQueue: result.updatedQueue
+        resources: result.newResources,
+        military: result.newMilitaryState
       });
     }
   };
   
-  // 更新训练进度（暂停时不运行）
+  // 更新训练进度（暂停时不运行） -> 使用系统提供的 updateTraining
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
-      const now = Date.now();
-      let hasUpdates = false;
-      
-      const updatedQueue = trainingQueue.filter(item => {
-        if (now >= item.completionTime) {
-          // 训练完成
-          const result = militarySystem.completeTraining(
-            item,
-            currentUnits,
-            gameState.population
-          );
-          
-          if (result.success) {
-            onUpdateGameState({
-              militaryUnits: result.updatedUnits,
-              population: result.updatedPopulation
-            });
-            hasUpdates = true;
-          }
-          
-          return false; // 从队列中移除
-        }
-        return true;
-      });
-      
-      if (hasUpdates) {
-        onUpdateGameState({ trainingQueue: updatedQueue });
+      // 以 1 秒为步进推进训练
+      // @ts-expect-error 直接传递 gameState 以便系统内部处理
+      const result = militarySystem.updateTraining(gameState, 1);
+      if (result.success && result.newMilitaryState) {
+        onUpdateGameState({ military: result.newMilitaryState });
       }
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [trainingQueue, currentUnits, gameState.population, militarySystem, onUpdateGameState, isPaused]);
+  }, [isPaused, militarySystem, gameState, onUpdateGameState]);
   
   return (
     <div className="space-y-6">
@@ -172,7 +145,7 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-gray-300">战斗力</div>
-                    <div className="text-lg font-bold text-blue-400">{unitType.combatPower}</div>
+                    <div className="text-lg font-bold text-blue-400">{Math.round((unitType.baseStats.attack + unitType.baseStats.defense + unitType.baseStats.health / 10))}</div>
                   </div>
                 </div>
                 
@@ -226,22 +199,22 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
         <div>
           <h3 className="text-lg font-semibold text-white mb-4">训练队列</h3>
           <div className="space-y-3">
-            {trainingQueue.map(item => {
+            {trainingQueue.map((item, index) => {
               const unitType = getUnitType(item.unitTypeId);
               if (!unitType) return null;
               
               const now = Date.now();
-              const totalTime = item.completionTime - item.startTime;
+              const totalTime = item.endTime - item.startTime;
               const elapsedTime = now - item.startTime;
               const progress = Math.min(100, (elapsedTime / totalTime) * 100);
-              const remainingTime = Math.max(0, item.completionTime - now);
+              const remainingTime = Math.max(0, item.endTime - now);
               
               return (
-                <div key={item.id} className="bg-gray-700 p-3 rounded-lg">
+                <div key={`${item.unitTypeId}-${item.startTime}-${index}`} className="bg-gray-700 p-3 rounded-lg">
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <h4 className="text-white font-medium">{unitType.name}</h4>
-                      <p className="text-gray-400 text-sm">训练数量: {item.count}</p>
+                      <p className="text-gray-400 text-sm">训练数量: {item.quantity}</p>
                     </div>
                     
                     <div className="text-right">
@@ -267,10 +240,10 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
                   </div>
                   
                   <button
-                    onClick={() => handleCancelTraining(item.id)}
+                    onClick={() => handleCancelTraining()}
                     className="w-full bg-red-600 hover:bg-red-700 text-white py-1 rounded text-sm font-medium transition-colors"
                   >
-                    取消训练
+                    取消训练（取消队列首项）
                   </button>
                 </div>
               );

@@ -17,7 +17,7 @@ import { MilitarySystem } from './military-system';
 import { ExplorationSystem } from './exploration-system';
 import { CombatSystem } from './combat-system';
 import { DiplomacySystem } from './diplomacy-system';
-import { Country, RelationshipLevel, MarketPrices, TradeRecord, GiftRecord, WarRecord, MercenaryUnit, SpecialTreasure, RaidEvent } from '@/types/diplomacy';
+import { Country, Relationship, RelationshipLevel, MarketPrices, TradeRecord, GiftRecord, WarRecord, MercenaryUnit, SpecialTreasure, RaidEvent, DiplomaticEffect } from '@/types/diplomacy';
 import { DIPLOMACY_CONFIG, COUNTRY_TEMPLATES, BASE_MARKET_PRICES } from './diplomacy-data';
 
 // 初始游戏状态
@@ -206,6 +206,7 @@ interface GameStore {
   // 时间系统
   updateTimeSystem: () => void;
   resetTimeSystem: () => void;
+  formatGameDate: () => string;
   
   // 资源管理
   addResources: (resources: Partial<Resources>) => void;
@@ -402,18 +403,17 @@ interface GameStore {
   updateCharacterSystem: () => void;
   
   // 外交系统方法
-  discoverCountry: (countryTemplate?: any) => Country;
-  tradeWithCountry: (countryId: string, offer: Partial<Resources>, request: Partial<Resources>) => boolean;
-  giftToCountry: (countryId: string, gift: Partial<Resources>) => boolean;
-  declareWarOnCountry: (countryId: string) => boolean;
-  hireMercenaries: (countryId: string, unitType: string, count: number) => boolean;
-  updateDiplomaticRelationships: () => void;
-  getCountryRelationship: (countryId: string) => RelationshipLevel;
+  discoverCountry: (country: Country) => void;
+  tradeWithCountry: (countryId: string, ourOffer: Partial<Resources>, theirOffer: Partial<Resources>) => void;
+  giftToCountry: (countryId: string, gift: Partial<Resources>) => void;
+  declareWar: (countryId: string) => void;
+  hireMercenary: (mercenaryId: string) => void;
+  updateDiplomacyRelationships: () => void;
+  getCountryRelationship: (countryId: string) => Relationship | undefined;
   getDiscoveredCountries: () => Country[];
-  getDiplomacyMarketPrices: () => MarketPrices;
   updateMarketPrices: () => void;
-  processRaidEvents: () => void;
-  generateRaidEvent: (countryId: string) => void;
+  generateRaidEvent: () => void;
+  getDiplomacyEffects: () => DiplomaticEffect[];
 }
 
 // 全局资源管理器实例

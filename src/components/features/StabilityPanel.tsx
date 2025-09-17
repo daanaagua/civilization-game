@@ -3,7 +3,9 @@
 import { useGameStore } from '@/lib/game-store';
 
 export function StabilityPanel() {
-  const { stability, maxStability } = useGameStore();
+  const { gameState } = useGameStore();
+  const stability = gameState.stability;
+  const maxStability = 100;
 
   const stabilityPercentage = (stability / maxStability) * 100;
   

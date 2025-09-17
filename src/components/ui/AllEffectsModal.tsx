@@ -102,6 +102,14 @@ function getEffectValueColor(value: number): string {
   return value > 0 ? 'text-green-400' : 'text-red-400';
 }
 
+// 规范化数值：部分数据以倍率(例如1.2)表示，部分以百分比(例如15)表示
+function normalizePercent(value: number): number {
+  if (value > 1 && value < 3) {
+    return (value - 1) * 100;
+  }
+  return value;
+}
+
 interface AllEffectsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -296,18 +304,22 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
         
         switch (effect.type) {
           case 'resource_multiplier':
-            if (effect.target === 'food' || effect.target === 'wood' || effect.target === 'stone' || effect.target === 'iron') {
+            if (effect.target === 'food' || effect.target === 'wood' || effect.target === 'stone' || effect.target === 'iron' || effect.target === 'tools') {
               effectName = '生产效率';
-              effectValue = (effect.value - 1) * 100;
+              effectValue = normalizePercent(effect.value);
             }
             break;
-          case 'population_growth':
-            effectName = '人口增长率';
-            effectValue = effect.value;
+          case 'resource_production_bonus':
+            effectName = '生产效率';
+            effectValue = normalizePercent(effect.value);
             break;
-          case 'research_speed':
+          case 'population_growth_bonus':
+            effectName = '人口增长率';
+            effectValue = normalizePercent(effect.value);
+            break;
+          case 'research_speed_bonus':
             effectName = '科技研发速度';
-            effectValue = effect.value;
+            effectValue = normalizePercent(effect.value);
             break;
         }
         

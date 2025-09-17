@@ -1,4 +1,5 @@
-import { Building, Technology, Character, Achievement } from '@/types/game';
+import { Building, Technology, Achievement } from '@/types/game';
+import { Character } from '@/types/character';
 
 // 建筑数据
 export const BUILDINGS: Record<string, Building> = {

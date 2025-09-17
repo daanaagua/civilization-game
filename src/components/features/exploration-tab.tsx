@@ -37,7 +37,16 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
   const [explorationSystem] = useState(() => {
     const system = new ExplorationSystem();
     if (gameState.exploration) {
-      system.importExplorationData(gameState.exploration);
+      // 将分类的 discoveredLocations 扁平化为数组，符合 ExplorationSystem 的导入类型
+      const flatDiscovered: DiscoveredLocation[] = [
+        ...(gameState.exploration.discoveredLocations?.dungeons || []),
+        ...(gameState.exploration.discoveredLocations?.countries || []),
+        ...(gameState.exploration.discoveredLocations?.events || []),
+      ];
+      system.importExplorationData({
+        discoveredLocations: flatDiscovered,
+        explorationHistory: gameState.exploration.explorationHistory || [],
+      });
     }
     return system;
   });
@@ -55,7 +64,7 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
   // 获取可用的战斗单位（用于攻击副本）
   const availableCombatUnits = (gameState.military?.units || []).filter(unit => {
     const unitType = getUnitType(unit.typeId);
-    return !unitType?.isExplorationUnit && unit.count > 0 && unit.status === 'defending';
+    return !unitType?.isExplorer && unit.count > 0 && unit.status === 'defending';
   });
   
   // 计算当前人口使用情况
@@ -102,17 +111,31 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
       if (result.discovery && result.discovery.type === 'country') {
         const countryData = result.discovery.data;
         if (countryData) {
-          discoverCountry(countryData.id, countryData);
+          discoverCountry(countryData);
         }
       }
       
       // 更新游戏状态
+      const exported = explorationSystem.exportExplorationData();
+      const categorized = {
+        dungeons: exported.discoveredLocations.filter(l => l.type === 'dungeon'),
+        countries: exported.discoveredLocations.filter(l => l.type === 'country'),
+        events: exported.discoveredLocations.filter(l => l.type === 'event'),
+      } as {
+        dungeons: DiscoveredLocation[];
+        countries: DiscoveredLocation[];
+        events: DiscoveredLocation[];
+      };
+
       const updates: any = {
         military: {
           ...gameState.military,
           units: [...(gameState.military?.units || [])]
         },
-        exploration: explorationSystem.exportExplorationData()
+        exploration: {
+          discoveredLocations: categorized,
+          explorationHistory: exported.explorationHistory,
+        },
       };
       
       // 如果有资源奖励，添加到资源中
@@ -318,13 +341,15 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
                 <div key={location.id} className="bg-gray-700 p-3 rounded-lg">
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-semibold text-white">{location.name}</h4>
-                    <div className={`text-sm font-bold ${
-                      location.difficulty <= 30 ? 'text-green-400' :
-                      location.difficulty <= 60 ? 'text-yellow-400' :
-                      'text-red-400'
-                    }`}>
-                      {location.difficulty}
-                    </div>
+                    {typeof location.difficulty === 'number' && (
+                      <div className={`text-sm font-bold ${
+                        location.difficulty! <= 30 ? 'text-green-400' :
+                        location.difficulty! <= 60 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {location.difficulty}
+                      </div>
+                    )}
                   </div>
                   
                   <p className="text-sm text-gray-400 capitalize mb-2">

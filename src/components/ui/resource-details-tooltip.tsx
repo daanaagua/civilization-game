@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useGameStore } from '@/lib/game-store';
-import { calculateDetailedRates } from '@/lib/resource-calculations';
+// 移除不存在的 import { calculateDetailedRates } from '@/lib/resource-calculations';
 import { Resources } from '@/types/game';
 import { formatNumber } from '@/lib/utils';
 
@@ -14,8 +14,8 @@ export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps
   const { gameState, getResourceRateDetails } = useGameStore();
   const { resources } = gameState;
 
-  const details = getResourceRateDetails(resource);
-  const totalRate = details ? details.reduce((sum, detail) => sum + detail.rate, 0) : 0;
+  const details = (getResourceRateDetails?.(resource) as any[]) || [];
+  const totalRate = details.reduce((sum, detail) => sum + (detail?.rate ?? 0), 0);
 
   const formatRate = (rate: number) => {
     if (resource === 'population' || resource === 'housing') {
@@ -33,19 +33,19 @@ export function ResourceDetailsTooltip({ resource }: ResourceDetailsTooltipProps
       tools: '工具',
       population: '人口',
       housing: '住房'
-    };
+    } as const;
     return names[resource];
   };
 
   const getResourceDescription = () => {
     const descriptions = {
       food: '维持人口生存的基本资源',
-      wood: '建造和制作的基础材料',
+      wood: '建造和制作的基础材料', 
       stone: '坚固建筑的重要材料', 
       tools: '提高生产效率的器具',
       population: '文明发展的核心力量',
       housing: '人口居住的容量限制'
-    };
+    } as const;
     return descriptions[resource];
   };
 
