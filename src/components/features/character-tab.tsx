@@ -99,10 +99,10 @@ export function CharacterTab({}: CharacterTabProps) {
   const renderActiveCharacters = () => {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">在职人物</h3>
+        <h3 className="text-lg font-semibold text-gray-100">在职人物</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Object.entries(activeCharacters).map(([type, character]) => (
-            <div key={type} className="bg-white rounded-lg border border-gray-200 p-4">
+            <div key={type} className="bg-gray-800 rounded-lg border border-gray-700 p-4">
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <h4 className="font-medium text-gray-900">
@@ -112,14 +112,7 @@ export function CharacterTab({}: CharacterTabProps) {
                     {character ? getPositionDisplay(character) : '空缺'}
                   </p>
                 </div>
-                {character && (
-                  <button
-                    onClick={() => handleDismissCharacter(character.id)}
-                    className="text-red-600 hover:text-red-800 text-sm"
-                  >
-                    解除
-                  </button>
-                )}
+                
               </div>
               
               {character ? (
@@ -189,16 +182,8 @@ export function CharacterTab({}: CharacterTabProps) {
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <p className="text-gray-500 text-sm mb-2">职位空缺</p>
-                  <button
-                    onClick={() => {
-                      setSelectedCharacterType(type as CharacterType);
-                      setShowAppointment(true);
-                    }}
-                    className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-                  >
-                    任命人物
-                  </button>
+                  <p className="text-gray-400 text-sm">职位空缺</p>
+                  <p className="text-gray-500 text-xs mt-1">该职位将由相关科技自动解锁并自动就任</p>
                 </div>
               )}
             </div>
@@ -341,8 +326,10 @@ export function CharacterTab({}: CharacterTabProps) {
       {/* 人物效果 */}
       {renderCharacterEffects()}
       
-      {/* 任命对话框 */}
-      {renderAvailableCharacters()}
+      {/* 人物系统提示：自动解锁与自动继任 */}
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 text-sm text-gray-300">
+        提示：人物由对应科技自动解锁并自动上岗；当人物死亡后，系统会自动生成同类型的继任者并就任。
+      </div>
     </div>
   );
 }

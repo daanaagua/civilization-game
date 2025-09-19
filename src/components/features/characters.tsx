@@ -67,7 +67,7 @@ const CharacterCard = ({ character }: CharacterCardProps) => {
   const TypeIcon = typeConfig.icon;
 
   return (
-    <div className="card hover:shadow-md transition-all duration-200 bg-white">
+    <div className="card hover:shadow-lg transition-all duration-200 bg-gray-800 border border-gray-700">
       {/* 角色头部信息 */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -83,32 +83,32 @@ const CharacterCard = ({ character }: CharacterCardProps) => {
             </div>
           </div>
         </div>
-        <div className="bg-stone-100 text-stone-700 px-2 py-1 rounded-full text-xs font-medium">
+        <div className="bg-gray-700 text-gray-200 px-2 py-1 rounded-full text-xs font-medium">
           {character.healthStatus === 'good' ? '健康' : character.healthStatus === 'fair' ? '一般' : '欠佳'}
         </div>
       </div>
 
-      <p className="text-sm text-stone-600 mb-4 leading-relaxed">
+      <p className="text-sm text-gray-300 mb-4 leading-relaxed">
         {typeConfig.description}
       </p>
 
       {/* 属性展示 */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-stone-50 p-3 rounded-lg">
+        <div className="bg-gray-900 p-3 rounded-lg">
           <div className="flex items-center gap-2 mb-1">
             <Shield size={14} className="text-red-600" />
             <span className="text-xs font-medium text-stone-600">武力</span>
           </div>
           <div className="text-lg font-semibold text-stone-900">{character.attributes.force}</div>
         </div>
-        <div className="bg-stone-50 p-3 rounded-lg">
+        <div className="bg-gray-900 p-3 rounded-lg">
           <div className="flex items-center gap-2 mb-1">
             <Scroll size={14} className="text-purple-600" />
             <span className="text-xs font-medium text-stone-600">智力</span>
           </div>
           <div className="text-lg font-semibold text-stone-900">{character.attributes.intelligence}</div>
         </div>
-        <div className="bg-stone-50 p-3 rounded-lg">
+        <div className="bg-gray-900 p-3 rounded-lg">
           <div className="flex items-center gap-2 mb-1">
             <Users size={14} className="text-blue-600" />
             <span className="text-xs font-medium text-stone-600">魅力</span>
@@ -203,7 +203,7 @@ export const CharactersPanel = () => {
       )}
 
       {/* 可任命/候选角色 */}
-      {filteredAvailable.length > 0 && (
+      {false && (
         <div>
           <h3 className="text-lg font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <Clock size={20} className="text-stone-500" />
