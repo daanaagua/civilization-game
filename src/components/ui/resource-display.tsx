@@ -80,12 +80,15 @@ type RateResourceKey = Extract<ResourceKey, keyof ResourceRates>;
 export const ResourceDisplay = ({ resource, showRate = false, className = '' }: ResourceDisplayProps) => {
   const { gameState } = useGameStore();
   const { resources, resourceRates, resourceLimits } = gameState;
+  const maxPopulation = useGameStore(state => state.maxPopulation);
   
   const config = resourceConfig[resource];
   const Icon = config.icon;
   const amount = resources[resource as keyof Resources];
   const rate = resource === 'housing' ? 0 : (resourceRates[resource as RateResourceKey] ?? 0);
-  const limit = resourceLimits[resource as keyof Resources];
+  const limit = resource === 'population'
+    ? maxPopulation
+    : (resourceLimits[resource as keyof Resources] as number);
   
   return (
     <Tooltip 
