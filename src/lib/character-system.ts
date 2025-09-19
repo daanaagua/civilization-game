@@ -8,7 +8,8 @@ import {
   CharacterBuff,
   CharacterEffect,
   HealthStatus,
-  CharacterUnlockCondition
+  CharacterUnlockCondition,
+  CharacterTrait
 } from '../types/character';
 import { 
   CHARACTER_TRAITS, 
@@ -124,16 +125,17 @@ export class CharacterSystem {
   }
 
   // 生成特性
-  private generateTraits() {
-    const traits = [];
-    const traitKeys = Object.keys(CHARACTER_TRAITS);
+  private generateTraits(): CharacterTrait[] {
+    const traits: CharacterTrait[] = [];
+    const traitKeys: string[] = Object.keys(CHARACTER_TRAITS);
     const maxTraits = CHARACTER_GENERATION_CONFIG.maxTraitsPerCharacter;
     
     for (let i = 0; i < maxTraits; i++) {
       if (Math.random() < CHARACTER_GENERATION_CONFIG.traitProbability) {
-        const randomTrait = traitKeys[Math.floor(Math.random() * traitKeys.length)];
-        if (!traits.find(t => t.id === randomTrait)) {
-          traits.push(CHARACTER_TRAITS[randomTrait]);
+        const randomTraitKey = traitKeys[Math.floor(Math.random() * traitKeys.length)];
+        const trait = CHARACTER_TRAITS[randomTraitKey];
+        if (trait && !traits.find(t => t.id === trait.id)) {
+          traits.push(trait);
         }
       }
     }
@@ -197,7 +199,8 @@ export class CharacterSystem {
     // 检查科技条件
     if (conditions.requiredTechnology) {
       for (const tech of conditions.requiredTechnology) {
-        if (!this.gameState.technologies.researched.includes(tech)) {
+        const techObj = this.gameState.technologies?.[tech as keyof typeof this.gameState.technologies];
+        if (!techObj || !techObj.researched) {
           return false;
         }
       }
@@ -205,15 +208,17 @@ export class CharacterSystem {
 
     // 检查建筑条件
     if (conditions.requiredBuilding) {
+      const buildingInstances = Object.values(this.gameState.buildings || {});
       for (const building of conditions.requiredBuilding) {
-        if (!this.gameState.buildings.some(b => b.type === building && b.isCompleted)) {
+        const hasBuilding = buildingInstances.some(b => b.buildingId === building && b.status === 'completed' && (b.count ?? 0) > 0);
+        if (!hasBuilding) {
           return false;
         }
       }
     }
 
     // 检查人口条件
-    if (conditions.requiredPopulation && this.gameState.population < conditions.requiredPopulation) {
+    if (conditions.requiredPopulation && (this.gameState.resources?.population ?? 0) < conditions.requiredPopulation) {
       return false;
     }
 

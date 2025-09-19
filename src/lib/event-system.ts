@@ -925,9 +925,9 @@ export class EventSystemManager {
 
   generateDomesticEvent(): GameEvent | null {
     const availableEvents = Object.values(DOMESTIC_EVENTS);
-    const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)];
+    const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)] as any;
     
-    if (this.checkEventRequirements(randomEvent.requirements)) {
+    if (this.checkEventRequirements((randomEvent as any).requirements)) {
       // 使用游戏时间（秒）记录上次触发点
       this.triggerState.lastDomesticEventGameTime = this.gameState.gameTime;
       if (!this.triggerState.firstDomesticEventTriggered) {
@@ -936,54 +936,120 @@ export class EventSystemManager {
       if (this.gameState?.settings?.eventsDebugEnabled) {
         console.log(`[Events][Domestic] generated: ${randomEvent.id}`);
       }
-      return {
-        ...randomEvent,
+
+      const choices = Array.isArray(randomEvent.choices)
+        ? randomEvent.choices.map((choice: any) => ({
+            id: String(choice.id),
+            text: String(choice.text),
+            description: choice.description ? String(choice.description) : undefined,
+            consequences: Array.isArray(choice.consequences)
+              ? choice.consequences.map((c: any) =>
+                  typeof c === 'string'
+                    ? c
+                    : c && typeof c === 'object'
+                    ? [c.type, c.target, c.value].filter((x: any) => x !== undefined).join(':')
+                    : String(c)
+                )
+              : undefined,
+            requirements: choice.requirements,
+            effectType: choice.effectType,
+            duration: choice.duration,
+            effects: choice.effects ?? null,
+          }))
+        : undefined;
+
+      const result: GameEvent = {
         id: `${randomEvent.id}_${Date.now()}`,
+        title: String(randomEvent.title),
+        description: String(randomEvent.description),
+        type: randomEvent.type as EventType,
+        priority: randomEvent.priority as any,
         timestamp: Date.now(),
+        duration: randomEvent.duration,
+        choices,
         isRead: false,
-        isResolved: false
+        isResolved: false,
+        category: randomEvent.category,
+        icon: randomEvent.icon,
       };
+
+      return result;
     }
     
     return null;
   }
 
   generateCharacterEvent(characterId: string): GameEvent | null {
-    const availableEvents = Object.values(CHARACTER_EVENTS).filter(event => 
+    const availableEvents = Object.values(CHARACTER_EVENTS).filter((event: any) => 
       !event.characterRequired || event.characterRequired === characterId
-    );
+    ) as any[];
     
     if (availableEvents.length === 0) return null;
     
-    const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)];
+    const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)] as any;
     
-    if (this.checkEventRequirements(randomEvent.requirements)) {
+    if (this.checkEventRequirements((randomEvent as any).requirements)) {
       this.triggerState.lastCharacterEventTime[characterId] = Date.now();
-      return {
-        ...randomEvent,
+
+      const choices = Array.isArray(randomEvent.choices)
+        ? randomEvent.choices.map((choice: any) => ({
+            id: String(choice.id),
+            text: String(choice.text),
+            description: choice.description ? String(choice.description) : undefined,
+            consequences: Array.isArray(choice.consequences)
+              ? choice.consequences.map((c: any) => (typeof c === 'string' ? c : String(c)))
+              : undefined,
+            requirements: choice.requirements,
+            effectType: choice.effectType,
+            duration: choice.duration,
+            effects: choice.effects ?? null,
+          }))
+        : undefined;
+
+      const result: GameEvent = {
         id: `${randomEvent.id}_${Date.now()}`,
+        title: String(randomEvent.title),
+        description: String(randomEvent.description),
+        type: randomEvent.type as EventType,
+        priority: randomEvent.priority as any,
         timestamp: Date.now(),
+        duration: randomEvent.duration,
+        choices,
         isRead: false,
-        isResolved: false
+        isResolved: false,
+        category: randomEvent.category,
+        icon: randomEvent.icon,
       };
+
+      return result;
     }
     
     return null;
   }
 
   generateAdventureEvent(): GameEvent | null {
-    const availableEvents = Object.values(ADVENTURE_EVENTS);
-    const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)];
+    const availableEvents = Object.values(ADVENTURE_EVENTS) as any[];
+    const randomEvent = availableEvents[Math.floor(Math.random() * availableEvents.length)] as any;
     
-    if (this.checkEventRequirements(randomEvent.requirements)) {
+    if (this.checkEventRequirements((randomEvent as any).requirements)) {
       this.triggerState.lastAdventureTime = Date.now();
-      return {
-        ...randomEvent,
+
+      const result: GameEvent = {
         id: `${randomEvent.id}_${Date.now()}`,
+        title: String(randomEvent.title),
+        description: String(randomEvent.description),
+        type: randomEvent.type as EventType,
+        priority: randomEvent.priority as any,
         timestamp: Date.now(),
+        duration: randomEvent.duration,
+        // 通知类事件一般没有 choices
         isRead: false,
-        isResolved: randomEvent.type === EventType.NOTIFICATION
+        isResolved: (randomEvent.type as EventType) === EventType.NOTIFICATION,
+        category: randomEvent.category,
+        icon: randomEvent.icon,
       };
+
+      return result;
     }
     
     return null;
@@ -1001,11 +1067,12 @@ export class EventSystemManager {
     
     // 检查资源要求
     if (requirements.resources) {
-      for (const [resource, requirement] of Object.entries(requirements.resources)) {
+      for (const [resource, requirement] of Object.entries(requirements.resources as Record<string, { min?: number; max?: number }>)) {
         const amount = this.gameState.resources[resource as keyof typeof this.gameState.resources];
+        const req = requirement as { min?: number; max?: number };
         if (typeof amount === 'number') {
-          if (requirement.min && amount < requirement.min) return false;
-          if (requirement.max && amount > requirement.max) return false;
+          if (req.min !== undefined && amount < req.min) return false;
+          if (req.max !== undefined && amount > req.max) return false;
         }
       }
     }

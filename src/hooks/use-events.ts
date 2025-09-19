@@ -5,6 +5,7 @@ import { GameEvent, EventType, EventPriority, EventChoice } from '@/components/f
 import { EventSystemManager, createEventSystem, EVENT_SYSTEM_VERSION } from '@/lib/event-system';
 import { useGameStore } from '@/lib/game-store';
 import { addTemporaryEffect, createTemporaryEffectFromEventChoice } from '@/lib/temporary-effects';
+import { CharacterType, CharacterPosition, CharacterSystemState, Character } from '@/types/character';
 
 // 历史事件存储键
 const EVENTS_STORAGE_KEY = 'civilization-game-events-history';
@@ -166,10 +167,99 @@ export function useEvents() {
       }
       
       // 2. 应用即时效果（兼容对象与字符串后果）
-      if (choice.consequences) {
+      if (choice.consequences && choice.consequences.length > 0) {
+        // 先扫描保底成功标记
+        const hasGuaranteedSuccess = choice.consequences.some(c => typeof c === 'string' && /^(guaranteed_success)\s*:\s*true$/i.test(c));
+        
         choice.consequences.forEach((consequence) => {
           if (!isConsequenceObject(consequence)) {
-            // 暂不处理字符串形式（如骰子判定等），未来可在此解析并应用
+            // 解析字符串形式后果
+            if (typeof consequence !== 'string') return;
+
+            // 1) 资源调整：如 "currency:-100" 或 "food:+50"
+            const resMatch = consequence.match(/^([a-zA-Z_]+)\s*:\s*([+-]?\d+)$/);
+            if (resMatch) {
+              const resKey = resMatch[1];
+              const delta = Number(resMatch[2]);
+              if (newGameState.resources && resKey in newGameState.resources) {
+                const curr = Number(newGameState.resources[resKey] ?? 0);
+                newGameState.resources[resKey] = Math.max(0, curr + delta);
+              }
+              return;
+            }
+
+            // 2) 骰子检定："dice_check:martial+1d6_vs_8"
+            const diceMatch = consequence.match(/^dice_check\s*:\s*([a-zA-Z_]+)\s*\+\s*(\d+)d(\d+)\s*_vs_\s*(\d+)$/i);
+            if (diceMatch) {
+              const attrKeyRaw = diceMatch[1].toLowerCase();
+              const diceCount = Number(diceMatch[2]);
+              const diceSides = Number(diceMatch[3]);
+              const target = Number(diceMatch[4]);
+
+              // 属性映射
+              const attrMap: Record<string, keyof Character['attributes']> = {
+                martial: 'force',
+                force: 'force',
+                intelligence: 'intelligence',
+                charisma: 'charisma',
+              };
+              const attrKey = attrMap[attrKeyRaw] ?? 'force';
+
+              // 寻找相关人物
+              const cs: CharacterSystemState | undefined = newGameState.characterSystem;
+              let subject: Character | undefined;
+
+              // 从事件元数据读取 characterRequired（事件系统可能携带该字段）
+              const characterRequired: string | undefined = (event as any)?.characterRequired;
+              if (cs && cs.characters) {
+                if (characterRequired === 'judge') {
+                  // 寻找职位为大法官的人物
+                  subject = Object.values(cs.characters).find((ch) => ch.position === CharacterPosition.CHIEF_JUDGE);
+                } else if (characterRequired === 'scholar') {
+                  // 优先取在职科研领袖
+                  const id = cs.activeCharacters?.[CharacterType.RESEARCH_LEADER] || null;
+                  subject = id ? cs.characters[id] : undefined;
+                  if (!subject) {
+                    subject = Object.values(cs.characters).find((ch) => ch.type === CharacterType.RESEARCH_LEADER);
+                  }
+                }
+
+                // 兜底：使用统治者，或任意一个人物
+                if (!subject) {
+                  const rulerId = cs.activeCharacters?.[CharacterType.RULER] || null;
+                  subject = rulerId ? cs.characters[rulerId] : Object.values(cs.characters)[0];
+                }
+              }
+
+              const baseAttr = subject?.attributes?.[attrKey] ?? 0;
+
+              // 掷骰
+              const rollOnce = (sides: number) => 1 + Math.floor(Math.random() * Math.max(1, sides));
+              let diceSum = 0;
+              for (let i = 0; i < diceCount; i++) diceSum += rollOnce(diceSides);
+
+              const total = baseAttr + diceSum;
+              const success = hasGuaranteedSuccess || total >= target;
+
+              // 生成结果通知事件
+              const title = '检定结果';
+              const desc = hasGuaranteedSuccess
+                ? `保底成功：判定视为成功（${attrKey}=${baseAttr}，骰子${diceCount}d${diceSides}未计算，对比目标${target}）`
+                : `判定${success ? '成功' : '失败'}：${attrKey}=${baseAttr}，掷出${diceCount}d${diceSides}=${diceSum}，总计${total}，目标${target}`;
+
+              addEvent({
+                title,
+                description: desc,
+                type: EventType.NOTIFICATION,
+                priority: success ? EventPriority.MEDIUM : EventPriority.LOW,
+                duration: 5000,
+                category: 'dice_check'
+              });
+
+              return;
+            }
+
+            // 3) 其他字符串后果（暂不处理）
             return;
           }
           const delta = Number(consequence.value ?? 0);

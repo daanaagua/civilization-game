@@ -1,13 +1,14 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { GameState, Resources, ResourceLimits, Technology, Building, GameEvent, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent, ResearchState } from '@/types/game';
-import { Character, CharacterPosition, CharacterSystem } from '@/types/character';
+import { GameState, Resources, ResourceLimits, Technology, Building, UIState, Notification, Buff, BuffSummary, GameEventInstance, PauseEvent, NonPauseEvent, ResearchState } from '@/types/game';
+import { GameEvent } from '@/types';
+import { Character, CharacterPosition } from '@/types/character';
 import { BuildingInstance, BuildingCategory } from '@/types/building';
 import { BUILDINGS, CHARACTERS, CORRUPTION_EVENTS, RANDOM_EVENTS, ACHIEVEMENTS, GAME_EVENTS } from './game-data';
 import { BUILDING_DEFINITIONS, BUILDING_CATEGORIES, getBuildingDefinition, getBuildingsByCategory, isBuildingUnlocked, getAvailableBuildings } from './building-data';
 import { BuildingSystem, BuildingUtils } from './building-system';
 import { TECHNOLOGIES, getTechnologyPrerequisites, canResearchTechnology } from './technology-data';
-import { getTriggeredEvents, canTriggerEvent, selectRandomEvent } from './events';
+import { getTriggeredEvents, selectRandomEvent } from './events';
 import { saveGameState, loadGameState, AutoSaveManager } from '@/lib/persistence';
 import { saveGameStateEnhanced, loadGameStateEnhanced, getSaveInfoEnhanced, hasSavedGameEnhanced, clearAllSaveData } from '@/lib/enhanced-persistence';
 import { ResourceManager, initializeResourceManager, getResourceManager } from './resource-manager';
@@ -437,9 +438,55 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     get maxPopulation() {
-      // 0住房时有一个免费人口，之后每个住房容纳一个人口
-      // 人口上限 = 住房资源 + 1（0住房时给予1点基础人口容量）
-      return get().gameState.resources.housing + 1;
+      // 动态根据当前建筑聚合住房容量：1 + Σ(容量 × 数量)
+      const state = get().gameState;
+      let totalHousing = 0;
+
+      Object.entries(state.buildings || {}).forEach(([key, entry]: [string, any]) => {
+        if (!entry) return;
+        // 如果有状态且未完成则不计
+        if (typeof entry.status === 'string' && entry.status !== 'completed') return;
+
+        // buildingId 以键为准（多数结构没有 entry.buildingId）
+        const buildingId = entry.buildingId || key;
+        const def = getBuildingDefinition(buildingId);
+        const count = typeof entry.count === 'number' ? entry.count : 1;
+
+        let capacityPerBuilding = 0;
+
+        // 1) effects.population_capacity
+        const effects: any[] = (def as any)?.effects || [];
+        if (Array.isArray(effects) && effects.length > 0) {
+          capacityPerBuilding = effects
+            .filter((e: any) => e?.type === 'population_capacity')
+            .reduce((sum: number, e: any) => sum + (Number(e?.value ?? e?.amount) || 0), 0);
+        }
+
+        // 2) produces.housing
+        if (!capacityPerBuilding) {
+          const prod = (def as any)?.produces;
+          capacityPerBuilding = Number(prod?.housing) || 0;
+        }
+
+        // 3) 更宽松的兜底：按建筑ID/分类判断住房类（含中英文关键词），默认 +2/栋
+        if (!capacityPerBuilding) {
+          const idStr = String((def as any)?.id || buildingId || '');
+          const cat = (def as any)?.category;
+          const isHousing =
+            cat === 'housing' ||
+            /house|hut|home|residence|dorm|cabin|tent|shack|cottage|lodging|quarters|住房|房屋|小屋|住所|居所|棚屋|帐篷|营帐|营地/i.test(idStr);
+          if (isHousing) capacityPerBuilding = 2;
+        }
+
+        totalHousing += capacityPerBuilding * count;
+      });
+
+      // 4) 若仍为 0，则回退到资源中的 housing 字段（兼容旧写入路径）
+      if (!totalHousing) {
+        totalHousing = Number((state.resources as any)?.housing) || 0;
+      }
+
+      return 1 + totalHousing;
     },
     
 
@@ -3179,10 +3226,14 @@ export const useGameStore = create<GameStore>()(persist(
         upgrades: []
       };
       
-      // 根据建筑效果提升住房资源（用于计算人口上限）
-      const __housingIncrease = (buildingDef.effects || [])
+      // 根据建筑效果与产出提升住房资源（用于计算人口上限）
+      const __housingIncreaseFromEffects = (buildingDef.effects || [])
         .filter(e => e.type === 'population_capacity')
         .reduce((sum, e) => sum + (e.value || 0), 0);
+      // 为兼容类型定义未包含 produces，使用宽松读取
+      const __bdAny = buildingDef as any;
+      const __housingIncreaseFromProduces = __bdAny?.produces?.housing ? Number(__bdAny.produces.housing) : 0;
+      const __housingIncrease = __housingIncreaseFromEffects + __housingIncreaseFromProduces;
 
       set((state) => ({
         gameState: {
@@ -3224,11 +3275,15 @@ export const useGameStore = create<GameStore>()(persist(
       const newBuildings = { ...gameState.buildings };
       delete newBuildings[instanceId];
 
-      // 折算住房容量减少
+      // 折算住房容量减少（effects.population_capacity + produces.housing）
       const __def = getBuildingDefinition(building.buildingId);
-      const __housingDecrease = (__def?.effects || [])
+      const __housingDecreaseFromEffects = (__def?.effects || [])
         .filter(e => e.type === 'population_capacity')
         .reduce((sum, e) => sum + (e.value || 0), 0);
+      // 为兼容类型定义未包含 produces，使用宽松读取
+      const __defAny = __def as any;
+      const __housingDecreaseFromProduces = __defAny?.produces?.housing ? Number(__defAny.produces.housing) : 0;
+      const __housingDecrease = __housingDecreaseFromEffects + __housingDecreaseFromProduces;
       
       set((state) => {
         const newHousing = Math.max(0, (state.gameState.resources.housing || 0) - __housingDecrease);
@@ -3948,9 +4003,59 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     calculateCharacterEffects: () => {
-      const { calculateCharacterEffects } = require('./character-system');
-      const activeCharacters = get().getActiveCharacters();
-      return calculateCharacterEffects(activeCharacters);
+      const activeList = (get().getActiveCharacters?.() || []) as any[];
+      // 动态加载常量，避免顶部改动 imports
+      const { CHARACTER_ATTRIBUTE_EFFECTS } = require('./character-data');
+      const effects: any[] = [];
+      
+      activeList.forEach((character: any) => {
+        if (!character) return;
+        const attrEffects = CHARACTER_ATTRIBUTE_EFFECTS?.[character.type];
+        const attrs = character.attributes || {};
+        
+        // 属性效果：武力/智力/魅力
+        if (attrEffects?.force && typeof attrs.force === 'number' && attrs.force > 0) {
+          const e = attrEffects.force;
+          effects.push({
+            type: e.type,
+            target: e.target,
+            value: e.value * attrs.force,
+            isPercentage: e.value < 1,
+            description: `${character.name}: ${String(e.description || '').replace('/点', ` x${attrs.force}`)}`
+          });
+        }
+        if (attrEffects?.intelligence && typeof attrs.intelligence === 'number' && attrs.intelligence > 0) {
+          const e = attrEffects.intelligence;
+          effects.push({
+            type: e.type,
+            target: e.target,
+            value: e.value * attrs.intelligence,
+            isPercentage: e.value < 1,
+            description: `${character.name}: ${String(e.description || '').replace('/点', ` x${attrs.intelligence}`)}`
+          });
+        }
+        if (attrEffects?.charisma && typeof attrs.charisma === 'number' && attrs.charisma > 0) {
+          const e = attrEffects.charisma;
+          effects.push({
+            type: e.type,
+            target: e.target,
+            value: e.value * attrs.charisma,
+            isPercentage: e.value < 1,
+            description: `${character.name}: ${String(e.description || '').replace('/点', ` x${attrs.charisma}`)}`
+          });
+        }
+        
+        // 特性效果
+        (character.traits || []).forEach((trait: any) => {
+          (trait?.effects || []).forEach((eff: any) => effects.push(eff));
+        });
+        // Buff 效果
+        (character.buffs || []).forEach((buff: any) => {
+          (buff?.effects || []).forEach((eff: any) => effects.push(eff));
+        });
+      });
+      
+      return effects;
     },
 
     updateCharacterSystem: () => {

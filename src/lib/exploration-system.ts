@@ -189,6 +189,17 @@ export class ExplorationSystem {
   private generateRandomEvent(): ExplorationEvent {
     const randomEvent = getRandomEvent();
     
+    if (!randomEvent) {
+      return {
+        id: `event_${Date.now()}`,
+        type: 'random',
+        title: '平安无事',
+        description: '这次探索未发生任何特殊事件。',
+        effects: {},
+        timestamp: Date.now()
+      };
+    }
+    
     return {
       id: `event_${Date.now()}`,
       type: 'random',
@@ -251,7 +262,7 @@ export class ExplorationSystem {
           case 'dungeon':
             return `你的探索队发现了一个神秘的地下城：${discovery.name}！这里似乎隐藏着宝藏和危险。`;
           case 'country':
-            return `你的探索队遇到了另一个文明：${discovery.name}！他们的实力看起来${discovery.difficulty > 50 ? '相当强大' : '较为温和'}。`;
+            return `你的探索队遇到了另一个文明：${discovery.name}！他们的实力看起来${(discovery as any).difficulty && (discovery as any).difficulty > 50 ? '相当强大' : '较为温和'}。`;
         }
       }
       

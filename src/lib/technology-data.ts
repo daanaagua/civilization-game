@@ -426,7 +426,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
 };
 
 // 科技分类配置
-export const TECHNOLOGY_CATEGORIES: Record<TechnologyCategory, { name: string; description: string; color: string }> = {
+export const TECHNOLOGY_CATEGORIES: Partial<Record<TechnologyCategory, { name: string; description: string; color: string }>> = {
   production: {
     name: '生产科技',
     description: '提升资源生产和储存能力',

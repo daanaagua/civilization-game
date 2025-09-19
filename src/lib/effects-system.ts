@@ -1,6 +1,7 @@
 'use client';
 
 import { GameState } from '@/types/game';
+import { BUILDING_DEFINITIONS } from './building-data';
 
 // 效果类型枚举
 export enum EffectType {
@@ -217,23 +218,66 @@ export class EffectsSystem {
 
     // 重新添加已研究科技的效果
     Object.entries(gameState.technologies).forEach(([techId, tech]) => {
-      if (tech.researched && tech.buffs) {
-        tech.buffs.forEach(buff => {
-          buff.effects.forEach(effect => {
+      if (tech.researched && Array.isArray(tech.effects)) {
+        tech.effects.forEach((effect, idx) => {
+          let mappedType: EffectType | null = null;
+          let isPercentage = false;
+
+          switch (effect.type) {
+            case 'resource_production_bonus':
+              mappedType = EffectType.RESOURCE_PRODUCTION;
+              isPercentage = true;
+              break;
+            case 'research_speed_bonus':
+              mappedType = EffectType.RESEARCH_SPEED;
+              isPercentage = true;
+              break;
+            case 'stability_bonus':
+              mappedType = EffectType.STABILITY;
+              isPercentage = false;
+              break;
+            case 'population_growth_bonus':
+              mappedType = EffectType.POPULATION_GROWTH;
+              isPercentage = true;
+              break;
+            case 'military_bonus':
+              mappedType = EffectType.MILITARY_STRENGTH;
+              isPercentage = true;
+              break;
+            case 'building_efficiency_bonus':
+              // 作为整体生产效率加成展示
+              mappedType = EffectType.RESOURCE_PRODUCTION;
+              isPercentage = true;
+              break;
+            case 'resource_storage_bonus':
+              // 储存上限效果由资源系统/状态处理，这里不加入效果面板，避免误导
+              mappedType = null;
+              break;
+            case 'global_bonus':
+            case 'resource_multiplier':
+              // 全局或倍率类效果由其他系统计算展示，这里暂不映射
+              mappedType = null;
+              break;
+            default:
+              // 未映射的类型先忽略，避免破坏 UI
+              mappedType = null;
+          }
+
+          if (mappedType !== null) {
             this.addEffect({
-              id: `tech_${techId}_${effect.type}`,
-              name: buff.name,
-              description: buff.description,
-              type: effect.type as EffectType,
-              value: effect.value,
-              isPercentage: effect.isPercentage,
+              id: `tech_${techId}_${idx}_${effect.type}`,
+              name: tech.name,
+              description: (effect as any).description ?? `${effect.type}${(effect as any).target ? ` (${(effect as any).target})` : ''}`,
+              type: mappedType,
+              value: (effect as any).value,
+              isPercentage,
               source: {
                 type: EffectSourceType.TECHNOLOGY,
                 id: techId,
                 name: tech.name
               }
             });
-          });
+          }
         });
       }
     });
@@ -246,24 +290,97 @@ export class EffectsSystem {
 
     // 重新添加建筑效果
     Object.entries(gameState.buildings).forEach(([buildingId, building]) => {
-      if (building.count > 0 && building.buffs) {
-        building.buffs.forEach(buff => {
-          buff.effects.forEach(effect => {
-            this.addEffect({
-              id: `building_${buildingId}_${effect.type}`,
-              name: `${buff.name} (${building.count}个)`,
-              description: buff.description,
-              type: effect.type as EffectType,
-              value: effect.value * building.count,
-              isPercentage: effect.isPercentage,
-              source: {
-                type: EffectSourceType.BUILDING,
-                id: buildingId,
-                name: building.name
-              }
-            });
+      if (building.count > 0) {
+        const def = BUILDING_DEFINITIONS[building.buildingId];
+        if (!def) return;
+
+        // 处理定义中的 effects（通用数值类效果）
+        if (Array.isArray(def.effects)) {
+          def.effects.forEach((effect, idx) => {
+            let mappedType: EffectType | null = null;
+            let isPercentage = !!effect.isPercentage;
+
+            switch (effect.type) {
+              case 'resource_production':
+                mappedType = EffectType.RESOURCE_PRODUCTION;
+                // 如果未显式标记，则默认为百分比加成
+                if (effect.isPercentage === undefined) isPercentage = true;
+                break;
+              case 'research_bonus':
+                mappedType = EffectType.RESEARCH_SPEED;
+                if (effect.isPercentage === undefined) isPercentage = true;
+                break;
+              case 'stability_bonus':
+                mappedType = EffectType.STABILITY;
+                break;
+              case 'defense_bonus':
+                mappedType = EffectType.MILITARY_STRENGTH;
+                break;
+              case 'worker_efficiency':
+                mappedType = EffectType.RESOURCE_PRODUCTION;
+                if (effect.isPercentage === undefined) isPercentage = true;
+                break;
+              case 'resource_storage':
+              case 'population_capacity':
+                // 展示层忽略这两类，实际数值由其他系统处理
+                mappedType = null;
+                break;
+              default:
+                mappedType = null;
+            }
+
+            if (mappedType !== null) {
+              this.addEffect({
+                id: `building_${buildingId}_${idx}_${effect.type}`,
+                name: `${def.name} (${building.count}个)`,
+                description: effect.description ?? `${effect.type}${effect.target ? ` (${effect.target})` : ''}`,
+                type: mappedType,
+                value: effect.value * building.count,
+                isPercentage,
+                source: {
+                  type: EffectSourceType.BUILDING,
+                  id: buildingId,
+                  name: def.name
+                }
+              });
+            }
           });
-        });
+        }
+
+        // 可选：将 specialEffects 也映射为展示效果
+        if (Array.isArray(def.specialEffects)) {
+          def.specialEffects.forEach((se, idx) => {
+            let mappedType: EffectType | null = null;
+            let isPercentage = false;
+            switch (se.type) {
+              case 'stability':
+                mappedType = EffectType.STABILITY; break;
+              case 'research_speed':
+                mappedType = EffectType.RESEARCH_SPEED; isPercentage = true; break;
+              case 'defense':
+                mappedType = EffectType.MILITARY_STRENGTH; break;
+              case 'population_growth':
+                mappedType = EffectType.POPULATION_GROWTH; break;
+              default:
+                mappedType = null;
+            }
+            if (mappedType !== null) {
+              this.addEffect({
+                id: `building_${buildingId}_special_${idx}_${se.type}`,
+                name: `${def.name} (${building.count}个)`,
+                description: se.description,
+                type: mappedType,
+                value: se.value * building.count,
+                isPercentage,
+                source: {
+                  type: EffectSourceType.BUILDING,
+                  id: buildingId,
+                  name: def.name
+                }
+              });
+            }
+          });
+        }
       }
     });
   }

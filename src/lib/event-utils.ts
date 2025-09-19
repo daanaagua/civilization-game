@@ -12,12 +12,16 @@ export function isResourceUnlocked(resourceKey: string, gameState: GameState): b
   const config = resourceConfig[resourceKey as keyof typeof resourceConfig];
   
   // 如果没有配置或没有科技要求，则认为已解锁
-  if (!config || !config.requiresTech) {
+  if (!config || !(config as any).requiresTech) {
     return true;
   }
   
-  // 检查是否已研究所需科技
-  return gameState.technologies.researched.includes(config.requiresTech);
+  // 检查是否已研究所需科技（支持字符串或字符串数组）
+  const req = (config as any).requiresTech as string | string[];
+  if (Array.isArray(req)) {
+    return req.every((techId) => Boolean(gameState.technologies[techId]?.researched));
+  }
+  return Boolean(gameState.technologies[req]?.researched);
 }
 
 /**

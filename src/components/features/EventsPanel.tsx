@@ -32,6 +32,13 @@ export interface EventChoice {
   disabled?: boolean;
   effectType?: 'immediate' | 'buff' | 'mixed'; // 效果类型
   duration?: number; // buff效果持续时间（天）
+  // 新增：与事件系统保持一致的可选效果负载
+  effects?: {
+    type: 'resource_production' | 'resource_income' | 'resource_percentage' | 'resource_per_population';
+    target?: string;
+    modifier?: number;
+    duration?: number;
+  } | null;
 }
 
 // 事件接口

@@ -225,6 +225,8 @@ export class BuildingSystem {
     const instance: BuildingInstance = {
       id: instanceId,
       buildingId,
+      // 新增：实例数量以请求数量为初始值
+      count: quantity,
       status: 'building',
       constructionProgress: 0,
       constructionStartTime: this.gameState.gameTime,

@@ -1,5 +1,5 @@
 import { Building, Technology, Achievement } from '@/types/game';
-import { Character } from '@/types/character';
+import { Character, CharacterType, CharacterPosition, HealthStatus } from '@/types/character';
 
 // 建筑数据
 export const BUILDINGS: Record<string, Building> = {
@@ -252,14 +252,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'fire_making',
     name: '生火',
     description: '掌握钻木取火的方法，为部落带来温暖和光明。+10%食物效率，-5%食物腐烂，解锁烹饪。',
-    category: 'survival',
+    category: 'production',
     cost: { wood: 10 },
     researchTime: 5, // 5秒
     unlocked: true,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.1 },
-      { type: 'unlock_building', target: 'housing', value: 1 }
+      { type: 'resource_multiplier', target: 'food', value: 1.1, description: '将 food 的倍率调整为 1.1' },
+      { type: 'global_bonus', target: 'housing', value: 1, description: '全局加成（原解锁已迁移：housing）：1' }
     ],
   },
   
@@ -267,15 +267,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'settlement',
     name: '定居点',
     description: '建立固定的居住地点，解锁住房建筑，+5稳定度。',
-    category: 'survival',
+    category: 'production',
     cost: { wood: 20, stone: 10 },
     researchTime: 8, // 8秒
     requires: ['fire_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'stability_bonus', target: 'stability', value: 5 },
-      { type: 'unlock_building', target: 'shelter', value: 1 }
+      { type: 'stability_bonus', target: 'stability', value: 5, description: '稳定度加成：5' },
+      { type: 'global_bonus', target: 'shelter', value: 1, description: '全局加成（原解锁已迁移：shelter）：1' }
     ],
   },
   
@@ -283,15 +283,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'stone_gathering',
     name: '采集石头',
     description: '学会有效采集和加工石料，解锁采石场，+20%石料获取效率。',
-    category: 'crafting',
+    category: 'production',
     cost: { wood: 15 },
     researchTime: 6, // 6秒
     requires: ['fire_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'stone', value: 1.2 },
-      { type: 'unlock_building', target: 'quarry', value: 1 }
+      { type: 'resource_multiplier', target: 'stone', value: 1.2, description: '将 stone 的倍率调整为 1.2' },
+      { type: 'global_bonus', target: 'quarry', value: 1, description: '全局加成（原解锁已迁移：quarry）：1' }
     ],
   },
   
@@ -299,15 +299,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'logging',
     name: '伐木',
     description: '掌握系统性的伐木技术，解锁伐木场，+20%木材获取效率。',
-    category: 'survival',
+    category: 'production',
     cost: { wood: 10 },
     researchTime: 5, // 5秒
     requires: ['fire_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'wood', value: 1.2 },
-      { type: 'unlock_building', target: 'logging_camp', value: 1 }
+      { type: 'resource_multiplier', target: 'wood', value: 1.2, description: '将 wood 的倍率调整为 1.2' },
+      { type: 'global_bonus', target: 'logging_camp', value: 1, description: '全局加成（原解锁已迁移：logging_camp）：1' }
     ],
   },
   
@@ -315,15 +315,17 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'hunting',
     name: '狩猎技术',
     description: '学会制作简单陷阱和狩猎工具，提高食物获取效率。',
-    category: 'survival',
+    category: 'production',
     cost: { food: 20 },
     researchTime: 10, // 10秒
     requires: ['fire_making'],
-    unlocks: ['hunting_ground'],
+    unlocks: [
+      { type: 'building', id: 'hunting_ground', name: '狩猎场' }
+    ],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.2 }
+      { type: 'resource_multiplier', target: 'food', value: 1.2, description: '将 food 的倍率调整为 1.2' }
     ],
   },
   
@@ -331,15 +333,17 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'gathering',
     name: '采集技术',
     description: '学会识别可食用植物和高效采集方法。',
-    category: 'survival',
+    category: 'production',
     cost: { food: 15 },
     researchTime: 8, // 8秒
     requires: ['fire_making'],
-    unlocks: ['gathering_hut'],
+    unlocks: [
+      { type: 'building', id: 'gathering_hut', name: '采集小屋' }
+    ],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.1 }
+      { type: 'resource_multiplier', target: 'food', value: 1.1, description: '将 food 的倍率调整为 1.1' }
     ],
   },
   
@@ -348,15 +352,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'tool_making',
     name: '制造工具',
     description: '学会制作基础工具，解锁工坊、工匠职业、工具资源。',
-    category: 'crafting',
+    category: 'production',
     cost: { wood: 20, stone: 15 },
     researchTime: 12, // 12秒
     requires: ['stone_gathering', 'logging'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'workshop', value: 1 },
-      { type: 'unlock_resource', target: 'tools', value: 1 }
+      { type: 'global_bonus', target: 'workshop', value: 1, description: '全局加成（原解锁已迁移：workshop）：1' },
+      { type: 'global_bonus', target: 'tools', value: 1, description: '全局加成（原解锁已迁移：tools）：1' }
     ],
   },
   
@@ -364,15 +368,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'primitive_storage',
     name: '原始贮存',
     description: '建造储存设施，解锁储藏点，+50%储存上限。',
-    category: 'crafting',
+    category: 'production',
     cost: { wood: 25, stone: 20 },
     researchTime: 15, // 15秒
     requires: ['tool_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'storage_bonus', target: 'storage', value: 1.5 },
-      { type: 'unlock_building', target: 'storage', value: 1 }
+      { type: 'resource_storage_bonus', target: 'storage', value: 1.5, description: '提升 storage 的储存：1.5' },
+      { type: 'global_bonus', target: 'storage', value: 1, description: '全局加成（原解锁已迁移：storage）：1' }
     ],
   },
   
@@ -380,14 +384,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'stone_tool_improvement',
     name: '石器改良',
     description: '改进石器制作工艺，+25%工具产出效率。',
-    category: 'crafting',
+    category: 'production',
     cost: { wood: 15, stone: 25 },
     researchTime: 240, // 8个月
     requires: ['tool_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'tools', value: 1.25 }
+      { type: 'resource_multiplier', target: 'tools', value: 1.25, description: '将 tools 的倍率调整为 1.25' }
     ],
   },
   
@@ -395,14 +399,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'bone_crafting',
     name: '骨器制作',
     description: '利用动物骨骼制作精细工具，解锁骨器资源。',
-    category: 'crafting',
+    category: 'production',
     cost: { wood: 20, stone: 10 },
     researchTime: 270, // 9个月
     requires: ['tool_making', 'animal_husbandry'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_advanced_tools', target: 'bone_tools', value: 1 }
+      { type: 'global_bonus', target: 'bone_tools', value: 1, description: '全局加成（原解锁已迁移：bone_tools）：1' }
     ],
   },
   
@@ -412,16 +416,18 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'woodworking',
     name: '木工技术',
     description: '掌握木材加工技术，制作更精细的木制工具。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 30, wood: 15, tools: 2 },
     researchTime: 15, // 15秒
     requires: ['tool_making'],
-    unlocks: ['logging_camp'],
+    unlocks: [
+      { type: 'building', id: 'logging_camp', name: '伐木场' }
+    ],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'wood', value: 1.3 },
-      { type: 'improve_tool_quality', target: 'tools', value: 1.2 }
+      { type: 'resource_multiplier', target: 'wood', value: 1.3, description: '将 wood 的倍率调整为 1.3' },
+      { type: 'resource_multiplier', target: 'tools', value: 1.2, description: '将 tools 的倍率调整为 1.2' }
     ],
   },
   
@@ -430,15 +436,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'primitive_agriculture',
     name: '原始农业',
     description: '学会基础的种植技术，解锁农田、农民职业。',
-    category: 'agriculture',
+    category: 'production',
     cost: { wood: 15, stone: 5 },
     researchTime: 20, // 20秒
     requires: ['settlement'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'farm', value: 1 },
-      { type: 'unlock_job', target: 'farmer', value: 1 }
+      { type: 'global_bonus', target: 'farm', value: 1, description: '全局加成（原解锁已迁移：farm）：1' },
+      { type: 'global_bonus', target: 'farmer', value: 1, description: '全局加成（原解锁已迁移：farmer）：1' }
     ],
   },
   
@@ -446,15 +452,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'primitive_husbandry',
     name: '原始畜牧',
     description: '学会驯养动物，解锁牧场、家畜资源。',
-    category: 'agriculture',
+    category: 'production',
     cost: { wood: 20, stone: 10, food: 5 },
     researchTime: 240, // 8个月
     requires: ['primitive_agriculture'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'pasture', value: 1 },
-      { type: 'unlock_resource', target: 'livestock', value: 1 }
+      { type: 'global_bonus', target: 'pasture', value: 1, description: '全局加成（原解锁已迁移：pasture）：1' },
+      { type: 'global_bonus', target: 'livestock', value: 1, description: '全局加成（原解锁已迁移：livestock）：1' }
     ],
   },
   
@@ -462,14 +468,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'seed_selection',
     name: '种子选育',
     description: '通过选育改良种子，+15%农田产量。',
-    category: 'agriculture',
+    category: 'production',
     cost: { wood: 10, food: 15 },
     researchTime: 180, // 6个月
     requires: ['primitive_agriculture'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.15 }
+      { type: 'resource_multiplier', target: 'food', value: 1.15, description: '将 food 的倍率调整为 1.15' }
     ],
   },
   
@@ -477,15 +483,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'livestock_domestication',
     name: '家畜驯化',
     description: '改进驯养技术，+20%牧场产量，解锁新家畜品种。',
-    category: 'agriculture',
+    category: 'production',
     cost: { wood: 15, food: 20 },
     researchTime: 300, // 10个月
     requires: ['primitive_husbandry'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'livestock', value: 1.2 },
-      { type: 'unlock_advanced_livestock', target: 'advanced_livestock', value: 1 }
+      { type: 'resource_multiplier', target: 'livestock', value: 1.2, description: '将 livestock 的倍率调整为 1.2' },
+      { type: 'global_bonus', target: 'advanced_livestock', value: 1, description: '全局加成（原解锁已迁移：advanced_livestock）：1' }
     ],
   },
   
@@ -493,15 +499,17 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'agriculture',
     name: '农业技术',
     description: '学会种植作物，获得稳定的食物来源。',
-    category: 'agriculture',
+    category: 'production',
     cost: { food: 50, tools: 5 },
     researchTime: 180,
     requires: ['tool_making'],
-    unlocks: ['farm', 'granary'],
+    unlocks: [
+      { type: 'building', id: 'farm', name: '农田' }
+    ],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.5 }
+      { type: 'resource_multiplier', target: 'food', value: 1.5, description: '将 food 的倍率调整为 1.5' }
     ],
   },
   
@@ -509,14 +517,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'animal_husbandry',
     name: '畜牧业',
     description: '学会驯养动物，获得肉类、奶制品和皮毛。',
-    category: 'agriculture',
+    category: 'production',
     cost: { food: 80, tools: 8 },
     researchTime: 240,
     requires: ['agriculture', 'hunting'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.3 }
+      { type: 'resource_multiplier', target: 'food', value: 1.3, description: '将 food 的倍率调整为 1.3' }
     ],
   },
   
@@ -532,8 +540,8 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_weapon', target: 'club', value: 1 },
-      { type: 'unlock_weapon', target: 'stone_axe', value: 1 }
+      { type: 'global_bonus', target: 'club', value: 1, description: '全局加成（原解锁已迁移：club）：1' },
+      { type: 'global_bonus', target: 'stone_axe', value: 1, description: '全局加成（原解锁已迁移：stone_axe）：1' }
     ],
   },
   
@@ -548,8 +556,8 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_weapon', target: 'sling', value: 1 },
-      { type: 'unlock_weapon', target: 'javelin', value: 1 }
+      { type: 'global_bonus', target: 'sling', value: 1, description: '全局加成（原解锁已迁移：sling）：1' },
+      { type: 'global_bonus', target: 'javelin', value: 1, description: '全局加成（原解锁已迁移：javelin）：1' }
     ],
   },
   
@@ -564,8 +572,8 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'hunting_efficiency', target: 'hunting', value: 1.25 },
-      { type: 'unlock_building', target: 'trap', value: 1 }
+      { type: 'resource_multiplier', target: 'food', value: 1.25, description: '效果：hunting_efficiency -> hunting = 1.25' },
+      { type: 'global_bonus', target: 'trap', value: 1, description: '全局加成（原解锁已迁移：trap）：1' }
     ],
   },
   
@@ -580,7 +588,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_military', target: 'military', value: 1 }
+      { type: 'global_bonus', target: 'military', value: 1, description: '全局加成（原解锁已迁移：military）：1' }
     ],
   },
   
@@ -589,15 +597,17 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'crafting',
     name: '手工艺',
     description: '学会制作各种日用品和精细工具。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 40, wood: 20, stone: 15, tools: 3 },
     researchTime: 150,
     requires: ['woodworking'],
-    unlocks: ['workshop'],
+    unlocks: [
+      { type: 'building', id: 'workshop', name: '工坊' }
+    ],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_advanced_tools', target: 'tools', value: 1 }
+      { type: 'global_bonus', target: 'tools', value: 1, description: '全局加成（原解锁已迁移：tools）：1' }
     ],
   },
   
@@ -605,11 +615,13 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'pottery',
     name: '陶器制作',
     description: '学会制作陶器，改善储存和烹饪条件。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 60, stone: 30, tools: 5 },
     researchTime: 200,
     requires: ['crafting'],
-    unlocks: ['pottery_kiln'],
+    unlocks: [
+      { type: 'building', id: 'pottery_kiln', name: '陶窑' }
+    ],
     unlocked: false,
     researched: false,
   },
@@ -619,14 +631,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'basic_shelter',
     name: '基础庇护所',
     description: '学会建造简单的遮风挡雨建筑，解锁小屋。',
-    category: 'construction',
+    category: 'production',
     cost: { wood: 10, stone: 5 },
     researchTime: 120, // 4个月
     requires: ['fire_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'hut', value: 1 }
+      { type: 'global_bonus', target: 'hut', value: 1, description: '全局加成（原解锁已迁移：hut）：1' }
     ],
   },
   
@@ -634,15 +646,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'advanced_construction',
     name: '高级建筑',
     description: '学会更复杂的建筑技术，解锁大型建筑。',
-    category: 'construction',
+    category: 'production',
     cost: { wood: 25, stone: 15, tools: 5 },
     researchTime: 240, // 8个月
     requires: ['basic_shelter', 'tool_making'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'longhouse', value: 1 },
-      { type: 'unlock_building', target: 'storage_pit', value: 1 }
+      { type: 'global_bonus', target: 'longhouse', value: 1, description: '全局加成（原解锁已迁移：longhouse）：1' },
+      { type: 'global_bonus', target: 'storage_pit', value: 1, description: '全局加成（原解锁已迁移：storage_pit）：1' }
     ],
   },
   
@@ -650,15 +662,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'defensive_structures',
     name: '防御建筑',
     description: '学会建造防御工事，解锁栅栏、瞭望塔。',
-    category: 'construction',
+    category: 'production',
     cost: { wood: 30, stone: 20, tools: 8 },
     researchTime: 300, // 10个月
     requires: ['advanced_construction'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'palisade', value: 1 },
-      { type: 'unlock_building', target: 'watchtower', value: 1 }
+      { type: 'global_bonus', target: 'palisade', value: 1, description: '全局加成（原解锁已迁移：palisade）：1' },
+      { type: 'global_bonus', target: 'watchtower', value: 1, description: '全局加成（原解锁已迁移：watchtower）：1' }
     ],
   },
   
@@ -666,14 +678,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'construction',
     name: '建筑技术',
     description: '学会建造更复杂的建筑结构。',
-    category: 'construction',
+    category: 'production',
     cost: { food: 70, wood: 40, stone: 30, tools: 8 },
     researchTime: 300,
     requires: ['crafting'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'building_unlock', target: 'advanced_buildings', value: 1 }
+      { type: 'global_bonus', target: 'advanced_buildings', value: 1, description: '全局加成（原类型 building_unlock，目标 advanced_buildings）：1' }
     ],
   },
   
@@ -682,15 +694,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'proto_writing',
     name: '原始文字',
     description: '发明简单的符号记录系统，解锁基础记录功能。',
-    category: 'knowledge',
+    category: 'research',
     cost: { wood: 40, stone: 30, tools: 15 },
     researchTime: 720, // 2年
     requires: ['tribal_law'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_writing', target: 'proto_writing', value: 1 },
-      { type: 'knowledge_preservation', target: 'knowledge', value: 1.1 }
+      { type: 'global_bonus', target: 'proto_writing', value: 1, description: '全局加成（原解锁已迁移：proto_writing）：1' },
+      { type: 'global_bonus', target: 'knowledge', value: 1.1, description: '全局加成（原类型 knowledge_preservation，目标 knowledge）：1.1' }
     ],
   },
   
@@ -698,15 +710,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'record_keeping',
     name: '记录保存',
     description: '建立系统的记录保存制度，+20%科技研发速度。',
-    category: 'knowledge',
+    category: 'research',
     cost: { wood: 50, stone: 40, tools: 20 },
     researchTime: 900, // 2.5年
     requires: ['proto_writing'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'research_speed_bonus', target: 'research', value: 1.2 },
-      { type: 'unlock_building', target: 'archive', value: 1 }
+      { type: 'research_speed_bonus', target: 'research', value: 1.2, description: '研究速度加成：1.2' },
+      { type: 'global_bonus', target: 'archive', value: 1, description: '全局加成（原解锁已迁移：archive）：1' }
     ],
   },
   
@@ -714,15 +726,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'number_concept',
     name: '数字概念',
     description: '发展抽象数字概念，解锁计数系统，+15%资源管理效率。',
-    category: 'knowledge',
+    category: 'research',
     cost: { wood: 35, stone: 25, tools: 10 },
     researchTime: 600, // 1.67年
     requires: ['proto_writing'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_counting', target: 'counting_system', value: 1 },
-      { type: 'resource_efficiency', target: 'all_resources', value: 1.15 }
+      { type: 'global_bonus', target: 'counting_system', value: 1, description: '全局加成（原解锁已迁移：counting_system）：1' },
+      { type: 'global_bonus', target: 'all_resources', value: 1.15, description: '全局加成（原类型 resource_efficiency，目标 all_resources）：1.15' }
     ],
   },
   
@@ -731,14 +743,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'copper_working',
     name: '铜器制作',
     description: '学会冶炼和加工铜，制作铜制工具和装饰品。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 80, stone: 40, tools: 10 },
     researchTime: 300,
     requires: ['pottery', 'construction'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'tools', value: 1.3 }
+      { type: 'resource_multiplier', target: 'tools', value: 1.3, description: '将 tools 的倍率调整为 1.3' }
     ],
   },
   
@@ -746,14 +758,14 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'bronze_working',
     name: '青铜器制作',
     description: '掌握青铜合金技术，制作更坚固的工具和武器。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 120, stone: 60, tools: 15 },
     researchTime: 400,
     requires: ['copper_working'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'tools', value: 1.5 }
+      { type: 'resource_multiplier', target: 'tools', value: 1.5, description: '将 tools 的倍率调整为 1.5' }
     ],
   },
   
@@ -761,15 +773,18 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'iron_working',
     name: '铁器制作',
     description: '掌握铁器制作技术，进入铁器时代。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 200, stone: 100, tools: 25 },
     researchTime: 600,
     requires: ['bronze_working'],
-    unlocks: ['iron_mine', 'forge'],
+    unlocks: [
+      { type: 'building', id: 'iron_mine', name: '铁矿' },
+      { type: 'building', id: 'forge', name: '锻造坊' }
+    ],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'tools', value: 2.0 }
+      { type: 'resource_multiplier', target: 'tools', value: 2.0, description: '将 tools 的倍率调整为 2.0' }
     ],
   },
   
@@ -785,8 +800,8 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_character', target: 'chieftain', value: 1 },
-      { type: 'unlock_inheritance', target: 'strength_inheritance', value: 1 }
+      { type: 'global_bonus', target: 'chieftain', value: 1, description: '全局加成（原解锁已迁移：chieftain）：1' },
+      { type: 'global_bonus', target: 'strength_inheritance', value: 1, description: '全局加成（原解锁已迁移：strength_inheritance）：1' }
     ],
   },
   
@@ -801,8 +816,8 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_character', target: 'elder', value: 1 },
-      { type: 'research_speed_bonus', target: 'research', value: 1.15 }
+      { type: 'global_bonus', target: 'elder', value: 1, description: '全局加成（原解锁已迁移：elder）：1' },
+      { type: 'research_speed_bonus', target: 'research', value: 1.15, description: '研究速度加成：1.15' }
     ],
   },
   
@@ -817,8 +832,8 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'stability_bonus', target: 'stability', value: 10 },
-      { type: 'unlock_legal_system', target: 'basic_law', value: 1 }
+      { type: 'stability_bonus', target: 'stability', value: 10, description: '稳定度加成：10' },
+      { type: 'global_bonus', target: 'basic_law', value: 1, description: '全局加成（原解锁已迁移：basic_law）：1' }
     ],
   },
   
@@ -834,12 +849,12 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_governance', target: 'governance', value: 1 }
+      { type: 'global_bonus', target: 'governance', value: 1, description: '全局加成（原解锁已迁移：governance）：1' }
     ],
   },
   
-  legal_code: {
-    id: 'legal_code',
+  legal_framework: {
+    id: 'legal_framework',
     name: '法律法典',
     description: '建立基本的法律制度，规范社会秩序。',
     category: 'social',
@@ -849,7 +864,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_corruption_system', target: 'corruption', value: 1 }
+      { type: 'global_bonus', target: 'corruption', value: 1, description: '全局加成（原解锁已迁移：corruption）：1' }
     ],
   },
   
@@ -858,16 +873,16 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     id: 'organized_religion',
     name: '有组织宗教',
     description: '建立正式的宗教体系和仪式，提高文化凝聚力。',
-    category: 'culture',
+    category: 'social',
     cost: { food: 100, wood: 50, stone: 30, tools: 10 },
     researchTime: 450,
     requires: ['proto_writing', 'tribal_law'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'temple', value: 1 },
-      { type: 'stability_bonus', target: 'stability', value: 15 },
-      { type: 'culture_boost', target: 'culture', value: 25 }
+      { type: 'global_bonus', target: 'temple', value: 1, description: '全局加成（原解锁已迁移：temple）：1' },
+      { type: 'stability_bonus', target: 'stability', value: 15, description: '稳定度加成：15' },
+      { type: 'global_bonus', target: 'culture', value: 25, description: '全局加成（原类型 culture_boost，目标 culture）：25' }
     ],
   },
   
@@ -882,9 +897,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'government_hall', value: 1 },
-      { type: 'population_limit_increase', target: 'population', value: 50 },
-      { type: 'governance_efficiency', target: 'governance', value: 1.15 }
+      { type: 'global_bonus', target: 'government_hall', value: 1, description: '全局加成（原解锁已迁移：government_hall）：1' },
+      { type: 'resource_multiplier', target: 'population', value: 50, description: '将 population 的倍率调整为 50' },
+      { type: 'global_bonus', target: 'governance', value: 1.15, description: '全局加成（原类型 governance_efficiency，目标 governance）：1.15' }
     ],
   },
   
@@ -899,26 +914,26 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_unit', target: 'bronze_warrior', value: 1 },
-      { type: 'military_strength_bonus', target: 'military', value: 1.4 },
-      { type: 'defense_bonus', target: 'defense', value: 1.25 }
+      { type: 'global_bonus', target: 'bronze_warrior', value: 1, description: '全局加成（原解锁已迁移：bronze_warrior）：1' },
+      { type: 'global_bonus', target: 'military', value: 1.4, description: '全局加成（原类型 military_strength_bonus，目标 military）：1.4' },
+      { type: 'global_bonus', target: 'defense', value: 1.25, description: '全局加成（原类型 defense_bonus，目标 defense）：1.25' }
     ],
   },
   
-  advanced_agriculture: {
-    id: 'advanced_agriculture',
-    name: '高级农业',
+  improved_agriculture: {
+    id: 'improved_agriculture',
+    name: '改良农业',
     description: '发展更先进的农业技术和灌溉系统。',
-    category: 'agriculture',
+    category: 'production',
     cost: { food: 100, wood: 60, stone: 30, tools: 20 },
     researchTime: 420,
     requires: ['seed_selection', 'bronze_working'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'food', value: 1.3 },
-      { type: 'unlock_building', target: 'irrigation_system', value: 1 },
-      { type: 'population_growth_bonus', target: 'population', value: 1.15 }
+      { type: 'resource_multiplier', target: 'food', value: 1.3, description: '将 food 的倍率调整为 1.3' },
+      { type: 'global_bonus', target: 'irrigation_system', value: 1, description: '全局加成（原解锁已迁移：irrigation_system）：1' },
+      { type: 'population_growth_bonus', target: 'population', value: 1.15, description: '人口增长加成：1.15' }
     ],
   },
   
@@ -933,25 +948,25 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'unlock_building', target: 'marketplace', value: 1 },
-      { type: 'resource_income_bonus', target: 'all_resources', value: 1.2 },
-      { type: 'culture_boost', target: 'culture', value: 15 }
+      { type: 'global_bonus', target: 'marketplace', value: 1, description: '全局加成（原解锁已迁移：marketplace）：1' },
+      { type: 'global_bonus', target: 'all_resources', value: 1.2, description: '全局加成（原类型 resource_income_bonus，目标 all_resources）：1.2' },
+      { type: 'global_bonus', target: 'culture', value: 15, description: '全局加成（原类型 culture_boost，目标 culture）：15' }
     ],
   },
   
-  advanced_metallurgy: {
-    id: 'advanced_metallurgy',
-    name: '高级冶金',
+  improved_metallurgy: {
+    id: 'improved_metallurgy',
+    name: '改良冶金',
     description: '改进金属冶炼技术，提高工具质量。',
-    category: 'crafting',
+    category: 'production',
     cost: { food: 140, wood: 70, stone: 60, tools: 25 },
     researchTime: 540,
     requires: ['bronze_working', 'advanced_construction'],
     unlocked: false,
     researched: false,
     effects: [
-      { type: 'resource_multiplier', target: 'tools', value: 1.4 },
-      { type: 'unlock_advanced_tools', target: 'advanced_bronze_tools', value: 1 }
+      { type: 'resource_multiplier', target: 'tools', value: 1.4, description: '将 tools 的倍率调整为 1.4' },
+      { type: 'global_bonus', target: 'advanced_bronze_tools', value: 1, description: '全局加成（原解锁已迁移：advanced_bronze_tools）：1' }
     ],
   },
   
@@ -959,16 +974,16 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       id: 'written_language',
       name: '文字语言',
       description: '发展完整的文字系统，促进知识传播。',
-      category: 'knowledge',
+      category: 'research',
       cost: { food: 120, wood: 80, stone: 50, tools: 15 },
       researchTime: 720,
       requires: ['record_keeping', 'organized_religion'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'research_speed_bonus', target: 'research', value: 1.3 },
-        { type: 'unlock_building', target: 'library', value: 1 },
-        { type: 'knowledge_preservation', target: 'knowledge', value: 1.25 }
+        { type: 'research_speed_bonus', target: 'research', value: 1.3, description: '研究速度加成：1.3' },
+        { type: 'global_bonus', target: 'library', value: 1, description: '全局加成（原解锁已迁移：library）：1' },
+        { type: 'global_bonus', target: 'knowledge', value: 1.25, description: '全局加成（原类型 knowledge_preservation，目标 knowledge）：1.25' }
       ],
     },
 
@@ -977,48 +992,48 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       id: 'irrigation_tech',
       name: '灌溉技术',
       description: '发展灌溉系统，提高农田产量和抗旱能力。',
-      category: 'agriculture',
+      category: 'production',
       cost: { food: 75, wood: 25, stone: 15, tools: 10 },
       researchTime: 450,
       requires: ['primitive_agriculture'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'food', value: 1.3 },
-        { type: 'unlock_building', target: 'irrigation_canal', value: 1 },
-        { type: 'drought_resistance', target: 'agriculture', value: 1.5 }
+        { type: 'resource_multiplier', target: 'food', value: 1.3, description: '将 food 的倍率调整为 1.3' },
+        { type: 'global_bonus', target: 'irrigation_canal', value: 1, description: '全局加成（原解锁已迁移：irrigation_canal）：1' },
+        { type: 'global_bonus', target: 'agriculture', value: 1.5, description: '全局加成（原类型 drought_resistance，目标 agriculture）：1.5' }
       ],
     },
     livestock_breeding: {
       id: 'livestock_breeding',
       name: '家畜选育',
       description: '通过选择性繁殖改良家畜品种。',
-      category: 'agriculture',
+      category: 'production',
       cost: { food: 60, wood: 20, stone: 10, tools: 15 },
       researchTime: 600,
       requires: ['primitive_husbandry'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'livestock', value: 1.25 },
-        { type: 'breeding_efficiency', target: 'livestock', value: 1.1 },
-        { type: 'unlock_advanced_livestock', target: 'livestock_varieties', value: 1 }
+        { type: 'resource_multiplier', target: 'livestock', value: 1.25, description: '将 livestock 的倍率调整为 1.25' },
+        { type: 'global_bonus', target: 'livestock', value: 1.1, description: '全局加成（原类型 breeding_efficiency，目标 livestock）：1.1' },
+        { type: 'global_bonus', target: 'livestock_varieties', value: 1, description: '全局加成（原解锁已迁移：livestock_varieties）：1' }
       ],
     },
     crop_rotation: {
       id: 'crop_rotation',
       name: '轮作制度',
       description: '通过轮作保护土壤，提高农田产量。',
-      category: 'agriculture',
+      category: 'production',
       cost: { food: 90, wood: 30, stone: 20, tools: 25 },
       researchTime: 900,
       requires: ['irrigation_tech', 'primitive_writing'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'food', value: 1.4 },
-        { type: 'soil_protection', target: 'agriculture', value: 1.2 },
-        { type: 'sustainable_farming', target: 'environment', value: 1.1 }
+        { type: 'resource_multiplier', target: 'food', value: 1.4, description: '将 food 的倍率调整为 1.4' },
+        { type: 'global_bonus', target: 'agriculture', value: 1.2, description: '全局加成（原类型 soil_protection，目标 agriculture）：1.2' },
+        { type: 'global_bonus', target: 'environment', value: 1.1, description: '全局加成（原类型 sustainable_farming，目标 environment）：1.1' }
       ],
     },
 
@@ -1027,48 +1042,48 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       id: 'textile_making',
       name: '制作布革',
       description: '学会制作布料和皮革，提供新的材料。',
-      category: 'crafting',
+      category: 'production',
       cost: { food: 60, wood: 20, stone: 15, tools: 10 },
       researchTime: 600,
       requires: ['primitive_husbandry'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'textile_workshop', value: 1 },
-        { type: 'unlock_resource', target: 'textiles', value: 1 },
-        { type: 'clothing_production', target: 'comfort', value: 1.15 }
+        { type: 'global_bonus', target: 'textile_workshop', value: 1, description: '全局加成（原解锁已迁移：textile_workshop）：1' },
+        { type: 'global_bonus', target: 'textiles', value: 1, description: '全局加成（原解锁已迁移：textiles）：1' },
+        { type: 'global_bonus', target: 'comfort', value: 1.15, description: '全局加成（原类型 clothing_production，目标 comfort）：1.15' }
       ],
     },
-    pottery_making: {
-      id: 'pottery_making',
-      name: '陶器制作',
+    improved_pottery: {
+      id: 'improved_pottery',
+      name: '改良制陶',
       description: '制作陶器容器，提高储存效率。',
-      category: 'crafting',
+      category: 'production',
       cost: { food: 105, wood: 35, stone: 40, tools: 25 },
       researchTime: 750,
       requires: ['textile_making', 'primitive_writing'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_resource', target: 'pottery', value: 1 },
-        { type: 'storage_efficiency', target: 'storage', value: 1.3 },
-        { type: 'food_preservation', target: 'food', value: 1.1 }
+        { type: 'global_bonus', target: 'pottery', value: 1, description: '全局加成（原解锁已迁移：pottery）：1' },
+        { type: 'global_bonus', target: 'storage', value: 1.3, description: '全局加成（原类型 storage_efficiency，目标 storage）：1.3' },
+        { type: 'resource_multiplier', target: 'food', value: 1.1, description: '将 food 的倍率调整为 1.1' }
       ],
     },
     dyeing_tech: {
       id: 'dyeing_tech',
       name: '染色技术',
       description: '掌握染色工艺，增加文化价值。',
-      category: 'crafting',
+      category: 'production',
       cost: { food: 75, wood: 25, stone: 20, tools: 30 },
       researchTime: 660,
       requires: ['textile_making'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_resource', target: 'dyes', value: 1 },
-        { type: 'culture_boost', target: 'culture', value: 20 },
-        { type: 'trade_value', target: 'textiles', value: 1.25 }
+        { type: 'global_bonus', target: 'dyes', value: 1, description: '全局加成（原解锁已迁移：dyes）：1' },
+        { type: 'global_bonus', target: 'culture', value: 20, description: '全局加成（原类型 culture_boost，目标 culture）：20' },
+        { type: 'global_bonus', target: 'textiles', value: 1.25, description: '全局加成（原类型 trade_value，目标 textiles）：1.25' }
       ],
     },
 
@@ -1077,48 +1092,48 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       id: 'copper_smelting',
       name: '青铜冶炼',
       description: '掌握铜的冶炼技术，开启金属时代。',
-      category: 'metalworking',
+      category: 'production',
       cost: { food: 150, wood: 50, stone: 40, tools: 30 },
       researchTime: 1500,
       requires: ['textile_making', 'primitive_writing'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'copper_mine', value: 1 },
-        { type: 'unlock_building', target: 'smeltery', value: 1 },
-        { type: 'unlock_resource', target: 'copper', value: 1 }
+        { type: 'global_bonus', target: 'copper_mine', value: 1, description: '全局加成（原解锁已迁移：copper_mine）：1' },
+        { type: 'global_bonus', target: 'smeltery', value: 1, description: '全局加成（原解锁已迁移：smeltery）：1' },
+        { type: 'global_bonus', target: 'copper', value: 1, description: '全局加成（原解锁已迁移：copper）：1' }
       ],
     },
     alloy_tech: {
       id: 'alloy_tech',
       name: '合金技术',
       description: '学会制作青铜合金，提高金属质量。',
-      category: 'metalworking',
+      category: 'production',
       cost: { food: 120, wood: 40, stone: 30, tools: 35 },
       researchTime: 1800,
       requires: ['copper_smelting'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'copper', value: 1.3 },
-        { type: 'unlock_resource', target: 'bronze', value: 1 },
-        { type: 'metal_quality', target: 'tools', value: 1.2 }
+        { type: 'resource_multiplier', target: 'copper', value: 1.3, description: '将 copper 的倍率调整为 1.3' },
+        { type: 'global_bonus', target: 'bronze', value: 1, description: '全局加成（原解锁已迁移：bronze）：1' },
+        { type: 'resource_multiplier', target: 'tools', value: 1.2, description: '将 tools 的倍率调整为 1.2' }
       ],
     },
     refining_tech: {
       id: 'refining_tech',
       name: '精炼技术',
       description: '改进金属精炼工艺，制作高质量工具。',
-      category: 'metalworking',
+      category: 'production',
       cost: { food: 135, wood: 45, stone: 35, tools: 40 },
       researchTime: 2100,
       requires: ['alloy_tech'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'metal_quality_boost', target: 'metals', value: 1.4 },
-        { type: 'unlock_advanced_tools', target: 'refined_tools', value: 1 },
-        { type: 'production_efficiency', target: 'crafting', value: 1.25 }
+        { type: 'global_bonus', target: 'metals', value: 1.4, description: '全局加成（原类型 metal_quality_boost，目标 metals）：1.4' },
+        { type: 'global_bonus', target: 'refined_tools', value: 1, description: '全局加成（原解锁已迁移：refined_tools）：1' },
+        { type: 'global_bonus', target: 'crafting', value: 1.25, description: '全局加成（原类型 production_efficiency，目标 crafting）：1.25' }
       ],
     },
 
@@ -1134,9 +1149,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_diplomacy', target: 'diplomacy', value: 1 },
-        { type: 'stability_bonus', target: 'stability', value: 5 },
-        { type: 'trade_opportunities', target: 'trade', value: 1.15 }
+        { type: 'global_bonus', target: 'diplomacy', value: 1, description: '全局加成（原解锁已迁移：diplomacy）：1' },
+        { type: 'stability_bonus', target: 'stability', value: 5, description: '稳定度加成：5' },
+        { type: 'global_bonus', target: 'trade', value: 1.15, description: '全局加成（原类型 trade_opportunities，目标 trade）：1.15' }
       ],
     },
     trade_system: {
@@ -1150,9 +1165,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_trade_system', target: 'trade', value: 1 },
-        { type: 'economic_growth', target: 'economy', value: 1.25 },
-        { type: 'resource_exchange', target: 'resources', value: 1.1 }
+        { type: 'global_bonus', target: 'trade', value: 1, description: '全局加成（原解锁已迁移：trade）：1' },
+        { type: 'global_bonus', target: 'economy', value: 1.25, description: '全局加成（原类型 economic_growth，目标 economy）：1.25' },
+        { type: 'global_bonus', target: 'resources', value: 1.1, description: '全局加成（原类型 resource_exchange，目标 resources）：1.1' }
       ],
     },
     specialization: {
@@ -1166,9 +1181,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'production_efficiency_all', target: 'production', value: 1.2 },
-        { type: 'unlock_specialists', target: 'jobs', value: 1 },
-        { type: 'skill_development', target: 'skills', value: 1.15 }
+        { type: 'global_bonus', target: 'production', value: 1.2, description: '全局加成（原类型 production_efficiency_all，目标 production）：1.2' },
+        { type: 'global_bonus', target: 'jobs', value: 1, description: '全局加成（原解锁已迁移：jobs）：1' },
+        { type: 'global_bonus', target: 'skills', value: 1.15, description: '全局加成（原类型 skill_development，目标 skills）：1.15' }
       ],
     },
 
@@ -1184,9 +1199,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'hunting_lodge', value: 1 },
-        { type: 'unlock_job', target: 'hunter', value: 1 },
-        { type: 'unlock_unit', target: 'archer', value: 1 }
+        { type: 'global_bonus', target: 'hunting_lodge', value: 1, description: '全局加成（原解锁已迁移：hunting_lodge）：1' },
+        { type: 'global_bonus', target: 'hunter', value: 1, description: '全局加成（原解锁已迁移：hunter）：1' },
+        { type: 'global_bonus', target: 'archer', value: 1, description: '全局加成（原解锁已迁移：archer）：1' }
       ],
     },
     bow_making: {
@@ -1200,9 +1215,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_unit', target: 'archer', value: 1 },
-        { type: 'ranged_combat_bonus', target: 'military', value: 1.3 },
-        { type: 'hunting_efficiency', target: 'food', value: 1.2 }
+        { type: 'global_bonus', target: 'archer', value: 1, description: '全局加成（原解锁已迁移：archer）：1' },
+        { type: 'global_bonus', target: 'military', value: 1.3, description: '全局加成（原类型 ranged_combat_bonus，目标 military）：1.3' },
+        { type: 'resource_multiplier', target: 'food', value: 1.2, description: '效果：hunting_efficiency -> food = 1.2' }
       ],
     },
     armor_making: {
@@ -1216,9 +1231,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_unit', target: 'heavy_warrior', value: 1 },
-        { type: 'defense_bonus', target: 'military', value: 1.4 },
-        { type: 'unit_survivability', target: 'military', value: 1.25 }
+        { type: 'global_bonus', target: 'heavy_warrior', value: 1, description: '全局加成（原解锁已迁移：heavy_warrior）：1' },
+        { type: 'global_bonus', target: 'military', value: 1.4, description: '全局加成（原类型 defense_bonus，目标 military）：1.4' },
+        { type: 'global_bonus', target: 'military', value: 1.25, description: '全局加成（原类型 unit_survivability，目标 military）：1.25' }
       ],
     },
     warrior_training: {
@@ -1232,9 +1247,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_job', target: 'warrior', value: 1 },
-        { type: 'military_strength_bonus', target: 'military', value: 1.2 },
-        { type: 'elite_unit_training', target: 'military', value: 1.15 }
+        { type: 'global_bonus', target: 'warrior', value: 1, description: '全局加成（原解锁已迁移：warrior）：1' },
+        { type: 'global_bonus', target: 'military', value: 1.2, description: '全局加成（原类型 military_strength_bonus，目标 military）：1.2' },
+        { type: 'global_bonus', target: 'military', value: 1.15, description: '全局加成（原类型 elite_unit_training，目标 military）：1.15' }
       ],
     },
 
@@ -1250,9 +1265,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_inheritance_system', target: 'government', value: 1 },
-        { type: 'centralized_power', target: 'authority', value: 1.3 },
-        { type: 'attribute_inheritance', target: 'leadership', value: 1 }
+        { type: 'global_bonus', target: 'government', value: 1, description: '全局加成（原解锁已迁移：government）：1' },
+        { type: 'global_bonus', target: 'authority', value: 1.3, description: '全局加成（原类型 centralized_power，目标 authority）：1.3' },
+        { type: 'global_bonus', target: 'leadership', value: 1, description: '全局加成（原类型 attribute_inheritance，目标 leadership）：1' }
       ],
     },
     legal_code: {
@@ -1266,9 +1281,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'courthouse', value: 1 },
-        { type: 'unlock_job', target: 'administrator', value: 1 },
-        { type: 'legal_system', target: 'justice', value: 1.25 }
+        { type: 'global_bonus', target: 'courthouse', value: 1, description: '全局加成（原解锁已迁移：courthouse）：1' },
+        { type: 'global_bonus', target: 'administrator', value: 1, description: '全局加成（原解锁已迁移：administrator）：1' },
+        { type: 'global_bonus', target: 'justice', value: 1.25, description: '全局加成（原类型 legal_system，目标 justice）：1.25' }
       ],
     },
     centralization: {
@@ -1282,9 +1297,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'global_production_bonus', target: 'production', value: 1.25 },
-        { type: 'stability_penalty', target: 'stability', value: -10 },
-        { type: 'administrative_efficiency', target: 'governance', value: 1.3 }
+        { type: 'global_bonus', target: 'production', value: 1.25, description: '全局加成（原类型 global_production_bonus，目标 production）：1.25' },
+        { type: 'global_bonus', target: 'stability', value: -10, description: '全局加成（原类型 stability_penalty，目标 stability）：-10' },
+        { type: 'global_bonus', target: 'governance', value: 1.3, description: '全局加成（原类型 administrative_efficiency，目标 governance）：1.3' }
       ],
     },
     feudalism: {
@@ -1298,9 +1313,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'stability_bonus', target: 'stability', value: 15 },
-        { type: 'military_capacity', target: 'military', value: 1.5 },
-        { type: 'local_autonomy', target: 'governance', value: 1.2 }
+        { type: 'stability_bonus', target: 'stability', value: 15, description: '稳定度加成：15' },
+        { type: 'global_bonus', target: 'military', value: 1.5, description: '全局加成（原类型 military_capacity，目标 military）：1.5' },
+        { type: 'global_bonus', target: 'governance', value: 1.2, description: '全局加成（原类型 local_autonomy，目标 governance）：1.2' }
       ],
     },
 
@@ -1309,64 +1324,64 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       id: 'literacy',
       name: '普及文字',
       description: '在民众中推广文字知识。',
-      category: 'culture',
+      category: 'social',
       cost: { food: 150, wood: 50, stone: 30, tools: 40 },
       researchTime: 2400,
       requires: ['primitive_writing'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'research_production_bonus', target: 'research', value: 1.3 },
-        { type: 'technology_speed_bonus', target: 'technology', value: 1.25 },
-        { type: 'cultural_development', target: 'culture', value: 1.2 }
+        { type: 'global_bonus', target: 'research', value: 1.3, description: '全局加成（原类型 research_production_bonus，目标 research）：1.3' },
+        { type: 'global_bonus', target: 'technology', value: 1.25, description: '全局加成（原类型 technology_speed_bonus，目标 technology）：1.25' },
+        { type: 'global_bonus', target: 'culture', value: 1.2, description: '全局加成（原类型 cultural_development，目标 culture）：1.2' }
       ],
     },
     religious_rituals: {
       id: 'religious_rituals',
       name: '宗教仪式',
       description: '建立正式的宗教仪式和信仰体系。',
-      category: 'culture',
+      category: 'social',
       cost: { food: 210, wood: 70, stone: 100, tools: 50 },
       researchTime: 3000,
       requires: ['advanced_construction'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_resource', target: 'faith', value: 1 },
-        { type: 'daily_stability_bonus', target: 'stability', value: 3 },
-        { type: 'spiritual_unity', target: 'culture', value: 1.25 }
+        { type: 'global_bonus', target: 'faith', value: 1, description: '全局加成（原解锁已迁移：faith）：1' },
+        { type: 'global_bonus', target: 'stability', value: 3, description: '全局加成（原类型 daily_stability_bonus，目标 stability）：3' },
+        { type: 'global_bonus', target: 'culture', value: 1.25, description: '全局加成（原类型 spiritual_unity，目标 culture）：1.25' }
       ],
     },
     artistic_creation: {
       id: 'artistic_creation',
       name: '艺术创作',
       description: '发展艺术和美学，提升文化价值。',
-      category: 'culture',
+      category: 'social',
       cost: { food: 180, wood: 60, stone: 40, tools: 55 },
       researchTime: 3600,
       requires: ['literacy', 'dyeing_tech'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_resource', target: 'art', value: 1 },
-        { type: 'cultural_influence', target: 'culture', value: 1.3 },
-        { type: 'aesthetic_value', target: 'happiness', value: 1.15 }
+        { type: 'global_bonus', target: 'art', value: 1, description: '全局加成（原解锁已迁移：art）：1' },
+        { type: 'global_bonus', target: 'culture', value: 1.3, description: '全局加成（原类型 cultural_influence，目标 culture）：1.3' },
+        { type: 'global_bonus', target: 'happiness', value: 1.15, description: '全局加成（原类型 aesthetic_value，目标 happiness）：1.15' }
       ],
     },
     historical_records: {
       id: 'historical_records',
       name: '历史编纂',
       description: '记录和编纂历史，传承知识。',
-      category: 'culture',
+      category: 'social',
       cost: { food: 135, wood: 45, stone: 30, tools: 50 },
       researchTime: 2700,
       requires: ['literacy', 'record_keeping'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'experience_gain_bonus', target: 'characters', value: 1.15 },
-        { type: 'knowledge_preservation', target: 'knowledge', value: 1.2 },
-        { type: 'cultural_continuity', target: 'culture', value: 1.1 }
+        { type: 'global_bonus', target: 'characters', value: 1.15, description: '全局加成（原类型 experience_gain_bonus，目标 characters）：1.15' },
+        { type: 'global_bonus', target: 'knowledge', value: 1.2, description: '全局加成（原类型 knowledge_preservation，目标 knowledge）：1.2' },
+        { type: 'global_bonus', target: 'culture', value: 1.1, description: '全局加成（原类型 cultural_continuity，目标 culture）：1.1' }
       ],
     },
 
@@ -1375,64 +1390,64 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       id: 'advanced_agriculture',
       name: '高级农业',
       description: '发展高级农业技术，提高粮食产量。',
-      category: 'agriculture',
+      category: 'production',
       cost: { food: 200, wood: 80, stone: 40, tools: 60 },
       researchTime: 3000,
       requires: ['irrigation_tech', 'crop_rotation'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'food_production_bonus', target: 'food', value: 1.4 },
-        { type: 'unlock_building', target: 'granary', value: 1 },
-        { type: 'agricultural_efficiency', target: 'farming', value: 1.3 }
+        { type: 'resource_multiplier', target: 'food', value: 1.4, description: '将 food 的倍率调整为 1.4' },
+        { type: 'global_bonus', target: 'granary', value: 1, description: '全局加成（原解锁已迁移：granary）：1' },
+        { type: 'global_bonus', target: 'farming', value: 1.3, description: '全局加成（原类型 agricultural_efficiency，目标 farming）：1.3' }
       ],
     },
     advanced_crafting: {
       id: 'advanced_crafting',
       name: '高级手工业',
       description: '发展精细手工业，制作高质量物品。',
-      category: 'crafting',
+      category: 'production',
       cost: { food: 180, wood: 90, stone: 60, tools: 80 },
       researchTime: 3600,
       requires: ['textile_making', 'pottery_making', 'alloy_tech'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'tools_production_bonus', target: 'tools', value: 1.5 },
-        { type: 'unlock_job', target: 'artisan', value: 1 },
-        { type: 'quality_bonus', target: 'crafting', value: 1.25 }
+        { type: 'resource_multiplier', target: 'tools', value: 1.5, description: '将 tools 的倍率调整为 1.5' },
+        { type: 'global_bonus', target: 'artisan', value: 1, description: '全局加成（原解锁已迁移：artisan）：1' },
+        { type: 'global_bonus', target: 'crafting', value: 1.25, description: '全局加成（原类型 quality_bonus，目标 crafting）：1.25' }
       ],
     },
     mass_production: {
       id: 'mass_production',
       name: '批量生产',
       description: '建立批量生产体系，提高生产效率。',
-      category: 'crafting',
+      category: 'production',
       cost: { food: 240, wood: 120, stone: 80, tools: 100 },
       researchTime: 4200,
       requires: ['advanced_crafting', 'professional_division'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'global_production_bonus', target: 'production', value: 1.3 },
-        { type: 'efficiency_bonus', target: 'workers', value: 1.2 },
-        { type: 'resource_optimization', target: 'resources', value: 1.15 }
+        { type: 'global_bonus', target: 'production', value: 1.3, description: '全局加成（原类型 global_production_bonus，目标 production）：1.3' },
+        { type: 'global_bonus', target: 'workers', value: 1.2, description: '全局加成（原类型 efficiency_bonus，目标 workers）：1.2' },
+        { type: 'global_bonus', target: 'resources', value: 1.15, description: '全局加成（原类型 resource_optimization，目标 resources）：1.15' }
       ],
     },
     advanced_metallurgy: {
       id: 'advanced_metallurgy',
       name: '高级冶金',
       description: '掌握高级冶金技术，制作更好的金属制品。',
-      category: 'metalworking',
+      category: 'production',
       cost: { food: 300, wood: 100, stone: 150, tools: 120 },
       researchTime: 4800,
       requires: ['bronze_smelting', 'refining_tech'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_resource', target: 'bronze', value: 1 },
-        { type: 'metal_quality_bonus', target: 'metalworking', value: 1.4 },
-        { type: 'advanced_tools', target: 'tools', value: 1.3 }
+        { type: 'global_bonus', target: 'bronze', value: 1, description: '全局加成（原解锁已迁移：bronze）：1' },
+        { type: 'global_bonus', target: 'metalworking', value: 1.4, description: '全局加成（原类型 metal_quality_bonus，目标 metalworking）：1.4' },
+        { type: 'resource_multiplier', target: 'tools', value: 1.3, description: '将 tools 的倍率调整为 1.3' }
       ],
     },
 
@@ -1448,9 +1463,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'military_strength_bonus', target: 'military', value: 1.5 },
-        { type: 'unlock_unit', target: 'bronze_warrior', value: 1 },
-        { type: 'weapon_durability', target: 'weapons', value: 1.3 }
+        { type: 'global_bonus', target: 'military', value: 1.5, description: '全局加成（原类型 military_strength_bonus，目标 military）：1.5' },
+        { type: 'global_bonus', target: 'bronze_warrior', value: 1, description: '全局加成（原解锁已迁移：bronze_warrior）：1' },
+        { type: 'global_bonus', target: 'weapons', value: 1.3, description: '全局加成（原类型 weapon_durability，目标 weapons）：1.3' }
       ],
     },
     military_formation: {
@@ -1464,9 +1479,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'tactical_bonus', target: 'military', value: 1.25 },
-        { type: 'formation_discipline', target: 'army', value: 1.2 },
-        { type: 'combat_coordination', target: 'battle', value: 1.15 }
+        { type: 'global_bonus', target: 'military', value: 1.25, description: '全局加成（原类型 tactical_bonus，目标 military）：1.25' },
+        { type: 'global_bonus', target: 'army', value: 1.2, description: '全局加成（原类型 formation_discipline，目标 army）：1.2' },
+        { type: 'global_bonus', target: 'battle', value: 1.15, description: '全局加成（原类型 combat_coordination，目标 battle）：1.15' }
       ],
     },
     fortification: {
@@ -1480,9 +1495,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'wall', value: 1 },
-        { type: 'defense_bonus', target: 'settlement', value: 1.4 },
-        { type: 'siege_resistance', target: 'defense', value: 1.3 }
+        { type: 'global_bonus', target: 'wall', value: 1, description: '全局加成（原解锁已迁移：wall）：1' },
+        { type: 'global_bonus', target: 'settlement', value: 1.4, description: '全局加成（原类型 defense_bonus，目标 settlement）：1.4' },
+        { type: 'global_bonus', target: 'defense', value: 1.3, description: '全局加成（原类型 siege_resistance，目标 defense）：1.3' }
       ],
     },
     standing_army: {
@@ -1496,9 +1511,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_job', target: 'professional_soldier', value: 1 },
-        { type: 'military_capacity', target: 'army', value: 2.0 },
-        { type: 'military_maintenance', target: 'upkeep', value: 1.5 }
+        { type: 'global_bonus', target: 'professional_soldier', value: 1, description: '全局加成（原解锁已迁移：professional_soldier）：1' },
+        { type: 'global_bonus', target: 'army', value: 2.0, description: '全局加成（原类型 military_capacity，目标 army）：2.0' },
+        { type: 'global_bonus', target: 'upkeep', value: 1.5, description: '全局加成（原类型 military_maintenance，目标 upkeep）：1.5' }
       ],
     },
 
@@ -1514,9 +1529,9 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'storage_bonus', target: 'storage', value: 1.4 },
-        { type: 'food_preservation', target: 'food', value: 1.1 },
-        { type: 'unlock_resource', target: 'pottery', value: 1 }
+        { type: 'resource_storage_bonus', target: 'storage', value: 1.4, description: '提升 storage 的储存：1.4' },
+        { type: 'resource_multiplier', target: 'food', value: 1.1, description: '将 food 的倍率调整为 1.1' },
+        { type: 'global_bonus', target: 'pottery', value: 1, description: '全局加成（原解锁已迁移：pottery）：1' }
       ],
     },
     bronze_technology: {
@@ -1524,31 +1539,31 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '青铜技术',
       description: '改进青铜冶炼技术，提高金属产量。',
       category: 'production',
-      cost: { food: 240, wood: 80, stone: 60, tools: 60, research: 20 },
+      cost: { food: 240, wood: 80, stone: 60, tools: 60, researchPoints: 20 },
       researchTime: 4500,
       requires: ['bronze_smelting'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'bronze', value: 1.5 },
-        { type: 'tools_efficiency', target: 'tools', value: 1.2 },
-        { type: 'unlock_advanced_bronze', target: 'advanced_bronze', value: 1 }
+        { type: 'resource_multiplier', target: 'bronze', value: 1.5, description: '将 bronze 的倍率调整为 1.5' },
+        { type: 'resource_multiplier', target: 'tools', value: 1.2, description: '将 tools 的倍率调整为 1.2' },
+        { type: 'global_bonus', target: 'advanced_bronze', value: 1, description: '全局加成（原解锁已迁移：advanced_bronze）：1' }
       ],
     },
     three_field_system: {
       id: 'three_field_system',
       name: '三圃制',
       description: '实行三圃轮作制度，大幅提高农业产量。',
-      category: 'agriculture',
-      cost: { food: 180, wood: 60, stone: 40, tools: 50, research: 30 },
+      category: 'production',
+      cost: { food: 180, wood: 60, stone: 40, tools: 50, researchPoints: 30 },
       researchTime: 3000,
       requires: ['irrigation_tech', 'literacy'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'food', value: 1.5 },
-        { type: 'food_stability', target: 'food', value: 1.2 },
-        { type: 'disaster_resistance', target: 'agriculture', value: 1.3 }
+        { type: 'resource_multiplier', target: 'food', value: 1.5, description: '将 food 的倍率调整为 1.5' },
+        { type: 'resource_multiplier', target: 'food', value: 1.2, description: '将 food 的倍率调整为 1.2' },
+        { type: 'global_bonus', target: 'agriculture', value: 1.3, description: '全局加成（原类型 disaster_resistance，目标 agriculture）：1.3' }
       ],
     },
     hydraulic_engineering: {
@@ -1556,15 +1571,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '水利工程',
       description: '建设大型水利设施，进一步提高农业产量。',
       category: 'production',
-      cost: { food: 300, wood: 100, stone: 120, tools: 80, research: 35 },
+      cost: { food: 300, wood: 100, stone: 120, tools: 80, researchPoints: 35 },
       researchTime: 6000,
       requires: ['three_field_system', 'construction'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'resource_multiplier', target: 'food', value: 1.6 },
-        { type: 'disaster_resistance', target: 'agriculture', value: 1.5 },
-        { type: 'unlock_building', target: 'aqueduct', value: 1 }
+        { type: 'resource_multiplier', target: 'food', value: 1.6, description: '将 food 的倍率调整为 1.6' },
+        { type: 'global_bonus', target: 'agriculture', value: 1.5, description: '全局加成（原类型 disaster_resistance，目标 agriculture）：1.5' },
+        { type: 'global_bonus', target: 'aqueduct', value: 1, description: '全局加成（原解锁已迁移：aqueduct）：1' }
       ],
     },
 
@@ -1574,15 +1589,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '战车制作',
       description: '制造战车，提供强大的机动作战能力。',
       category: 'military',
-      cost: { food: 240, wood: 80, stone: 60, tools: 70, research: 25 },
+      cost: { food: 240, wood: 80, stone: 60, tools: 70, researchPoints: 25 },
       researchTime: 5400,
       requires: ['bronze_technology', 'horse_domestication'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_unit', target: 'chariot', value: 1 },
-        { type: 'mobility_bonus', target: 'military', value: 1.3 },
-        { type: 'shock_attack', target: 'combat', value: 1.4 }
+        { type: 'global_bonus', target: 'chariot', value: 1, description: '全局加成（原解锁已迁移：chariot）：1' },
+        { type: 'global_bonus', target: 'military', value: 1.3, description: '全局加成（原类型 mobility_bonus，目标 military）：1.3' },
+        { type: 'global_bonus', target: 'combat', value: 1.4, description: '全局加成（原类型 shock_attack，目标 combat）：1.4' }
       ],
     },
     siege_engines: {
@@ -1590,15 +1605,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '攻城器械',
       description: '制造攻城器械，提高攻城作战能力。',
       category: 'military',
-      cost: { food: 270, wood: 90, stone: 70, tools: 80, research: 30 },
+      cost: { food: 270, wood: 90, stone: 70, tools: 80, researchPoints: 30 },
       researchTime: 6000,
       requires: ['bronze_weapons', 'engineering'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_unit', target: 'siege_engineer', value: 1 },
-        { type: 'siege_bonus', target: 'siege', value: 1.5 },
-        { type: 'fortification_damage', target: 'siege', value: 1.6 }
+        { type: 'global_bonus', target: 'siege_engineer', value: 1, description: '全局加成（原解锁已迁移：siege_engineer）：1' },
+        { type: 'global_bonus', target: 'siege', value: 1.5, description: '全局加成（原类型 siege_bonus，目标 siege）：1.5' },
+        { type: 'global_bonus', target: 'siege', value: 1.6, description: '全局加成（原类型 fortification_damage，目标 siege）：1.6' }
       ],
     },
     elite_training: {
@@ -1606,15 +1621,15 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '精锐训练',
       description: '建立精锐部队训练体系，提高军队质量。',
       category: 'military',
-      cost: { food: 210, wood: 70, stone: 50, tools: 60, research: 25 },
+      cost: { food: 210, wood: 70, stone: 50, tools: 60, researchPoints: 25 },
       researchTime: 4500,
       requires: ['warrior_training', 'bronze_weapons'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_unit', target: 'elite_guard', value: 1 },
-        { type: 'military_quality', target: 'military', value: 1.3 },
-        { type: 'experience_bonus', target: 'combat', value: 1.2 }
+        { type: 'global_bonus', target: 'elite_guard', value: 1, description: '全局加成（原解锁已迁移：elite_guard）：1' },
+        { type: 'global_bonus', target: 'military', value: 1.3, description: '全局加成（原类型 military_quality，目标 military）：1.3' },
+        { type: 'global_bonus', target: 'combat', value: 1.2, description: '全局加成（原类型 experience_bonus，目标 combat）：1.2' }
       ],
     },
 
@@ -1624,32 +1639,32 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '铁冶炼',
       description: '掌握铁器冶炼技术，开启铁器时代。',
       category: 'production',
-      cost: { food: 360, wood: 120, stone: 100, tools: 80, research: 40 },
+      cost: { food: 360, wood: 120, stone: 100, tools: 80, researchPoints: 40 },
       researchTime: 12000,
       requires: ['bronze_technology'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'iron_mine', value: 1 },
-        { type: 'unlock_building', target: 'iron_smelter', value: 1 },
-        { type: 'unlock_resource', target: 'iron', value: 1 },
-        { type: 'era_advancement', target: 'iron_age', value: 1 }
+        { type: 'global_bonus', target: 'iron_mine', value: 1, description: '全局加成（原解锁已迁移：iron_mine）：1' },
+        { type: 'global_bonus', target: 'iron_smelter', value: 1, description: '全局加成（原解锁已迁移：iron_smelter）：1' },
+        { type: 'global_bonus', target: 'iron', value: 1, description: '全局加成（原解锁已迁移：iron）：1' },
+        { type: 'global_bonus', target: 'iron_age', value: 1, description: '全局加成（原类型 era_advancement，目标 iron_age）：1' }
       ],
     },
     horse_domestication: {
       id: 'horse_domestication',
       name: '驯马',
       description: '驯化马匹，获得强大的机动力。',
-      category: 'agriculture',
-      cost: { food: 240, wood: 80, stone: 60, tools: 40, research: 20 },
+      category: 'production',
+      cost: { food: 240, wood: 80, stone: 60, tools: 40, researchPoints: 20 },
       researchTime: 7500,
       requires: ['bronze_technology', 'livestock_breeding'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'stable', value: 1 },
-        { type: 'unlock_resource', target: 'horses', value: 1 },
-        { type: 'unlock_unit', target: 'cavalry', value: 1 }
+        { type: 'global_bonus', target: 'stable', value: 1, description: '全局加成（原解锁已迁移：stable）：1' },
+        { type: 'global_bonus', target: 'horses', value: 1, description: '全局加成（原解锁已迁移：horses）：1' },
+        { type: 'global_bonus', target: 'cavalry', value: 1, description: '全局加成（原解锁已迁移：cavalry）：1' }
       ],
     },
     currency_system: {
@@ -1657,31 +1672,31 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       name: '货币制度',
       description: '建立货币制度，促进贸易发展。',
       category: 'social',
-      cost: { food: 210, wood: 70, stone: 50, tools: 65, research: 35 },
+      cost: { food: 210, wood: 70, stone: 50, tools: 65, researchPoints: 35 },
       researchTime: 9000,
       requires: ['trade_system', 'bronze_technology'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_resource', target: 'currency', value: 1 },
-        { type: 'trade_efficiency', target: 'trade', value: 1.4 },
-        { type: 'economic_development', target: 'economy', value: 1.3 }
+        { type: 'global_bonus', target: 'currency', value: 1, description: '全局加成（原解锁已迁移：currency）：1' },
+        { type: 'global_bonus', target: 'trade', value: 1.4, description: '全局加成（原类型 trade_efficiency，目标 trade）：1.4' },
+        { type: 'global_bonus', target: 'economy', value: 1.3, description: '全局加成（原类型 economic_development，目标 economy）：1.3' }
       ],
     },
     engineering: {
       id: 'engineering',
       name: '工程学',
       description: '发展工程学知识，提高建造能力。',
-      category: 'culture',
-      cost: { food: 255, wood: 85, stone: 70, tools: 75, research: 40 },
+      category: 'social',
+      cost: { food: 255, wood: 85, stone: 70, tools: 75, researchPoints: 40 },
       researchTime: 10500,
       requires: ['bronze_technology', 'number_concept'],
       unlocked: false,
       researched: false,
       effects: [
-        { type: 'unlock_building', target: 'large_construction', value: 1 },
-        { type: 'construction_efficiency', target: 'building', value: 1.3 },
-        { type: 'unlock_job', target: 'engineer', value: 1 }
+        { type: 'global_bonus', target: 'large_construction', value: 1, description: '全局加成（原解锁已迁移：large_construction）：1' },
+        { type: 'global_bonus', target: 'building', value: 1.3, description: '全局加成（原类型 construction_efficiency，目标 building）：1.3' },
+        { type: 'global_bonus', target: 'engineer', value: 1, description: '全局加成（原解锁已迁移：engineer）：1' }
       ],
     },
 };
@@ -1841,39 +1856,73 @@ export const CHARACTERS: Record<string, Character> = {
   chief: {
     id: 'chief',
     name: '部落酋长',
-    type: 'chief',
-    level: 1,
-    experience: 0,
-    skills: {
-      leadership: 8,
-      crafting: 3,
-      farming: 3,
-      building: 4,
-      military: 6,
-      research: 5,
+    type: CharacterType.RULER,
+    position: CharacterPosition.CHIEF,
+    age: 35,
+    health: 100,
+    healthStatus: HealthStatus.GOOD,
+    attributes: {
+      force: 6,
+      intelligence: 5,
+      charisma: 8,
     },
-    traits: ['天生领袖', '决策果断'],
-    isActive: true,
-    description: '部落的领导者，拥有出色的领导能力和决策智慧。',
+    traits: [
+      {
+        id: 'innate_leader',
+        name: '天生领袖',
+        description: '天生具备领导才能，能稳定部落士气。',
+        type: 'positive',
+        effects: [],
+      },
+      {
+        id: 'decisive',
+        name: '决策果断',
+        description: '在关键时刻能够迅速做出正确决策。',
+        type: 'positive',
+        effects: [],
+      },
+    ],
+    buffs: [],
+    isUnlocked: true,
+    unlockConditions: {},
+    experience: 0,
+    loyalty: 80,
   },
   
   elder: {
     id: 'elder',
     name: '部落长老',
-    type: 'elder',
-    level: 1,
-    experience: 0,
-    skills: {
-      leadership: 6,
-      crafting: 5,
-      farming: 4,
-      building: 4,
-      military: 3,
-      research: 8,
+    type: CharacterType.RESEARCH_LEADER,
+    position: CharacterPosition.ELDER,
+    age: 60,
+    health: 90,
+    healthStatus: HealthStatus.GOOD,
+    attributes: {
+      force: 4,
+      intelligence: 8,
+      charisma: 6,
     },
-    traits: ['博学多识', '经验丰富'],
-    isActive: true,
-    description: '部落中最有智慧的人，负责传承知识和指导研究。',
+    traits: [
+      {
+        id: 'erudite',
+        name: '博学多识',
+        description: '拥有广博的知识，擅长指导研究。',
+        type: 'positive',
+        effects: [],
+      },
+      {
+        id: 'experienced',
+        name: '经验丰富',
+        description: '历经世事，能够提供明智的建议。',
+        type: 'positive',
+        effects: [],
+      },
+    ],
+    buffs: [],
+    isUnlocked: true,
+    unlockConditions: {},
+    experience: 0,
+    loyalty: 75,
   },
 };
 

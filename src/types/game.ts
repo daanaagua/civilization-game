@@ -72,7 +72,10 @@ export interface Building {
   description: string;
   type: BuildingType;
   cost: Partial<Resources>;
-  produces?: Partial<ResourceRates>;
+  // 生产/提供的效果：既支持标准资源键（如 food、wood、housing），也允许自定义键（如 storage_capacity、defense 等）
+  produces?: Partial<Resources> & Record<string, number>;
+  // 消耗的资源：既支持标准资源键，也允许自定义键
+  consumes?: Partial<Resources> & Record<string, number>;
   requires?: string[]; // 前置科技
   maxCount?: number;
   unlocked: boolean;
@@ -86,7 +89,8 @@ export type BuildingType =
   | 'military'
   | 'cultural'
   | 'special'
-  | 'storage';
+  | 'storage'
+  | 'administrative';
 
 // 建筑实例（保留兼容性，实际使用 building.ts 中的 BuildingInstance）
 export interface BuildingInstance {
@@ -317,10 +321,9 @@ export interface UIState {
   selectedBuilding?: string;
   selectedTechnology?: string;
   showEventModal: boolean;
-  currentEvent?: PauseEvent;
+  currentEvent?: PauseEvent | GameEventInstance | import('./index').GameEvent;
   notifications: Notification[];
-  
-  // 转生系统UI状态
+
   showRebirthConfirmation: boolean;
   showInheritanceShop: boolean;
 }

@@ -27,6 +27,7 @@ const buildingTypeConfig: Record<BuildingType, { name: string; icon: any; color:
   cultural: { name: '文化', icon: Palette, color: 'text-purple-600' },
   special: { name: '特殊', icon: Star, color: 'text-yellow-600' },
   storage: { name: '储存', icon: Package, color: 'text-orange-600' },
+  administrative: { name: '行政', icon: Users, color: 'text-teal-600' },
 };
 
 interface BuildingCardProps {
