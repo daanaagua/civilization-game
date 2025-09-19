@@ -92,7 +92,7 @@ export function Sidebar({}: SidebarProps) {
             {/* 人口 */}
              <Tooltip content={`当前人口: ${formatNumber(population, 0)}\n最大人口: ${formatNumber(maxPopulation, 0)}\n\n人口增长受住房限制影响`}>
                <div 
-                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
+                 className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600 hidden"
                >
                  <div className="flex items-center">
                    <span>人口</span>

@@ -809,6 +809,7 @@ const availableWorkers = getAvailableWorkers();
           />
           <ResourceItem
             name="人口"
+            className="hidden"
             value={resources.population}
             limit={maxPopulation}
             tooltipContent={`当前人口: ${formatNumber(resources.population, 0)}\n最大人口: ${formatNumber(maxPopulation, 0)}\n\n人口增长受住房限制影响`}
