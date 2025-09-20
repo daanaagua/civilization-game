@@ -140,6 +140,7 @@ const CharacterCard = ({ character }: CharacterCardProps) => {
 
 export const CharactersPanel = () => {
   const { getActiveCharacters, getAvailableCharacters } = useGameStore();
+  const gameState = useGameStore((s) => s.gameState);
   const [selectedType, setSelectedType] = useState<CharacterType | 'all'>('all');
 
   const allTypes = (Object.values(CharacterType) as CharacterType[]);
@@ -148,9 +149,34 @@ export const CharactersPanel = () => {
   const activeCharacters = getActiveCharacters();
   const availableCharacters = getAvailableCharacters();
 
+  // 根据已研究科技的 unlocks 过滤“可见人物类型”
+  const unlockedCharacterTypes = (() => {
+    const mapIdToType: Record<string, CharacterType> = {
+      chief: CharacterType.RULER,
+      elder: CharacterType.RESEARCH_LEADER,
+      high_priest: CharacterType.FAITH_LEADER,
+      archmage: CharacterType.MAGE_LEADER,
+      chief_judge: CharacterType.CIVIL_LEADER,
+      general: CharacterType.GENERAL,
+      diplomat: CharacterType.DIPLOMAT
+    };
+    const set = new Set<CharacterType>();
+    const techs = gameState?.technologies || {};
+    Object.values(techs).forEach((t: any) => {
+      if (!t?.researched) return;
+      (t.unlocks || []).forEach((u: any) => {
+        if (u?.type === 'character' && u.id && mapIdToType[u.id]) {
+          set.add(mapIdToType[u.id]);
+        }
+      });
+    });
+    return set;
+  })();
+
+  const visibleActive = activeCharacters.filter(c => unlockedCharacterTypes.has(c.type));
   const filteredActive = selectedType === 'all' 
-    ? activeCharacters 
-    : activeCharacters.filter(c => c.type === selectedType);
+    ? visibleActive 
+    : visibleActive.filter(c => c.type === selectedType);
 
   const filteredAvailable = selectedType === 'all' 
     ? availableCharacters 

@@ -205,7 +205,14 @@ export default function TechnologyTab() {
   };
   
   const getFilteredTechnologies = () => {
-    let technologies = Object.values(TECHNOLOGIES);
+    // 只显示“可见”的科技：
+    // - 初始已解锁（unlocked === true），例如“生火”
+    // - 或所有前置科技均已研究完成（requires 全满足）
+    let technologies = Object.values(TECHNOLOGIES).filter((tech) => {
+      const requires = tech.requires || [];
+      const prereqMet = requires.length === 0 || requires.every((req) => gameState.technologies[req]?.researched);
+      return tech.unlocked || prereqMet;
+    });
     
     if (selectedCategory !== 'all') {
       technologies = technologies.filter(tech => tech.category === selectedCategory);

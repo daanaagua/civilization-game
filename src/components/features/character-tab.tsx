@@ -10,6 +10,7 @@ interface CharacterTabProps {
 
 export function CharacterTab({}: CharacterTabProps) {
   const { getActiveCharacters, getAvailableCharacters, calculateCharacterEffects, appointCharacter, dismissCharacter } = useGameStore();
+  const gameState = useGameStore((s) => s.gameState);
   const [selectedCharacterType, setSelectedCharacterType] = useState<CharacterType | null>(null);
   const [showAppointment, setShowAppointment] = useState(false);
  
@@ -27,6 +28,30 @@ export function CharacterTab({}: CharacterTabProps) {
   activeList.forEach((c: Character) => {
     activeCharacters[c.type] = c;
   });
+
+  // 依据已研究科技的 unlocks 过滤“可见人物类型”（空缺位也不展示卡）
+  const unlockedCharacterTypes = (() => {
+    const mapIdToType: Record<string, CharacterType> = {
+      chief: CharacterType.RULER,
+      elder: CharacterType.RESEARCH_LEADER,
+      high_priest: CharacterType.FAITH_LEADER,
+      archmage: CharacterType.MAGE_LEADER,
+      chief_judge: CharacterType.CIVIL_LEADER,
+      general: CharacterType.GENERAL,
+      diplomat: CharacterType.DIPLOMAT
+    };
+    const set = new Set<CharacterType>();
+    const techs = gameState?.technologies || {};
+    Object.values(techs).forEach((t: any) => {
+      if (!t?.researched) return;
+      (t.unlocks || []).forEach((u: any) => {
+        if (u?.type === 'character' && u.id && mapIdToType[u.id]) {
+          set.add(mapIdToType[u.id]);
+        }
+      });
+    });
+    return set;
+  })();
   
   // 获取可用人物
   const availableCharacters = (getAvailableCharacters?.() || []) as Character[];
@@ -101,7 +126,9 @@ export function CharacterTab({}: CharacterTabProps) {
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-100">在职人物</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(activeCharacters).map(([type, character]) => (
+          {Object.entries(activeCharacters)
+            .filter(([type]) => unlockedCharacterTypes.has(type as CharacterType))
+            .map(([type, character]) => (
             <div key={type} className="bg-gray-800 rounded-lg border border-gray-700 p-4">
               <div className="flex justify-between items-start mb-3">
                 <div>
