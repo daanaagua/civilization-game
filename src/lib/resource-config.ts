@@ -116,5 +116,82 @@ export const resourceConfig: Record<string, ResourceConfig> = {
     clickable: false,
     description: '制作铁器的珍贵材料',
     requiresTech: 'iron_working'
+  },
+
+  // 新增翻译与占位（仅名称和样式，不改变解锁逻辑）
+  cloth: {
+    name: '布革',
+    icon: Hammer,
+    color: 'text-pink-600',
+    bgColor: 'bg-pink-50',
+    borderColor: 'border-pink-200',
+    clickable: false,
+    description: '纺织与革制品，用于衣物与装备'
+  },
+  researchPoints: {
+    name: '研究点',
+    icon: Hammer,
+    color: 'text-cyan-600',
+    bgColor: 'bg-cyan-50',
+    borderColor: 'border-cyan-200',
+    clickable: false,
+    description: '用于进行科技研究的点数'
+  },
+  currency: {
+    name: '货币',
+    icon: Coins,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200',
+    clickable: false,
+    description: '通用交换媒介，用于贸易与支付'
+  },
+  horses: {
+    name: '马',
+    icon: Hammer,
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200',
+    clickable: false,
+    description: '可用于运输与军事的战略资源'
+  },
+
+  // 其他常见资源的中文翻译
+  crystal: {
+    name: '水晶',
+    icon: Mountain,
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    clickable: false,
+    description: '稀有资源，常用于高级科技与制造'
+  },
+  magic: {
+    name: '魔力',
+    icon: Hammer,
+    color: 'text-indigo-600',
+    bgColor: 'bg-indigo-50',
+    borderColor: 'border-indigo-200',
+    clickable: false,
+    description: '特殊能量，用于神秘学或魔法体系'
+  },
+  faith: {
+    name: '信仰',
+    icon: Hammer,
+    color: 'text-yellow-600',
+    bgColor: 'bg-yellow-50',
+    borderColor: 'border-yellow-200',
+    clickable: false,
+    description: '宗教相关资源，影响事件与士气'
+  },
+  // 一些模块会使用 leather 作为资源键，这里与布革保持一致别名
+  leather: {
+    name: '布革',
+    icon: Hammer,
+    color: 'text-pink-600',
+    bgColor: 'bg-pink-50',
+    borderColor: 'border-pink-200',
+    clickable: false,
+    description: '皮革与布料用品，用于衣物与装备'
   }
 };

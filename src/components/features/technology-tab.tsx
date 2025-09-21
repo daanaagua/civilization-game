@@ -29,24 +29,18 @@ interface TechnologyCardProps {
   canResearch: boolean;
   isResearching: boolean;
   onStartResearch: (techId: string) => void;
+  onPauseResearch: (techId: string) => void;
+  onResumeResearch: (techId: string) => void;
 }
 
-function TechnologyCard({ technology, canResearch, isResearching, onStartResearch }: TechnologyCardProps) {
+function TechnologyCard({ technology, canResearch, isResearching, onStartResearch, onPauseResearch, onResumeResearch }: TechnologyCardProps) {
   const gameState = useGameStore((state) => state.gameState);
   const currentResearch = gameState.researchState?.currentResearch;
   const isResearched = gameState.technologies[technology.id]?.researched || false;
-  const researchProgressPercent =
-    isResearching && currentResearch
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            (currentResearch.progress /
-              (gameState.technologies[technology.id]?.researchTime || 1)) *
-              100
-          )
-        )
-      : 0;
+  const savedProgress = Number(gameState.technologies[technology.id]?.researchProgress || 0);
+  const totalTime = Number(gameState.technologies[technology.id]?.researchTime || 1);
+  const activeProgress = isResearching && currentResearch ? currentResearch.progress : savedProgress;
+  const researchProgressPercent = Math.min(100, Math.max(0, (activeProgress / totalTime) * 100));
   
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -143,8 +137,8 @@ function TechnologyCard({ technology, canResearch, isResearching, onStartResearc
           </div>
         )}
         
-        {/* 研究进度 */}
-        {isResearching && (
+        {/* 研究进度（进行中或存在保存进度时显示） */}
+        {(isResearching || savedProgress > 0) && (
           <div className="mb-2">
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs font-medium text-gray-700">进度</span>
@@ -158,14 +152,36 @@ function TechnologyCard({ technology, canResearch, isResearching, onStartResearc
         
         {/* 操作按钮 */}
         {!isResearched && (
-          <Button 
-            size="sm" 
-            className="w-full h-7 text-xs"
-            disabled={!canResearch || isResearching}
-            onClick={() => onStartResearch(technology.id)}
-          >
-            {isResearching ? '研究中' : '研究'}
-          </Button>
+          <>
+            {isResearching ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full h-7 text-xs"
+                onClick={() => onPauseResearch(technology.id)}
+              >
+                暂停
+              </Button>
+            ) : savedProgress > 0 ? (
+              <Button
+                size="sm"
+                className="w-full h-7 text-xs"
+                disabled={!canResearch}
+                onClick={() => onResumeResearch(technology.id)}
+              >
+                继续研究
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="w-full h-7 text-xs"
+                disabled={!canResearch}
+                onClick={() => onStartResearch(technology.id)}
+              >
+                研究
+              </Button>
+            )}
+          </>
         )}
         
         {isResearched && (
@@ -305,35 +321,7 @@ export default function TechnologyTab() {
             </div>
           </div>
           
-          {/* 当前研究 */}
-          {currentResearch && (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium text-blue-900">当前研究</h4>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={pauseResearch}
-                >
-                  暂停
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 mb-2">
-                <BookOpen className="w-4 h-4 text-blue-600" />
-                <span className="font-medium">{currentTech?.name || ''}</span>
-              </div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-600">进度</span>
-                <span className="text-sm text-gray-600">
-                  {Math.round(currentProgressPercent)}%
-                </span>
-              </div>
-              <Progress 
-                value={currentProgressPercent} 
-                className="h-2" 
-              />
-            </div>
-          )}
+          
         </CardContent>
       </Card>
       
@@ -373,6 +361,8 @@ export default function TechnologyTab() {
                     canResearch={canResearchTech}
                     isResearching={isResearching}
                     onStartResearch={handleStartResearch}
+                    onPauseResearch={() => { if (isResearching) pauseResearch(); }}
+                    onResumeResearch={handleStartResearch}
                   />
                 );
               })}

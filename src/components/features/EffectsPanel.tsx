@@ -2,15 +2,32 @@
 
 import { useState } from 'react';
 import { Info } from 'lucide-react';
-import { Effect, EffectType } from '@/lib/effects-system';
+import { Effect, EffectType, EffectSourceType } from '@/lib/effects-system';
 import { AllEffectsModal } from '@/components/ui/AllEffectsModal';
+import { useGameStore } from '@/lib/game-store';
 
-// 格式化效果值显示
+ // 格式化效果值显示
 function formatValue(value: number, isPercentage: boolean): string {
   const rounded = Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
   const fixed = rounded.toFixed(2);
   const signed = rounded > 0 ? `+${fixed}` : fixed; // 负数自动带 -
   return isPercentage ? `${signed}%` : signed;
+}
+
+// 本地工具：归一化倍率/百分比
+function normalizePercent(value: number): number {
+  if (value > 1 && value < 3) return (value - 1) * 100;
+  return value;
+}
+function getResLabel(res: string) {
+  const map: Record<string, string> = {
+    food: '食物',
+    wood: '木材',
+    stone: '石材',
+    tools: '工具',
+    iron: '铁'
+  };
+  return map[res] || res.replace(/_/g, ' ');
 }
 
 // 计算稳定度对游戏机制的影响（根据stability.md设计文档）
@@ -322,6 +339,48 @@ interface EffectsPanelProps {
 export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   const [hoveredEffect, setHoveredEffect] = useState<Effect | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [techHover, setTechHover] = useState(false);
+
+  // 读取游戏状态中的科技，构建“科技”浮框明细
+  const gameState = useGameStore((s) => s.gameState);
+  const researchedTechs = Object.values(gameState.technologies || {}).filter((t: any) => t?.researched);
+
+  // 将科技效果映射为“名称：说明”行
+  const techBuffLines: Array<{ techName: string; text: string }> = [];
+  researchedTechs.forEach((tech: any) => {
+    (tech.effects || []).forEach((eff: any) => {
+      const type = eff?.type;
+      const target = eff?.target ?? eff?.resource;
+      const valPct = normalizePercent(Number(eff?.value || 0));
+      if (!type || !Number.isFinite(valPct) || valPct === 0) return;
+
+      switch (type) {
+        case 'resource_multiplier':
+        case 'resource_production_bonus': {
+          if (typeof target === 'string' && target && target !== 'all') {
+            techBuffLines.push({ techName: tech.name, text: `${getResLabel(target)}效率 ${valPct > 0 ? '+' : ''}${valPct}%` });
+          } else {
+            techBuffLines.push({ techName: tech.name, text: `生产效率 ${valPct > 0 ? '+' : ''}${valPct}%` });
+          }
+          break;
+        }
+        case 'population_growth_bonus':
+          techBuffLines.push({ techName: tech.name, text: `人口增长率 ${valPct > 0 ? '+' : ''}${valPct}%` });
+          break;
+        case 'research_speed_bonus':
+          techBuffLines.push({ techName: tech.name, text: `科技研发速度 ${valPct > 0 ? '+' : ''}${valPct}%` });
+          break;
+        case 'stability_bonus': {
+          const v = Number(eff?.value || 0);
+          techBuffLines.push({ techName: tech.name, text: `稳定度 ${v > 0 ? '+' : ''}${v}` });
+          break;
+        }
+        default:
+          // 其他类型先忽略，避免误导
+          break;
+      }
+    });
+  });
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePosition({ x: e.clientX, y: e.clientY });
@@ -339,8 +398,14 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
     );
   }
 
+  // 从标签列表中过滤掉“科技来源”的效果（合并为单一“科技”徽章显示）
+  const displayEffects = effects.filter((e: any) => {
+    const srcType = e?.source?.type ?? e?.sourceType;
+    return srcType !== EffectSourceType.TECHNOLOGY && srcType !== 'technology';
+  });
+
   // 按类型分组效果，确保鲁棒性
-  const groupedEffects = effects.reduce((acc, effect) => {
+  const groupedEffects = displayEffects.reduce((acc, effect) => {
     // 统一读取来源（兼容旧结构与新结构）
     const src: any = (effect as any).source || {};
     const sourceType = src.type || (effect as any).sourceType || effect.type || 'unknown';
@@ -379,6 +444,17 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
       
       {/* 横排显示效果标签，支持自动换行 */}
       <div className="flex flex-wrap gap-2">
+        {/* 科技合并徽章 */}
+        {researchedTechs.length > 0 && (
+          <div
+            className="px-3 py-1 rounded-full border text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-blue-900/40 border-blue-500/50 text-blue-200"
+            onMouseEnter={() => setTechHover(true)}
+            onMouseLeave={() => setTechHover(false)}
+          >
+            科技
+          </div>
+        )}
+
         {Object.entries(groupedEffects).map(([key, effectGroup]) => {
           // 对于同类型的效果，显示合并后的值
           const firstEffect = effectGroup[0];
@@ -411,6 +487,28 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
           effect={hoveredEffect}
           position={mousePosition}
         />
+      )}
+
+      {/* 科技浮框明细 */}
+      {techHover && researchedTechs.length > 0 && (
+        <div
+          className="fixed z-50 bg-gray-900 border border-gray-600 rounded-lg p-3 shadow-xl max-w-sm"
+          style={{ left: mousePosition.x + 10, top: mousePosition.y - 10, transform: 'translateY(-100%)' }}
+        >
+          <div className="text-white font-semibold mb-2">科技效果</div>
+          {techBuffLines.length === 0 ? (
+            <div className="text-xs text-gray-400">已研究科技暂无可显示的数值类效果</div>
+          ) : (
+            <div className="space-y-1">
+              {techBuffLines.map((line, idx) => (
+                <div key={idx} className="flex justify-between text-xs">
+                  <span className="text-gray-400">{line.techName}:</span>
+                  <span className={line.text.includes('-') ? 'text-red-400' : 'text-green-400'}>{line.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       
       {/* 全部效果弹窗 */}

@@ -197,6 +197,9 @@ export interface GameState {
   resources: Resources;
   resourceRates: ResourceRates;
   resourceLimits: ResourceLimits;
+
+  // 已解锁资源可见性（用于侧边栏逐行解锁；兼容旧存档为可选）
+  unlockedResources?: string[];
   
   // 建筑（使用新的建筑系统）
   buildings: Record<string, import('../types/building').BuildingInstance>;
@@ -288,6 +291,8 @@ export type GameAge =
 
 export interface GameSettings {
   autoSave: boolean;
+  // 开发者模式（可选），用于一键解锁与资源拉满
+  devMode?: boolean;
   soundEnabled: boolean;
   animationsEnabled: boolean;
   gameSpeed: number; // 游戏速度倍数

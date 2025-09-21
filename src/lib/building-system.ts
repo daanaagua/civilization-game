@@ -32,6 +32,9 @@ export class BuildingSystem {
    * 检查建筑是否解锁
    */
   isBuildingUnlocked(buildingId: string): boolean {
+    // 开发者模式：强制解锁
+    if (this.gameState.settings?.devMode) return true;
+
     const researchedTechs = new Set(
       Object.entries(this.gameState.technologies)
         .filter(([_, tech]) => tech.researched)
@@ -81,7 +84,11 @@ export class BuildingSystem {
    * 获取所有可用建筑
    */
   getAvailableBuildings(): BuildingDefinition[] {
-    return Object.values(BUILDING_DEFINITIONS).filter(building => 
+    // 开发者模式：返回全部建筑定义
+    if (this.gameState.settings?.devMode) {
+      return Object.values(BUILDING_DEFINITIONS);
+    }
+    return Object.values(BUILDING_DEFINITIONS).filter(building =>
       this.isBuildingUnlocked(building.id)
     );
   }
@@ -136,7 +143,10 @@ export class BuildingSystem {
     
     // 检查建筑是否解锁
     if (!this.isBuildingUnlocked(buildingId)) {
-      reasons.push('建筑未解锁');
+      // 开发者模式放开
+      if (!this.gameState.settings?.devMode) {
+        reasons.push('建筑未解锁');
+      }
     }
 
     // 检查建造限制
@@ -512,7 +522,7 @@ export class BuildingSystem {
         buildLimits[building.id] = {
           current,
           maximum,
-          canBuild: current < maximum && this.isBuildingUnlocked(building.id)
+          canBuild: current < maximum && (this.gameState.settings?.devMode ? true : this.isBuildingUnlocked(building.id))
         };
       }
     });

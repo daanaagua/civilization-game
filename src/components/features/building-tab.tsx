@@ -119,8 +119,13 @@ export function BuildingTab() {
   // 获取分类下的建筑：
   // - 若注册中心启用，则仅使用 registry 的可见结果进行过滤映射（不回退旧逻辑，避免提前曝光）
   // - 若注册中心未启用，则回退旧系统解锁判断
+  const devMode = gameState.settings?.devMode === true;
+
   const categoryBuildings = useMemo(() => {
     const baseList = getBuildingsByCategory(selectedCategory);
+    // 开发者模式：直接放开该分类的全部建筑
+    if (devMode) return baseList;
+
     if (registryHasAnyBuildings) {
       const idsInCategory = new Set(baseList.map(b => b.id));
       const visibleIds = new Set(registryVisibleBuildings.map(b => b.id));
@@ -129,7 +134,7 @@ export function BuildingTab() {
     }
     // 回退：始终以科技前置为准
     return baseList.filter(b => isBuildingUnlocked(b.id, ownedTechIds));
-  }, [selectedCategory, buildingSystem, registryHasAnyBuildings, registryVisibleBuildings]);
+  }, [selectedCategory, buildingSystem, registryHasAnyBuildings, registryVisibleBuildings, devMode, ownedTechIds]);
 
   // 处理建造建筑
   const handleBuildBuilding = (buildingId: string) => {

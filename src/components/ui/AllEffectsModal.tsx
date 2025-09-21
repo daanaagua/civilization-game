@@ -295,95 +295,101 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
     }
   });
   
-  // 添加科技效果
+  // 添加科技效果（将资源特定加成拆分为“{资源名}效率”）
+  // 动态资源标签：已知映射优先，否则将下划线转空格做回退
+  const getResLabel = (res: string) => {
+    const map: Record<string, string> = {
+      food: '食物',
+      wood: '木材',
+      stone: '石材',
+      tools: '工具',
+      iron: '铁'
+    };
+    return map[res] || res.replace(/_/g, ' ');
+  };
+  const upsertEffect = (name: string, addValuePct: number, source: string) => {
+    const existing = allEffects.get(name);
+    const valueStr = addValuePct > 0 ? `+${addValuePct}%` : `${addValuePct}%`;
+    if (existing) {
+      const existingValue = parseFloat(existing.value.replace('%', '').replace('+', '')) || 0;
+      const totalValue = existingValue + addValuePct;
+      allEffects.set(name, {
+        value: totalValue === 0 ? '0%' : `${totalValue > 0 ? '+' : ''}${totalValue}%`,
+        sources: [...existing.sources, source]
+      });
+    } else {
+      allEffects.set(name, { value: valueStr, sources: [source] });
+    }
+  };
+
   Object.values(gameState.technologies).forEach((tech) => {
     if (tech.researched && tech.effects) {
-      tech.effects.forEach((effect) => {
-        let effectName = '';
-        let effectValue = 0;
-        
+      tech.effects.forEach((effect: any) => {
         switch (effect.type) {
-          case 'resource_multiplier':
-            if (effect.target === 'food' || effect.target === 'wood' || effect.target === 'stone' || effect.target === 'iron' || effect.target === 'tools') {
-              effectName = '生产效率';
-              effectValue = normalizePercent(effect.value);
+          case 'resource_multiplier': {
+            const val = normalizePercent(effect.value);
+            if (typeof effect.target === 'string' && effect.target && effect.target !== 'all') {
+              upsertEffect(`${getResLabel(effect.target)}效率`, val, tech.name);
+            } else {
+              upsertEffect('生产效率', val, tech.name);
             }
             break;
-          case 'resource_production_bonus':
-            effectName = '生产效率';
-            effectValue = normalizePercent(effect.value);
-            break;
-          case 'population_growth_bonus':
-            effectName = '人口增长率';
-            effectValue = normalizePercent(effect.value);
-            break;
-          case 'research_speed_bonus':
-            effectName = '科技研发速度';
-            effectValue = normalizePercent(effect.value);
-            break;
-        }
-        
-        if (effectName && effectValue !== 0) {
-          const existing = allEffects.get(effectName);
-          const valueStr = effectValue > 0 ? `+${effectValue}%` : `${effectValue}%`;
-          
-          if (existing) {
-            const existingValue = parseFloat(existing.value.replace('%', '').replace('+', ''));
-            const totalValue = existingValue + effectValue;
-            allEffects.set(effectName, {
-              value: totalValue === 0 ? '0%' : `${totalValue > 0 ? '+' : ''}${totalValue}%`,
-              sources: [...existing.sources, tech.name]
-            });
-          } else {
-            allEffects.set(effectName, {
-              value: valueStr,
-              sources: [tech.name]
-            });
           }
+          case 'resource_production_bonus': {
+            const val = normalizePercent(effect.value);
+            if (typeof effect.target === 'string' && effect.target && effect.target !== 'all') {
+              upsertEffect(`${getResLabel(effect.target)}效率`, val, tech.name);
+            } else {
+              upsertEffect('生产效率', val, tech.name);
+            }
+            break;
+          }
+          case 'population_growth_bonus': {
+            upsertEffect('人口增长率', normalizePercent(effect.value), tech.name);
+            break;
+          }
+          case 'research_speed_bonus': {
+            upsertEffect('科技研发速度', normalizePercent(effect.value), tech.name);
+            break;
+          }
+          default:
+            break;
         }
       });
     }
   });
   
-  // 添加Buff效果
+  // 添加Buff效果（同样区分资源特定与全局）
   const activeBuffs = getActiveBuffs();
   activeBuffs.forEach((buff) => {
-    buff.effects.forEach((effect) => {
-      let effectName = '';
-      let effectValue = effect.value;
-      
+    buff.effects.forEach((effect: any) => {
       switch (effect.type) {
-        case 'population_growth':
-          effectName = '人口增长率';
+        case 'population_growth': {
+          const val = normalizePercent(effect.value);
+          upsertEffect('人口增长率', val, buff.name);
           break;
-        case 'resource_production':
-          effectName = '生产效率';
-          break;
-        case 'research_speed':
-          effectName = '科技研发速度';
-          break;
-        case 'building_efficiency':
-          effectName = '生产效率';
-          break;
-      }
-      
-      if (effectName && effectValue !== 0) {
-        const existing = allEffects.get(effectName);
-        const valueStr = effectValue > 0 ? `+${effectValue}%` : `${effectValue}%`;
-        
-        if (existing) {
-          const existingValue = parseFloat(existing.value.replace('%', '').replace('+', ''));
-          const totalValue = existingValue + effectValue;
-          allEffects.set(effectName, {
-            value: totalValue === 0 ? '0%' : `${totalValue > 0 ? '+' : ''}${totalValue}%`,
-            sources: [...existing.sources, buff.name]
-          });
-        } else {
-          allEffects.set(effectName, {
-            value: valueStr,
-            sources: [buff.name]
-          });
         }
+        case 'resource_production': {
+          const val = normalizePercent(effect.value);
+          if (typeof effect.target === 'string' && effect.target && effect.target !== 'all') {
+            upsertEffect(`${getResLabel(effect.target)}效率`, val, buff.name);
+          } else {
+            upsertEffect('生产效率', val, buff.name);
+          }
+          break;
+        }
+        case 'research_speed': {
+          const val = normalizePercent(effect.value);
+          upsertEffect('科技研发速度', val, buff.name);
+          break;
+        }
+        case 'building_efficiency': {
+          const val = normalizePercent(effect.value);
+          upsertEffect('生产效率', val, buff.name);
+          break;
+        }
+        default:
+          break;
       }
     });
   });

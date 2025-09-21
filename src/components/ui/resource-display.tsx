@@ -17,12 +17,19 @@ import {
 } from 'lucide-react';
 
 interface ResourceDisplayProps {
-  resource: keyof typeof resourceConfig; // 仅限支持在本组件中展示的资源键，避免索引越界
+  resource: string; // 支持任意资源键，结合兜底配置动态展示
   showRate?: boolean;
   className?: string;
 }
 
-const resourceConfig = {
+const resourceConfig: Record<string, {
+  name: string;
+  icon: any;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  description: string;
+}> = {
   food: {
     name: '食物',
     icon: Apple,
@@ -71,24 +78,32 @@ const resourceConfig = {
     borderColor: 'border-slate-600',
     description: '人口居住的容量限制。通过建造居住建筑增加住房容量。',
   },
-} as const;
+};
 
-type ResourceKey = keyof typeof resourceConfig;
+type ResourceKey = string;
 // 仅用于生产速率的资源键（housing 没有生产速率）
-type RateResourceKey = Extract<ResourceKey, keyof ResourceRates>;
+type RateResourceKey = keyof ResourceRates;
 
 export const ResourceDisplay = ({ resource, showRate = false, className = '' }: ResourceDisplayProps) => {
   const { gameState } = useGameStore();
   const { resources, resourceRates, resourceLimits } = gameState;
   const maxPopulation = useGameStore(state => state.maxPopulation);
   
-  const config = resourceConfig[resource];
+  const fallback = {
+    name: resource,
+    icon: Hammer,
+    color: 'text-slate-300',
+    bgColor: 'bg-slate-800',
+    borderColor: 'border-slate-600',
+    description: '通用资源',
+  };
+  const config = (resourceConfig as any)[resource] || fallback;
   const Icon = config.icon;
-  const amount = resources[resource as keyof Resources];
-  const rate = resource === 'housing' ? 0 : (resourceRates[resource as RateResourceKey] ?? 0);
+  const amount = (resources as any)?.[resource] ?? 0;
+  const rate = resource === 'housing' ? 0 : ((((resourceRates as any) ?? {})[resource as RateResourceKey] ?? 0) as number);
   const limit = resource === 'population'
     ? maxPopulation
-    : (resourceLimits[resource as keyof Resources] as number);
+    : (typeof (resourceLimits as any)?.[resource] === 'number' ? (resourceLimits as any)[resource] : undefined);
   
   return (
     <Tooltip 
@@ -118,7 +133,7 @@ export const ResourceDisplay = ({ resource, showRate = false, className = '' }: 
           
           <div className="text-lg font-bold text-slate-100">
             {formatNumber(amount)}
-            {resource !== 'housing' && (
+            {resource !== 'housing' && typeof limit === 'number' && (
               <span className="text-sm font-normal text-slate-400 ml-1">
                 / {formatNumber(limit)}
               </span>
@@ -137,14 +152,37 @@ export const ResourceDisplay = ({ resource, showRate = false, className = '' }: 
 
 // 资源面板组件
 export const ResourcePanel = () => {
-  const resources: ResourceKey[] = ['food', 'wood', 'stone', 'tools', 'population', 'housing'];
-  
+  const { gameState } = useGameStore();
+  const { resources, resourceRates, settings, unlockedResources } = gameState as any;
+
+  // 候选集合：resourceConfig 的所有键 ∪ gameState.resources 的键（并集，确保未初始化的资源也能被列出）
+  const keysFromConfig: ResourceKey[] = Object.keys(resourceConfig || {});
+  const keysFromState: ResourceKey[] = Object.keys(resources || {});
+  const allKeys: ResourceKey[] = Array.from(new Set([...keysFromConfig, ...keysFromState]));
+
+  // 排序优先：核心资源排前，其余按字母序
+  const preferred: ResourceKey[] = ['food', 'wood', 'stone', 'tools', 'population', 'housing'];
+  const others = allKeys.filter(k => !preferred.includes(k)).sort();
+  const orderedKeys: ResourceKey[] = [...preferred.filter(k => allKeys.includes(k)), ...others];
+
+  // 可见性判定：人口/住房始终显示；其余按解锁或非零展示；开发者模式全显
+  const visibleList = orderedKeys.filter((key) => {
+    if (key === 'population' || key === 'housing') return true;
+    if (settings?.devMode) return true;
+
+    const isUnlocked = Array.isArray(unlockedResources) && unlockedResources.includes(key);
+    const amount = (resources?.[key as keyof Resources] ?? 0) as number;
+    const rate = key === 'housing' ? 0 : ((resourceRates?.[key as keyof ResourceRates] ?? 0) as number);
+
+    return isUnlocked || amount !== 0 || rate !== 0;
+  });
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      {resources.map((resource) => (
-        <ResourceDisplay 
-          key={resource} 
-          resource={resource} 
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 select-none">
+      {visibleList.map((resource) => (
+        <ResourceDisplay
+          key={resource}
+          resource={resource}
           showRate={resource !== 'housing'}
         />
       ))}

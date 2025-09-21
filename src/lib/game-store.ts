@@ -65,7 +65,7 @@ const initialGameState: GameState = {
     wood: 0,
     stone: 0,
     tools: 0,
-    population: 1,
+    population: 0,
     researchPoints: 0,
     copper: 0,
     iron: 0,
@@ -100,6 +100,9 @@ const initialGameState: GameState = {
   },
   
   buildings: {} as Record<string, BuildingInstance>,
+
+  // 逐行解锁的资源可见性
+  unlockedResources: [],
   
   // 使用新的科技数据结构
   technologies: Object.fromEntries(
@@ -176,6 +179,7 @@ const initialGameState: GameState = {
     gameSpeed: 1,
     eventsPollIntervalMs: 1000,
     eventsDebugEnabled: false,
+    devMode: false,
   },
 
   // 统计数据
@@ -186,7 +190,7 @@ const initialGameState: GameState = {
     totalTechnologiesResearched: 0,
     totalEventsTriggered: 0,
     totalAchievementsUnlocked: 0,
-    currentGeneration: 1
+    currentGeneration: 0
   },
 
   // 游戏时间相关
@@ -265,6 +269,8 @@ interface GameStore {
   // 科技管理
   startResearch: (technologyId: string) => boolean;
   completeResearch: (technologyId: string) => void;
+  // 资源解锁（根据已研究科技重算）
+  recomputeUnlockedResourcesFromTechs: () => void;
   pauseResearch: () => void;
   updateResearchProgress: (deltaTime: number) => void;
   
@@ -370,9 +376,13 @@ interface GameStore {
   loadGame: () => boolean;
   initializePersistence: () => void;
 
-  // 统计数据管理
+   // 统计数据管理
   updateStatistics: (updates: Partial<GameState['statistics']>) => void;
   incrementStatistic: (key: keyof GameState['statistics'], value?: number) => void;
+
+  // 世代系统
+  setGeneration: (n: number) => void;
+  incrementGeneration: () => void;
 
   // 游戏速度控制
   setGameSpeed: (speed: number) => void;
@@ -380,6 +390,10 @@ interface GameStore {
   setEventsPollIntervalMs: (ms: number) => void;
   // 事件调试日志开关
   setEventsDebugEnabled: (enabled: boolean) => void;
+
+  // 开发者模式
+  toggleDevMode: () => void;
+  enableDevMode: () => void;
 
   // 效果系统
   effectsVersion: number;
@@ -442,6 +456,8 @@ interface GameStore {
 
 // 全局资源管理器实例
 let resourceManager: ResourceManager | null = null;
+// 人口增长累计器（单位：秒），用于确定性增长模型（基础10秒/人）
+let popGrowthAccumSec = 0;
 
 export const useGameStore = create<GameStore>()(persist(
   (set, get) => ({
@@ -883,7 +899,7 @@ export const useGameStore = create<GameStore>()(persist(
           totalTechnologiesResearched: 0,
           totalEventsTriggered: 0,
           totalAchievementsUnlocked: 0,
-          currentGeneration: 1,
+          currentGeneration: 0,
         };
         const updatedStatistics = {
           ...prevStats,
@@ -1037,6 +1053,8 @@ export const useGameStore = create<GameStore>()(persist(
       // 更新研究进度
       get().updateResearchProgress(adjustedDelta);
       
+      // 累计人口增长时间（用于确定性10秒/人模型）
+      popGrowthAccumSec += adjustedDelta;
       // 计算人口增长
       get().calculatePopulationGrowth();
       
@@ -1351,6 +1369,9 @@ export const useGameStore = create<GameStore>()(persist(
 
     isBuildingUnlocked: (buildingId: string) => {
       const { gameState } = get();
+      // 开发者模式下强制解锁
+      if (gameState.settings?.devMode) return true;
+
       const building = BUILDINGS[buildingId];
       if (!building) return false;
       
@@ -1382,27 +1403,33 @@ export const useGameStore = create<GameStore>()(persist(
         return false; // 已经在研究其他科技
       }
       
-      // 成本处理：支持普通资源与研究点并存
+      // 成本处理：支持普通资源与研究点并存（若已有进度，则视为恢复，不再扣费）
       const cost = technology.cost || {};
       const hasRP = typeof cost.researchPoints === 'number' && cost.researchPoints > 0;
       const basicCost: any = { ...cost };
       delete basicCost.researchPoints;
-      // 先校验负担能力
-      if (Object.keys(basicCost).length > 0 && !get().canAfford(basicCost)) {
-        return false;
-      }
-      if (hasRP && get().gameState.resources.researchPoints < (cost.researchPoints as number)) {
-        return false;
-      }
-      // 扣除成本
-      if (Object.keys(basicCost).length > 0) {
-        if (!get().spendResources(basicCost)) {
+
+      const savedProgress = Math.max(0, Number(technology.researchProgress || 0));
+      const isResume = savedProgress > 0;
+
+      if (!isResume) {
+        // 先校验负担能力
+        if (Object.keys(basicCost).length > 0 && !get().canAfford(basicCost)) {
           return false;
         }
-      }
-      if (hasRP) {
-        if (!get().spendResearchPoints(cost.researchPoints as number)) {
+        if (hasRP && get().gameState.resources.researchPoints < (cost.researchPoints as number)) {
           return false;
+        }
+        // 扣除成本
+        if (Object.keys(basicCost).length > 0) {
+          if (!get().spendResources(basicCost)) {
+            return false;
+          }
+        }
+        if (hasRP) {
+          if (!get().spendResearchPoints(cost.researchPoints as number)) {
+            return false;
+          }
         }
       }
       
@@ -1413,7 +1440,7 @@ export const useGameStore = create<GameStore>()(persist(
             ...state.gameState.researchState,
             currentResearch: {
               technologyId,
-              progress: 0,
+              progress: savedProgress,
               startTime: Date.now(),
             },
           },
@@ -1423,7 +1450,7 @@ export const useGameStore = create<GameStore>()(persist(
       get().addNotification({
         type: 'info',
         title: '开始研究',
-        message: `开始研究${technology.name}`,
+        message: `开始研究${technology.name}${isResume ? '（从已保存进度恢复）' : ''}`,
         duration: 3000,
       });
       
@@ -1456,6 +1483,9 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 应用科技效果
       get().applyTechnologyEffects(technologyId);
+
+      // 科技完成后，依据所有已研究科技重算解锁的资源行
+      get().recomputeUnlockedResourcesFromTechs();
       
       // 更新统计数据
       get().incrementStatistic('totalTechnologiesResearched');
@@ -1466,6 +1496,19 @@ export const useGameStore = create<GameStore>()(persist(
         message: `成功研究了${technology.name}`,
         duration: 5000,
       });
+
+      // 研究“部落组织”后，至少提升至第1代
+      if (technologyId === 'tribal_organization') {
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            statistics: {
+              ...state.gameState.statistics,
+              currentGeneration: Math.max(1, state.gameState.statistics?.currentGeneration || 0),
+            },
+          },
+        }));
+      }
     },
     
     pauseResearch: () => {
@@ -1474,10 +1517,20 @@ export const useGameStore = create<GameStore>()(persist(
       if (!gameState.researchState?.currentResearch) {
         return;
       }
-      
+
+      const current = gameState.researchState.currentResearch;
+      const tech = gameState.technologies[current.technologyId];
+
       set((state) => ({
         gameState: {
           ...state.gameState,
+          technologies: {
+            ...state.gameState.technologies,
+            [current.technologyId]: {
+              ...tech,
+              researchProgress: current.progress
+            }
+          },
           researchState: {
             ...state.gameState.researchState,
             currentResearch: null,
@@ -1488,7 +1541,7 @@ export const useGameStore = create<GameStore>()(persist(
       get().addNotification({
         type: 'info',
         title: '暂停研究',
-        message: '已暂停当前研究',
+        message: '已暂停当前研究（进度已保存）',
         duration: 3000,
       });
     },
@@ -1524,9 +1577,17 @@ export const useGameStore = create<GameStore>()(persist(
       if (newProgress >= technology.researchTime) {
         get().completeResearch(research.technologyId);
       } else {
+        // 进行中：同步 currentResearch 与 technology.researchProgress，便于暂停/恢复与进度条滚动
         set((state) => ({
           gameState: {
             ...state.gameState,
+            technologies: {
+              ...state.gameState.technologies,
+              [research.technologyId]: {
+                ...technology,
+                researchProgress: newProgress,
+              },
+            },
             researchState: {
               ...state.gameState.researchState,
               currentResearch: {
@@ -2033,42 +2094,37 @@ export const useGameStore = create<GameStore>()(persist(
         return;
       }
       
-      // 基础条件：必须有空余住房和食物（人口上限 = housing + 1）
+      // 必须有空余住房和食物（人口上限 = housing + 1）
       const availableHousing = (resources.housing + 1) - resources.population;
       if (availableHousing <= 0 || resources.food <= 0) {
+        // 条件不满足时清零累计，避免条件恢复瞬间暴涨
+        popGrowthAccumSec = 0;
         return;
       }
       
-      // 基础增长概率：每十天增长一个人口（约0.1%每秒）
-      const baseGrowthChance = 0.001;
+      // 基础耗时：每10秒 +1 人
+      const baseSecondsPerPerson = 10;
       
-      // 根据稳定度等级调整增长倍率
+      // 稳定度倍率（影响速度，最低为0表示不增长）
       let stabilityMultiplier = 1.0;
       if (stability >= 90) {
-        // 极度稳定：正常增长
-        stabilityMultiplier = 1.0;
+        stabilityMultiplier = 1.1;
       } else if (stability >= 75) {
-        // 高度稳定：正常增长
         stabilityMultiplier = 1.0;
       } else if (stability >= 60) {
-        // 基本稳定：正常增长
         stabilityMultiplier = 1.0;
       } else if (stability >= 45) {
-        // 轻度不稳：-25%增长率
         stabilityMultiplier = 0.75;
       } else if (stability >= 30) {
-        // 中度不稳：-50%增长率
         stabilityMultiplier = 0.5;
       } else if (stability >= 15) {
-        // 严重不稳：-75%增长率
         stabilityMultiplier = 0.25;
       } else {
-        // 崩溃：-100%增长率（无增长）
         stabilityMultiplier = 0;
       }
       
-      // 住房充足度影响
-      const housingAbundance = availableHousing / resources.population;
+      // 住房充足度倍率（影响速度）
+      const housingAbundance = availableHousing / Math.max(1, resources.population);
       let housingMultiplier = 1.0;
       if (housingAbundance > 0.5) {
         housingMultiplier = 1.5;
@@ -2076,28 +2132,32 @@ export const useGameStore = create<GameStore>()(persist(
         housingMultiplier = 0.5;
       }
       
-      // 计算最终增长概率
-      const finalGrowthChance = baseGrowthChance * stabilityMultiplier * housingMultiplier;
+      const speedMultiplier = stabilityMultiplier * housingMultiplier;
+      if (speedMultiplier <= 0) return;
       
-      // 使用随机数决定是否增长
-      if (Math.random() < finalGrowthChance) {
-        get().addResources({ population: 1 });
-        
-        // 添加人口增长通知
-        get().addNotification({
-          type: 'success',
-          title: '人口增长',
-          message: `部落迎来了新成员！当前人口：${resources.population + 1}`,
-          duration: 3000,
-        });
-
-        // 同步记录为非暂停事件：进入历史与“最新事件”（最多保留3条）
-        get().triggerNonPauseEvent({
-          id: `population_growth_${Date.now()}`,
-          title: '人口增长',
-          description: `部落迎来了新成员！当前人口：${resources.population + 1}`,
-          type: 'positive'
-        } as any);
+      const secondsNeeded = Math.max(2, baseSecondsPerPerson / speedMultiplier);
+      
+      if (popGrowthAccumSec >= secondsNeeded) {
+        // 计算本次可增长人数（不超过空余住房）
+        const births = Math.min(availableHousing, Math.floor(popGrowthAccumSec / secondsNeeded));
+        if (births > 0) {
+          popGrowthAccumSec -= births * secondsNeeded;
+          get().addResources({ population: births });
+          
+          // 通知与事件（合并一条）
+          get().addNotification({
+            type: 'success',
+            title: '人口增长',
+            message: `部落迎来了${births}名新成员！当前人口：${resources.population + births}`,
+            duration: 3000,
+          });
+          get().triggerNonPauseEvent({
+            id: `population_growth_${Date.now()}`,
+            title: '人口增长',
+            description: `部落迎来了${births}名新成员！当前人口：${resources.population + births}`,
+            type: 'positive'
+          } as any);
+        }
       }
     },
 
@@ -3173,7 +3233,7 @@ export const useGameStore = create<GameStore>()(persist(
       console.log('持久化功能已初始化 - 每10秒自动保存');
     },
 
-    // 统计数据管理
+     // 统计数据管理
     updateStatistics: (updates) => {
       set((state) => ({
         ...state,
@@ -3182,6 +3242,33 @@ export const useGameStore = create<GameStore>()(persist(
           statistics: {
             ...state.gameState.statistics,
             ...updates,
+          },
+        },
+      }));
+    },
+
+    // 世代系统
+    setGeneration: (n: number) => {
+      set((state) => ({
+        ...state,
+        gameState: {
+          ...state.gameState,
+          statistics: {
+            ...state.gameState.statistics,
+            currentGeneration: Math.max(0, Math.floor(n)),
+          },
+        },
+      }));
+    },
+
+    incrementGeneration: () => {
+      set((state) => ({
+        ...state,
+        gameState: {
+          ...state.gameState,
+          statistics: {
+            ...state.gameState.statistics,
+            currentGeneration: Math.max(0, (state.gameState.statistics?.currentGeneration || 0) + 1),
           },
         },
       }));
@@ -3251,6 +3338,160 @@ export const useGameStore = create<GameStore>()(persist(
           },
         },
       }));
+    },
+
+    // 开发者模式：开启后解锁全部科技、资源与人口拉满
+    enableDevMode: () => {
+      set((state) => {
+        // 1) 全科技解锁
+        const newTechs: any = {};
+        Object.entries(state.gameState.technologies).forEach(([id, tech]: any) => {
+          newTechs[id] = {
+            ...tech,
+            researched: true,
+            researchProgress: tech.researchTime || tech.researchProgress || 0
+          };
+        });
+
+        // 2) 先写入科技再更新效果系统，确保上限/效率等先就位
+        const midState: any = {
+          ...state,
+          gameState: {
+            ...state.gameState,
+            technologies: newTechs,
+            // 开发者模式下先设置 devMode，再全量放开资源可视
+            settings: {
+              ...state.gameState.settings,
+              devMode: true
+            },
+            unlockedResources: Object.keys(state.gameState.resources || {})
+          }
+        };
+
+        return midState;
+      });
+
+      // 刷新效果系统与速率
+      get().updateEffectsSystem();
+      get().calculateResourceRates();
+
+      // 3) 将资源设置为各自上限（人口=住房+1）
+      set((state) => {
+        const limits = state.gameState.resourceLimits;
+        const cur = state.gameState.resources;
+
+        // 若资源管理器未初始化，先初始化
+        if (!resourceManager) {
+          resourceManager = initializeResourceManager(state.gameState.resources, state.gameState.resourceLimits);
+        }
+
+        const newResources: any = { ...cur };
+        Object.entries(limits).forEach(([k, cap]) => {
+          if (k === 'housing') {
+            // housing 保持当前统计值
+            return;
+          }
+          if (k === 'population') {
+            // 人口设为住房上限 + 1
+            newResources.population = (state.gameState.resources.housing || 0) + 1;
+          } else {
+            // 其他资源设为上限
+            if (typeof newResources[k] === 'number') {
+              newResources[k] = cap as number;
+            }
+          }
+        });
+
+        // 同步资源管理器
+        if (resourceManager) {
+          resourceManager.setResources(newResources, 'manual');
+          resourceManager.updateResourceLimits(limits);
+        }
+
+        return {
+          ...state,
+          gameState: {
+            ...state.gameState,
+            resources: newResources
+          }
+        };
+      });
+
+      // 终态再算一次速率
+      get().calculateResourceRates();
+
+      // 同步一次（若后续新资源键加入资源对象，也确保可视）
+      set((state) => ({
+        gameState: {
+          ...state.gameState,
+          unlockedResources: Array.from(new Set([
+            ...(state.gameState.unlockedResources || []),
+            ...Object.keys(state.gameState.resources || {})
+          ]))
+        }
+      }));
+
+      // 通知
+      get().addNotification({
+        type: 'success',
+        title: '开发者模式',
+        message: '已解锁全部科技并将资源/人口拉满'
+      });
+    },
+
+    // 根据已研究科技重算资源解锁（依赖 Technology.unlocks 中的 { type: 'resource', id }）
+    recomputeUnlockedResourcesFromTechs: () => {
+      const state = get().gameState;
+      const unlocked = new Set<string>(state.unlockedResources || []);
+      Object.values(state.technologies || {}).forEach((tech: any) => {
+        if (!tech?.researched) return;
+        const unlocks = Array.isArray(tech.unlocks) ? tech.unlocks : [];
+        unlocks.forEach((u: any) => {
+          if (u && (u.type === 'resource') && typeof u.id === 'string') {
+            unlocked.add(u.id);
+          }
+        });
+      });
+
+      // 兼容：如资源已有非零数值/速率，也纳入显示
+      const res = state.resources || ({} as any);
+      const rates = state.resourceRates || ({} as any);
+      Object.keys(res).forEach((k) => {
+        if ((res as any)[k] !== 0 || (rates as any)[k] !== 0) {
+          unlocked.add(k);
+        }
+      });
+
+      set((s) => ({
+        gameState: {
+          ...s.gameState,
+          unlockedResources: Array.from(unlocked)
+        }
+      }));
+    },
+
+    toggleDevMode: () => {
+      const current = !!get().gameState.settings?.devMode;
+      if (!current) {
+        get().enableDevMode();
+      } else {
+        // 仅切换标志为关闭，不回滚状态，避免误伤已有进度
+        set((state) => ({
+          ...state,
+          gameState: {
+            ...state.gameState,
+            settings: {
+              ...state.gameState.settings,
+              devMode: false
+            }
+          }
+        }));
+        get().addNotification({
+          type: 'info',
+          title: '开发者模式',
+          message: '已关闭开发者模式（不回滚已变更的资源/科技）'
+        });
+      }
     },
 
     // 效果系统实现
@@ -3780,15 +4021,18 @@ export const useGameStore = create<GameStore>()(persist(
       if (!buildingDef) {
         return { canBuild: false, reason: '建筑定义未找到' };
       }
-      
-      // 检查科技前置条件
-      const researchedTechs = new Set(
-        Object.entries(gameState.technologies)
-          .filter(([_, tech]) => tech.researched)
-          .map(([id]) => id)
-      );
-      if (!isBuildingUnlocked(buildingId, researchedTechs)) {
-        return { canBuild: false, reason: '需要先研究相关科技' };
+
+      // 开发者模式：跳过解锁判定
+      if (!gameState.settings?.devMode) {
+        // 检查科技前置条件（普通模式）
+        const researchedTechs = new Set(
+          Object.entries(gameState.technologies)
+            .filter(([_, tech]) => tech.researched)
+            .map(([id]) => id)
+        );
+        if (!isBuildingUnlocked(buildingId, researchedTechs)) {
+          return { canBuild: false, reason: '需要先研究相关科技' };
+        }
       }
       
       // 检查建造限制
@@ -4689,7 +4933,7 @@ export const useGameStore = create<GameStore>()(persist(
           totalTechnologiesResearched: 0,
           totalEventsTriggered: 0,
           totalAchievementsUnlocked: 0,
-          currentGeneration: 1,
+          currentGeneration: 0,
         };
       }
 
@@ -4723,7 +4967,7 @@ export const useGameStore = create<GameStore>()(persist(
               totalTechnologiesResearched: 0,
               totalEventsTriggered: 0,
               totalAchievementsUnlocked: 0,
-              currentGeneration: 1,
+              currentGeneration: 0,
             };
           }
           
