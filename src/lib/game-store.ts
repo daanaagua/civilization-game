@@ -120,7 +120,7 @@ const initialGameState: GameState = {
     activeCharacters: {},
     availableCharacters: [],
     allCharacters: {},
-    unlockedPositions: ['chief'] // 默认解锁酋长职位
+    unlockedPositions: [] // 初始不解锁任何职位（避免重置后统治者卡片直接出现）
   },
   
   stability: 50,
@@ -430,6 +430,8 @@ interface GameStore {
   appointCharacter: (characterId: string, position: CharacterPosition) => boolean;
   dismissCharacter: (characterId: string) => boolean;
   getActiveCharacters: () => Character[];
+  // 新增：按职位读取在职人物映射
+  getActiveCharactersByPosition: () => Record<CharacterPosition, Character | null>;
   getAvailableCharacters: () => Character[];
   getCharacterById: (id: string) => Character | undefined;
   unlockCharacterPosition: (position: CharacterPosition) => void;
@@ -548,6 +550,90 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 初始化资源管理器
       get().initializeResourceManager();
+
+      // 旧存档补发：为所有“无特性”的人物分配1-2个特性，并同步修正属性/健康
+      try {
+        const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+        const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+        const pick = <T,>(arr: T[]) => arr[rand(0, arr.length - 1)];
+        const { characterSystem } = get().gameState;
+        if (characterSystem && characterSystem.allCharacters) {
+          // 与生成器中的 TRAIT_POOL 保持一致（轻量复刻最关键条目）
+          const POOL = [
+            { id: 'charming', dc: 2, type: 'positive', name: '风流倜傥', description: '魅力 +2（直接加属性）' },
+            { id: 'ugly', dc: -2, type: 'negative', name: '丑陋不堪', description: '魅力 -2（直接减属性）' },
+            { id: 'strong', df: 2, type: 'positive', name: '力大无穷', description: '武力 +2（直接加属性）' },
+            { id: 'weakling', df: -2, type: 'negative', name: '瘦弱不堪', description: '武力 -2（直接减属性）' },
+            { id: 'frail_health', dh: -15, type: 'negative', name: '体弱多病', description: '基础健康 -15（直接减生命上限）' },
+            { id: 'clever', di: 2, type: 'positive', name: '足智多谋', description: '智力 +2（直接加属性）' },
+            { id: 'private_stash', type: 'neutral', name: '小金库', description: '每年随机获得一笔货币（50~150）' },
+          ] as any[];
+          const positives = POOL.filter(t => t.type === 'positive');
+          const others = POOL.filter(t => t.type !== 'positive');
+          const weighted = [...positives, ...positives, ...others];
+
+          const patched: any = {};
+          Object.values(characterSystem.allCharacters).forEach((c: any) => {
+            if (!c) return;
+            if (!Array.isArray(c.traits) || c.traits.length === 0) {
+              const count = Math.random() < 0.6 ? 2 : 1;
+              const chosen: any[] = [];
+              while (chosen.length < count && weighted.length > 0) {
+                const t = pick(weighted);
+                if (!chosen.find(x => x.id === t.id)) chosen.push(t);
+              }
+              let f = c.attributes?.force ?? 5;
+              let i = c.attributes?.intelligence ?? 5;
+              let ch = c.attributes?.charisma ?? 5;
+              let hp = Math.max(10, Math.min(100, c.health ?? 100));
+              chosen.forEach((t) => {
+                if (typeof t.df === 'number') f = clamp(f + t.df, 0, 10);
+                if (typeof t.di === 'number') i = clamp(i + t.di, 0, 10);
+                if (typeof t.dc === 'number') ch = clamp(ch + t.dc, 0, 10);
+                if (typeof t.dh === 'number') hp = clamp(hp + t.dh, 10, 100);
+              });
+              const normalized = chosen.map((t) => ({
+                id: t.id, name: t.name, type: t.type, description: t.description, effects: []
+              }));
+              patched[c.id] = {
+                ...c,
+                attributes: { ...c.attributes, force: f, intelligence: i, charisma: ch },
+                health: hp,
+                traits: normalized
+              };
+            }
+          });
+          if (Object.keys(patched).length > 0) {
+            set((state) => ({
+              gameState: {
+                ...state.gameState,
+                characterSystem: {
+                  ...state.gameState.characterSystem,
+                  allCharacters: {
+                    ...state.gameState.characterSystem.allCharacters,
+                    ...patched
+                  },
+                  // 同步在职与候选
+                  activeCharacters: Object.fromEntries(
+                    Object.entries(state.gameState.characterSystem.activeCharacters || {}).map(([id, ch]: any) => {
+                      const rep = patched[id];
+                      return [id, rep ? rep : ch];
+                    })
+                  ) as any,
+                  availableCharacters: (state.gameState.characterSystem.availableCharacters || []).map((c: any) => patched[c.id] || c),
+                  activeByPosition: Object.fromEntries(
+                    Object.entries((state.gameState.characterSystem as any).activeByPosition || {}).map(([pos, ch]: any) => {
+                      if (!ch) return [pos, ch];
+                      const rep = patched[ch.id];
+                      return [pos, rep ? rep : ch];
+                    })
+                  ) as any
+                }
+              }
+            }) as any);
+          }
+        }
+      } catch {}
       
       // 启动时根据已有建筑重算住房容量并钳制人口
       (() => {
@@ -795,6 +881,30 @@ export const useGameStore = create<GameStore>()(persist(
       const newGameTime = gameState.gameTime + adjustedDelta;
       const newDays = Math.floor(newGameTime / 86400);
       const daysPassed = newDays - oldDays;
+      // 小金库年度结算：每满360天触发一次
+      if (daysPassed > 0) {
+        (globalThis as any).__privateStashDays = ((globalThis as any).__privateStashDays || 0) + daysPassed;
+        if ((globalThis as any).__privateStashDays >= 360) {
+          try {
+            const stashHolders = (get().getActiveCharacters?.() || []).filter((c: any) =>
+              Array.isArray(c?.traits) && c.traits.some((t: any) => t?.id === 'private_stash')
+            );
+            if (stashHolders.length > 0) {
+              const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+              const total = stashHolders.reduce((sum: number) => sum + rand(50, 150), 0);
+              if (total > 0) {
+                get().addResources({ currency: total } as any);
+                get().addNotification({
+                  type: 'info',
+                  title: '小金库入账',
+                  message: `本年共有 ${stashHolders.length} 位人物的小金库入账，共 +${total} 货币。`
+                });
+              }
+            }
+          } catch {}
+          (globalThis as any).__privateStashDays = 0;
+        }
+      }
       
       // 清理过期的临时效果
       if (daysPassed > 0) {
@@ -1483,6 +1593,37 @@ export const useGameStore = create<GameStore>()(persist(
       
       // 应用科技效果
       get().applyTechnologyEffects(technologyId);
+
+      // 解析本科技的解锁，处理职位/人物（自动生成并尝试上任）
+      try {
+        const techAfter = get().gameState.technologies[technologyId] as any;
+        const unlocks: any[] = Array.isArray(techAfter?.unlocks) ? techAfter.unlocks : [];
+
+        // 解锁职位
+        unlocks
+          .filter(u => u && u.type === 'character_position' && typeof u.id === 'string')
+          .forEach(u => {
+            try { get().unlockCharacterPosition(u.id as CharacterPosition); } catch {}
+          });
+
+        // 解锁人物：生成1名随机人物加入候选，并尝试自动任命到空缺职位
+        const hasCharacterUnlock = unlocks.some(u => u && u.type === 'character');
+        if (hasCharacterUnlock) {
+          const ch = get().generateCharacter();
+          const positions = get().getUnlockedPositions();
+          const occupied = new Set(
+            Object.values(get().gameState.characterSystem.activeCharacters || {})
+              .map((c: any) => c?.position)
+              .filter(Boolean)
+          );
+          const emptyPos = positions.find(p => !occupied.has(p));
+          if (emptyPos) {
+            try { get().appointCharacter(ch.id, emptyPos); } catch {}
+          }
+        }
+      } catch {
+        // 忽略异常，保证研究流程不中断
+      }
 
       // 科技完成后，依据所有已研究科技重算解锁的资源行
       get().recomputeUnlockedResourcesFromTechs();
@@ -3431,11 +3572,172 @@ export const useGameStore = create<GameStore>()(persist(
         }
       }));
 
+      // 4) 解锁全部职位并“按类型-职位”一对一定向生成与任命（避免类型与职位错配导致面板空缺）
+      try {
+        // 类型→初始职位映射（与 character-system 的 getInitialPosition 一致）
+        const typeToPos: Array<{ type: any; pos: CharacterPosition }> = [
+          { type: (require('@/types/character') as any).CharacterType.RULER,            pos: CharacterPosition.CHIEF },
+          { type: (require('@/types/character') as any).CharacterType.RESEARCH_LEADER, pos: CharacterPosition.ELDER },
+          { type: (require('@/types/character') as any).CharacterType.FAITH_LEADER,    pos: CharacterPosition.HIGH_PRIEST },
+          { type: (require('@/types/character') as any).CharacterType.MAGE_LEADER,     pos: CharacterPosition.ARCHMAGE },
+          { type: (require('@/types/character') as any).CharacterType.CIVIL_LEADER,    pos: CharacterPosition.CHIEF_JUDGE },
+          { type: (require('@/types/character') as any).CharacterType.GENERAL,         pos: CharacterPosition.GENERAL },
+          { type: (require('@/types/character') as any).CharacterType.DIPLOMAT,        pos: CharacterPosition.DIPLOMAT },
+        ];
+
+        // 标记：记录本次因开发者模式而临时解锁的职位与任命的人物，便于关闭时回滚
+        const devUnlocked = new Set<string>();
+        const devAppointed = new Set<string>();
+
+        // 解锁所有映射中的职位
+        typeToPos.forEach(({ pos }) => {
+          try {
+            const before = (get().gameState.characterSystem.unlockedPositions || []) as any[];
+            if (!before.includes(pos)) {
+              get().unlockCharacterPosition(pos);
+              devUnlocked.add(String(pos));
+            }
+          } catch {}
+        });
+
+        // 已占用职位集合
+        const active = get().gameState.characterSystem.activeCharacters || {};
+        const occupied = new Set(
+          Object.values(active)
+            .map((c: any) => c?.position)
+            .filter(Boolean)
+        );
+
+        // 对每个映射：若该职位空缺，则生成该“类型”的人物并任命到该“职位”
+        const { generateRandomCharacterOfType } = (() => {
+          try {
+            const m = require('./character-system');
+            // 若没有定向生成函数，则回退到 generateRandomCharacter 并覆盖 type
+            return {
+              generateRandomCharacterOfType: (t: any) => {
+                const ch = m.generateRandomCharacter();
+                return { ...ch, type: t };
+              }
+            };
+          } catch {
+            return {
+              generateRandomCharacterOfType: (t: any) => {
+                const id = `dev_${t}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+                return {
+                  id,
+                  name: '临时候选',
+                  type: t,
+                  position: CharacterPosition.CHIEF,
+                  age: 30,
+                  health: 100,
+                  healthStatus: 'good',
+                  attributes: { force: 5, intelligence: 5, charisma: 5 },
+                  traits: [],
+                  buffs: [],
+                  isUnlocked: true,
+                  unlockConditions: {},
+                  experience: 0,
+                  loyalty: 80
+                } as any;
+              }
+            };
+          }
+        })();
+
+        typeToPos.forEach(({ type, pos }) => {
+          if (!occupied.has(pos)) {
+            // 生成指定类型人物，放入可用池/allCharacters
+            const ch = generateRandomCharacterOfType(type);
+            set((state) => ({
+              gameState: {
+                ...state.gameState,
+                characterSystem: {
+                  ...state.gameState.characterSystem,
+                  availableCharacters: [...state.gameState.characterSystem.availableCharacters, ch],
+                  allCharacters: {
+                    ...state.gameState.characterSystem.allCharacters,
+                    [ch.id]: ch
+                  }
+                }
+              }
+            }));
+            // 任命到指定职位
+            try {
+              if (get().appointCharacter(ch.id, pos)) {
+                devAppointed.add(ch.id);
+              }
+            } catch {}
+          }
+        });
+
+        // 将记录保存到 state 以便关闭时回滚
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            characterSystem: {
+              ...state.gameState.characterSystem,
+              // 用非破坏性可选字段记录
+              devUnlockedPositions: Array.from(devUnlocked) as any,
+              devAppointedIds: Array.from(devAppointed) as any
+            } as any
+          }
+        }) as any);
+      } catch {
+        // 忽略异常以避免影响其它 devMode 流程
+      }
+
+      // 最终兜底：确保所有已解锁职位均有人就任（防止个别路径未任命导致空缺）
+      try {
+        const { CharacterType } = require('@/types/character');
+        const posToType: Record<string, any> = {
+          chief: CharacterType.RULER,
+          elder: CharacterType.RESEARCH_LEADER,
+          high_priest: CharacterType.FAITH_LEADER,
+          archmage: CharacterType.MAGE_LEADER,
+          chief_judge: CharacterType.CIVIL_LEADER,
+          general: CharacterType.GENERAL,
+          diplomat: CharacterType.DIPLOMAT,
+          king: CharacterType.RULER,
+          emperor: CharacterType.RULER,
+          president: CharacterType.RULER,
+          grand_scholar: CharacterType.RESEARCH_LEADER,
+          academy_head: CharacterType.RESEARCH_LEADER,
+          archbishop: CharacterType.FAITH_LEADER,
+          pope: CharacterType.FAITH_LEADER,
+          royal_archmage: CharacterType.MAGE_LEADER,
+          speaker: CharacterType.CIVIL_LEADER,
+          grand_marshal: CharacterType.GENERAL
+        };
+        const positions = get().getUnlockedPositions();
+        positions.forEach((pos) => {
+          const cs: any = get().gameState.characterSystem || {};
+          const byPos = (cs.activeByPosition || {}) as Record<string, any>;
+          if (!byPos[pos]) {
+            let ch = get().generateCharacter();
+            const targetType = posToType[String(pos)];
+            if (targetType && ch && ch.type !== targetType) {
+              ch = { ...ch, type: targetType };
+              set((state) => ({
+                gameState: {
+                  ...state.gameState,
+                  characterSystem: {
+                    ...state.gameState.characterSystem,
+                    allCharacters: { ...state.gameState.characterSystem.allCharacters, [ch.id]: ch },
+                    availableCharacters: state.gameState.characterSystem.availableCharacters.map((c: any) => c.id === ch.id ? ch : c)
+                  }
+                }
+              }));
+            }
+            try { get().appointCharacter(ch.id, pos); } catch {}
+          }
+        });
+      } catch {}
+      
       // 通知
       get().addNotification({
         type: 'success',
         title: '开发者模式',
-        message: '已解锁全部科技并将资源/人口拉满'
+        message: '已解锁全部科技/资源并将人口拉满；职位与人物已自动填充'
       });
     },
 
@@ -3475,7 +3777,70 @@ export const useGameStore = create<GameStore>()(persist(
       if (!current) {
         get().enableDevMode();
       } else {
-        // 仅切换标志为关闭，不回滚状态，避免误伤已有进度
+        // 关闭开发者模式：回滚“仅由开发者模式带来的职位解锁与任命”
+        try {
+          const cs: any = get().gameState.characterSystem || {};
+          const devUnlocked: string[] = Array.isArray(cs.devUnlockedPositions) ? cs.devUnlockedPositions : [];
+          const devAppointed: string[] = Array.isArray(cs.devAppointedIds) ? cs.devAppointedIds : [];
+
+          // 解除任命并清空对应职位
+          devAppointed.forEach((id) => {
+            const act = get().gameState.characterSystem.activeCharacters[id];
+            const pos = act?.position;
+            if (act) {
+              // 从 active 映射中移除
+              set((state) => ({
+                gameState: {
+                  ...state.gameState,
+                  characterSystem: {
+                    ...state.gameState.characterSystem,
+                    activeCharacters: Object.fromEntries(
+                      Object.entries(state.gameState.characterSystem.activeCharacters)
+                        .filter(([cid]) => cid !== id)
+                    ),
+                    activeByPosition: {
+                      ...(state.gameState.characterSystem as any).activeByPosition,
+                      ...(pos ? { [pos]: null } : {})
+                    },
+                    // 放回候选池
+                    availableCharacters: [...state.gameState.characterSystem.availableCharacters, { ...(act as any) }]
+                  }
+                }
+              }));
+            }
+          });
+
+          // 撤销开发者临时解锁的职位
+          if (devUnlocked.length > 0) {
+            set((state) => ({
+              gameState: {
+                ...state.gameState,
+                characterSystem: {
+                  ...state.gameState.characterSystem,
+                  unlockedPositions: (state.gameState.characterSystem.unlockedPositions || []).filter(
+                    (p: any) => !devUnlocked.includes(String(p))
+                  ),
+                  devUnlockedPositions: [],
+                  devAppointedIds: []
+                } as any
+              }
+            }) as any);
+          } else {
+            // 清空记录
+            set((state) => ({
+              gameState: {
+                ...state.gameState,
+                characterSystem: {
+                  ...state.gameState.characterSystem,
+                  devUnlockedPositions: [],
+                  devAppointedIds: []
+                } as any
+              }
+            }) as any);
+          }
+        } catch {}
+
+        // 最后仅切换标志为关闭
         set((state) => ({
           ...state,
           gameState: {
@@ -3486,10 +3851,11 @@ export const useGameStore = create<GameStore>()(persist(
             }
           }
         }));
+
         get().addNotification({
           type: 'info',
           title: '开发者模式',
-          message: '已关闭开发者模式（不回滚已变更的资源/科技）'
+          message: '已关闭开发者模式（已回滚由开发者模式临时解锁/任命的人物与职位）'
         });
       }
     },
@@ -3500,6 +3866,10 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     updateEffectsSystem: () => {
+      // 先下沉/刷新“人物效果”至全局效果系统，确保后续汇总包含最新人物变化
+      try {
+        get().updateCharacterSystem();
+      } catch {}
       const state = get().gameState;
       globalEffectsSystem.updateFromGameState(state);
       set((s) => ({ ...s, effectsVersion: s.effectsVersion + 1 }));
@@ -4350,8 +4720,128 @@ export const useGameStore = create<GameStore>()(persist(
 
     // 人物系统方法
     generateCharacter: () => {
-      const { generateRandomCharacter } = require('./character-system');
-      const character = generateRandomCharacter();
+      // 内置安全生成器（避免依赖不存在的外部函数）
+      const { CharacterType, CharacterPosition, HealthStatus } = require('@/types/character');
+
+      // 工具
+      const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+      const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+      const pick = <T,>(arr: T[]) => arr[rand(0, arr.length - 1)];
+
+      // ID 与姓名
+      const id = `char_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const familyNames = ['阿', '巴', '卡', '达', '伊', '法', '格', '赫', '吉', '卡', '拉', '马', '那', '欧', '帕', '奇', '瑞', '萨', '塔', '乌', '维', '沃', '希', '伊', '泽'];
+      const givenNamesMale = ['图', '鲁', '卡', '纳', '米', '若', '哈', '亚', '索', '凯', '良', '昂', '岳', '宁'];
+      const givenNamesFemale = ['雅', '娜', '薇', '琳', '娅', '茜', '琪', '芙', '莎', '莲', '瑶', '雪', '朵', '馨'];
+      const gender: 'male' | 'female' = Math.random() < 0.5 ? 'male' : 'female';
+      const given = gender === 'male' ? pick(givenNamesMale) : pick(givenNamesFemale);
+      const name = `${pick(familyNames)}${given}`;
+
+      // 随机类型与其初始职位映射
+      const typeValues: any[] = Object.values(CharacterType);
+      const type = typeValues[rand(0, typeValues.length - 1)];
+
+      const typeToPos: Record<string, any> = {
+        [CharacterType.RULER]: CharacterPosition.CHIEF,
+        [CharacterType.RESEARCH_LEADER]: CharacterPosition.ELDER,
+        [CharacterType.FAITH_LEADER]: CharacterPosition.HIGH_PRIEST,
+        [CharacterType.MAGE_LEADER]: CharacterPosition.ARCHMAGE,
+        [CharacterType.CIVIL_LEADER]: CharacterPosition.CHIEF_JUDGE,
+        [CharacterType.GENERAL]: CharacterPosition.GENERAL,
+        [CharacterType.DIPLOMAT]: CharacterPosition.DIPLOMAT
+      };
+      const position = typeToPos[type] || CharacterPosition.CHIEF;
+
+      // 年龄规则：
+      // - 默认上任年龄：26–40
+      // - 若已解锁“国王”职位，且类型为 RULER，视作可能的继承人：18–40
+      const unlocked = (get().gameState.characterSystem?.unlockedPositions || []) as any[];
+      const kingUnlocked = unlocked.includes(CharacterPosition.KING);
+      const ageMin = type === CharacterType.RULER && kingUnlocked ? 18 : 26;
+      const ageMax = 40;
+      const age = rand(ageMin, ageMax);
+
+      // 基础属性
+      let force = rand(3, 9);
+      let intelligence = rand(3, 9);
+      let charisma = rand(3, 9);
+
+      // 特性池（包含加减属性与功能特性）
+      type TraitTpl = {
+        id: string;
+        name: string;
+        type: 'positive'|'negative'|'neutral';
+        description: string;
+        // 直接改属性：Δ武/智/魅
+        df?: number; di?: number; dc?: number;
+        // 直接改基础健康（0-100）
+        dh?: number;
+        // 功能标记，用于循环结算
+        flag?: 'private_stash';
+      };
+      const TRAIT_POOL: TraitTpl[] = [
+        { id: 'charming', name: '风流倜傥', type: 'positive', description: '魅力 +2（直接加属性）', dc: 2 },
+        { id: 'ugly', name: '丑陋不堪', type: 'negative', description: '魅力 -2（直接减属性）', dc: -2 },
+        { id: 'strong', name: '力大无穷', type: 'positive', description: '武力 +2（直接加属性）', df: 2 },
+        { id: 'weakling', name: '瘦弱不堪', type: 'negative', description: '武力 -2（直接减属性）', df: -2 },
+        { id: 'frail_health', name: '体弱多病', type: 'negative', description: '基础健康 -15（直接减生命上限）', dh: -15 },
+        { id: 'clever', name: '足智多谋', type: 'positive', description: '智力 +2（直接加属性）', di: 2 },
+        { id: 'bookish', name: '学究气重', type: 'neutral', description: '智力 +1，生产效率 -4%', di: 1 },
+        { id: 'industrious', name: '勤勉有序', type: 'positive', description: '全局生产效率 +5%' },
+        { id: 'wasteful', name: '浪费成性', type: 'negative', description: '产出 +5%，消耗 +8%' },
+        { id: 'private_stash', name: '小金库', type: 'neutral', description: '每年随机获得一笔货币（50~150）', flag: 'private_stash' },
+      ];
+
+      // 权重：正面略高
+      const positives = TRAIT_POOL.filter(t => t.type === 'positive');
+      const others = TRAIT_POOL.filter(t => t.type !== 'positive');
+      const poolWeighted = [...positives, ...positives, ...others];
+
+      // 抽取1-2个不重复特性
+      const traitCount = Math.random() < 0.6 ? 2 : 1;
+      const picked: TraitTpl[] = [];
+      while (picked.length < traitCount && poolWeighted.length > 0) {
+        const t = pick(poolWeighted);
+        if (!picked.find(x => x.id === t.id)) picked.push(t);
+      }
+
+      // 应用属性与健康修正
+      let baseHealth = 100;
+      picked.forEach(t => {
+        force = clamp(force + (t.df || 0), 0, 10);
+        intelligence = clamp(intelligence + (t.di || 0), 0, 10);
+        charisma = clamp(charisma + (t.dc || 0), 0, 10);
+        if (typeof t.dh === 'number') baseHealth = clamp(baseHealth + t.dh, 10, 100);
+      });
+
+      const character: any = {
+        id,
+        name,
+        type,
+        position,
+        gender,
+        age,
+        health: baseHealth,
+        healthStatus: HealthStatus.GOOD,
+        attributes: {
+          force,
+          intelligence,
+          charisma
+        },
+        traits: picked.map(t => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          type: t.type,
+          effects: [] // 属性已直接体现在数值上，效果系统可按需映射
+        })),
+        buffs: [],
+        isUnlocked: true,
+        unlockConditions: {},
+        experience: 0,
+        loyalty: rand(60, 95)
+      };
+
       set((state) => ({
         gameState: {
           ...state.gameState,
@@ -4365,7 +4855,8 @@ export const useGameStore = create<GameStore>()(persist(
           }
         }
       }));
-      return character;
+
+      return character as any;
     },
 
     appointCharacter: (characterId: string, position: CharacterPosition) => {
@@ -4373,17 +4864,18 @@ export const useGameStore = create<GameStore>()(persist(
       const character = state.gameState.characterSystem.allCharacters[characterId];
       if (!character) return false;
 
-      // 检查职位是否已解锁
+      // 职位是否解锁
       if (!state.gameState.characterSystem.unlockedPositions.includes(position)) {
         return false;
       }
 
-      // 检查职位是否已被占用
-      const currentHolder = Object.values(state.gameState.characterSystem.activeCharacters)
-        .find(char => char.position === position);
-      if (currentHolder) return false;
+      // 职位是否已被占用（优先用按职位映射判断）
+      const currentByPos = (state.gameState.characterSystem as any).activeByPosition || {};
+      if (currentByPos[position]) {
+        return false;
+      }
 
-      // 任命人物
+      // 任命人物：同时更新按ID与按职位两份索引
       const appointedCharacter = { ...character, position };
       set((state) => ({
         gameState: {
@@ -4393,6 +4885,10 @@ export const useGameStore = create<GameStore>()(persist(
             activeCharacters: {
               ...state.gameState.characterSystem.activeCharacters,
               [characterId]: appointedCharacter
+            },
+            activeByPosition: {
+              ...(state.gameState.characterSystem as any).activeByPosition,
+              [position]: appointedCharacter
             },
             availableCharacters: state.gameState.characterSystem.availableCharacters
               .filter(char => char.id !== characterId)
@@ -4410,7 +4906,9 @@ export const useGameStore = create<GameStore>()(persist(
       const character = state.gameState.characterSystem.activeCharacters[characterId];
       if (!character) return false;
 
-      // 不修改 position 字段，直接从 active 移除并放回可选列表，避免 position: undefined 的类型错误
+      const pos = (character as any).position;
+
+      // 从在职移除（两份索引），并放回可选列表
       set((state) => ({
         gameState: {
           ...state.gameState,
@@ -4420,6 +4918,10 @@ export const useGameStore = create<GameStore>()(persist(
               Object.entries(state.gameState.characterSystem.activeCharacters)
                 .filter(([id]) => id !== characterId)
             ),
+            activeByPosition: {
+              ...(state.gameState.characterSystem as any).activeByPosition,
+              ...(pos ? { [pos]: null } : {})
+            },
             availableCharacters: [...state.gameState.characterSystem.availableCharacters, { ...character }]
           }
         }
@@ -4528,6 +5030,7 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     unlockCharacterPosition: (position: CharacterPosition) => {
+      // 1) 写入解锁列表（去重）
       set((state) => ({
         gameState: {
           ...state.gameState,
@@ -4539,10 +5042,64 @@ export const useGameStore = create<GameStore>()(persist(
           }
         }
       }));
+      // 2) 若该职位当前为空缺，则立刻生成人物并自动任命，避免出现“职位空缺”
+      try {
+        const cs: any = get().gameState.characterSystem || {};
+        const activeByPos = (cs.activeByPosition || {}) as Record<CharacterPosition, any>;
+        if (!activeByPos[position]) {
+          // 职位 -> 类型 映射（与 UI/character-tab 逻辑一致）
+          const { CharacterType } = require('@/types/character');
+          const posToType: Record<string, any> = {
+            chief: CharacterType.RULER,
+            elder: CharacterType.RESEARCH_LEADER,
+            high_priest: CharacterType.FAITH_LEADER,
+            archmage: CharacterType.MAGE_LEADER,
+            chief_judge: CharacterType.CIVIL_LEADER,
+            general: CharacterType.GENERAL,
+            diplomat: CharacterType.DIPLOMAT,
+            king: CharacterType.RULER,
+            emperor: CharacterType.RULER,
+            president: CharacterType.RULER,
+            grand_scholar: CharacterType.RESEARCH_LEADER,
+            academy_head: CharacterType.RESEARCH_LEADER,
+            archbishop: CharacterType.FAITH_LEADER,
+            pope: CharacterType.FAITH_LEADER,
+            royal_archmage: CharacterType.MAGE_LEADER,
+            speaker: CharacterType.CIVIL_LEADER,
+            grand_marshal: CharacterType.GENERAL
+          };
+          const targetType = posToType[String(position)];
+          // 生成一名候选人（若无法定向生成，则用通用生成并覆盖类型）
+          let ch = get().generateCharacter();
+          if (targetType && ch && ch.type !== targetType) {
+            ch = { ...ch, type: targetType };
+            set((state) => ({
+              gameState: {
+                ...state.gameState,
+                characterSystem: {
+                  ...state.gameState.characterSystem,
+                  allCharacters: { ...state.gameState.characterSystem.allCharacters, [ch.id]: ch },
+                  availableCharacters: state.gameState.characterSystem.availableCharacters.map((c: any) => c.id === ch.id ? ch : c)
+                }
+              }
+            }));
+          }
+          try {
+            get().appointCharacter(ch.id, position);
+          } catch {}
+        }
+      } catch {
+        // 忽略异常，保证主流程
+      }
     },
 
     getActiveCharacters: () => {
       return Object.values(get().gameState.characterSystem.activeCharacters);
+    },
+    // 新增：按职位读取在职人物映射
+    getActiveCharactersByPosition: () => {
+      const cs: any = get().gameState.characterSystem || {};
+      return cs.activeByPosition || {};
     },
 
     getAvailableCharacters: () => {
@@ -4610,25 +5167,115 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     updateCharacterSystem: () => {
-      const effects = get().calculateCharacterEffects();
+      const state = get().gameState;
       const effectsSystem = get().getEffectsSystem();
-      
-      // 移除旧的人物效果
+
+      // 清除旧的人物效果
       effectsSystem.removeEffectsBySource('character' as any);
-      
-      // 添加新的人物效果
-      effects.forEach(effect => {
-        effectsSystem.addEffect({
-          ...effect,
-          sourceType: 'character',
-          sourceId: effect.characterId
+
+      // 读取在职人物（按职位）
+      const activeByPos: Record<string, any> = (state.characterSystem as any)?.activeByPosition || {};
+
+      // 映射：职位 -> 中文标签（用于效果来源名）
+      const posLabel: Record<string, string> = {
+        chief: '酋长',
+        king: '国王',
+        emperor: '皇帝',
+        president: '总统',
+        elder: '长老',
+        grand_scholar: '大学士',
+        academy_head: '学院院长',
+        high_priest: '大祭司',
+        archbishop: '大主教',
+        pope: '教宗',
+        archmage: '大法师',
+        royal_archmage: '御用大法师',
+        chief_judge: '大法官',
+        speaker: '议长',
+        general: '将军',
+        grand_marshal: '大元帅',
+        diplomat: '外交官'
+      };
+
+      // 加载属性折算映射
+      let ATTR_MAP: any = null;
+      try {
+        ATTR_MAP = (require('@/lib/character-data') as any).CHARACTER_ATTRIBUTE_EFFECTS || null;
+      } catch {
+        ATTR_MAP = null;
+      }
+
+      // 特性效果映射（只列出数值类；属性/健康直接体现在数值中不重复记）
+      const pushTraitEffects = (traits: any[], sink: any[]) => {
+        (traits || []).forEach((t: any) => {
+          switch (t?.id) {
+            case 'industrious': // 勤勉有序：全局生产效率 +5%
+              sink.push({ type: 'resource_production_bonus', target: 'all', value: 0.05, isPercentage: true, name: '生产效率' });
+              break;
+            case 'bookish': // 学究气重：生产效率 -4%
+              sink.push({ type: 'resource_production_bonus', target: 'all', value: -0.04, isPercentage: true, name: '生产效率' });
+              break;
+            case 'wasteful': // 浪费成性：产出 +5%（消耗+8%暂不写入全局，避免未知类型）
+              sink.push({ type: 'resource_production_bonus', target: 'all', value: 0.05, isPercentage: true, name: '生产效率' });
+              break;
+            default:
+              // 其他特性：若自身带 effects 数组，也并入
+              (t?.effects || []).forEach((eff: any) => sink.push(eff));
+              break;
+          }
+        });
+      };
+
+      // 遍历职位，聚合每个职位的人物效果
+      Object.entries(activeByPos).forEach(([pos, ch]) => {
+        if (!ch) return;
+        const srcId = String(pos);
+        const srcName = posLabel[srcId] || srcId;
+
+        const local: any[] = [];
+
+        // 1) 属性折算
+        if (ATTR_MAP && ch.type && ATTR_MAP[ch.type]) {
+          const attrs = ch.attributes || {};
+          const m = ATTR_MAP[ch.type];
+          const apply = (key: 'force'|'intelligence'|'charisma') => {
+            const def = m[key];
+            const pts = Number(attrs?.[key] || 0);
+            if (def && pts > 0) {
+              const val = Number(def.value || 0) * pts;
+              local.push({
+                type: def.type,
+                target: def.target,
+                value: val,
+                isPercentage: def.value < 1,
+                name: def.name || def.target || '效果'
+              });
+            }
+          };
+          apply('force'); apply('intelligence'); apply('charisma');
+        }
+
+        // 2) 特性效果
+        pushTraitEffects(ch.traits || [], local);
+
+        // 3) Buff 效果
+        (ch.buffs || []).forEach((b: any) => (b?.effects || []).forEach((eff: any) => local.push(eff)));
+
+        // 将本职位的效果写入全局效果系统（逐条写入，便于“全部效果”正确累计）
+        local.forEach((eff) => {
+          // 规范化字段
+          const effectPayload: any = {
+            ...eff,
+            sourceType: 'character',
+            sourceId: srcId,
+            source: { type: 'character', id: srcId, name: srcName }
+          };
+          effectsSystem.addEffect(effectPayload);
         });
       });
-      
+
       // 更新效果系统版本
-      set((state) => ({
-        effectsVersion: state.effectsVersion + 1
-      }));
+      set((s) => ({ effectsVersion: s.effectsVersion + 1 }));
     },
 
     // 外交系统方法

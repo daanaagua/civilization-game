@@ -35,7 +35,7 @@ export enum CharacterPosition {
   GRAND_MARSHAL = 'grand_marshal'     // 大元帅
 }
 
-// 人物属性
+ // 人物属性
 export interface CharacterAttributes {
   force: number;      // 武力 (0-10)
   intelligence: number; // 智力 (0-10)
@@ -87,12 +87,13 @@ export interface CharacterUnlockCondition {
   requiredAge?: number;
 }
 
-// 人物数据
+ // 人物数据
 export interface Character {
   id: string;
   name: string;
   type: CharacterType;
   position: CharacterPosition;
+  gender?: 'male' | 'female'; // 性别（新增，可选以兼容旧存档）
   age: number;
   health: number;           // 后台数据，玩家不可见
   healthStatus: HealthStatus; // 玩家可见的健康状态

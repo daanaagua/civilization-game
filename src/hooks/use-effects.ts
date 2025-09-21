@@ -142,15 +142,17 @@ export const useEffects = () => {
       return `${sign}${effect.value}${percentage}`;
     };
 
+    // 兼容: 某些效果可能缺少 source 字段，提供安全默认值以避免崩溃
+    const safeSource = effect.source ?? { type: EffectSourceType.BASE, id: 'unknown', name: '基础' };
     return {
       id: effect.id,
       name: getEffectName(effect.type),
       description: getEffectDescription(effect),
       value: effect.value,
       type: effect.type,
-      sourceType: effect.source.type,
-      sourceId: effect.source.id,
-      sourceName: effect.source.name ?? getSourceName(effect.source.type, effect.source.id),
+      sourceType: safeSource.type,
+      sourceId: safeSource.id,
+      sourceName: safeSource.name ?? getSourceName(safeSource.type, safeSource.id),
       isPositive: effect.value >= 0
     };
   };
@@ -160,14 +162,16 @@ export const useEffects = () => {
     const grouped = new Map<string, EffectsBySource>();
 
     activeEffects.forEach(effect => {
-      const key = `${effect.source.type}-${effect.source.id}`;
+      const src = effect.source ?? { type: EffectSourceType.BASE, id: 'unknown', name: '基础' };
+      const key = `${src.type}-${src.id}`;
       const displayInfo = getEffectDisplayInfo(effect);
 
       if (!grouped.has(key)) {
+        const src = effect.source ?? { type: EffectSourceType.BASE, id: 'unknown', name: displayInfo.sourceName };
         grouped.set(key, {
-          sourceType: effect.source.type,
-          sourceId: effect.source.id,
-          sourceName: effect.source.name ?? displayInfo.sourceName,
+          sourceType: src.type,
+          sourceId: src.id,
+          sourceName: src.name ?? displayInfo.sourceName,
           effects: []
         });
       }

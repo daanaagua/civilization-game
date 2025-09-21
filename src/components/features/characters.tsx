@@ -151,6 +151,11 @@ export const CharactersPanel = () => {
 
   // 根据已研究科技的 unlocks 过滤“可见人物类型”
   const unlockedCharacterTypes = (() => {
+    const allTypes = Object.values(CharacterType) as CharacterType[];
+    // 开发者模式：视为全部人物类型已解锁，方便验证
+    if (gameState?.settings?.devMode) {
+      return new Set<CharacterType>(allTypes);
+    }
     const mapIdToType: Record<string, CharacterType> = {
       chief: CharacterType.RULER,
       elder: CharacterType.RESEARCH_LEADER,

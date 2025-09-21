@@ -9,55 +9,52 @@ interface CharacterTabProps {
 }
 
 export function CharacterTab({}: CharacterTabProps) {
-  const { getActiveCharacters, getAvailableCharacters, calculateCharacterEffects, appointCharacter, dismissCharacter } = useGameStore();
+  const { getActiveCharacters, getAvailableCharacters, appointCharacter, dismissCharacter } = useGameStore();
   const gameState = useGameStore((s) => s.gameState);
   const [selectedCharacterType, setSelectedCharacterType] = useState<CharacterType | null>(null);
   const [showAppointment, setShowAppointment] = useState(false);
  
-  // 获取在职人物（构建类型到人物的映射，便于现有渲染逻辑）
-  const activeList = (getActiveCharacters?.() || []) as Character[];
-  const activeCharacters: Record<CharacterType, Character | null> = {
-    [CharacterType.RULER]: null,
-    [CharacterType.RESEARCH_LEADER]: null,
-    [CharacterType.FAITH_LEADER]: null,
-    [CharacterType.MAGE_LEADER]: null,
-    [CharacterType.CIVIL_LEADER]: null,
-    [CharacterType.GENERAL]: null,
-    [CharacterType.DIPLOMAT]: null,
+  // 属性以金色五角星显示（0-10星，取整且钳制）
+  const renderStars = (n: number) => {
+    const count = Math.max(0, Math.min(10, Math.round(n || 0)));
+    return '★'.repeat(count);
   };
-  activeList.forEach((c: Character) => {
-    activeCharacters[c.type] = c;
-  });
+ 
+  // 以“职位”为驱动渲染，直接读取按职位在职映射，避免出现“职位空缺”占位
+  const byPosition = useGameStore((s) => (s.gameState.characterSystem as any)?.activeByPosition || {}) as Record<string, Character | null>;
 
-  // 依据已研究科技的 unlocks 过滤“可见人物类型”（空缺位也不展示卡）
-  const unlockedCharacterTypes = (() => {
-    const mapIdToType: Record<string, CharacterType> = {
-      chief: CharacterType.RULER,
-      elder: CharacterType.RESEARCH_LEADER,
-      high_priest: CharacterType.FAITH_LEADER,
-      archmage: CharacterType.MAGE_LEADER,
-      chief_judge: CharacterType.CIVIL_LEADER,
-      general: CharacterType.GENERAL,
-      diplomat: CharacterType.DIPLOMAT
-    };
-    const set = new Set<CharacterType>();
-    const techs = gameState?.technologies || {};
-    Object.values(techs).forEach((t: any) => {
-      if (!t?.researched) return;
-      (t.unlocks || []).forEach((u: any) => {
-        if (u?.type === 'character' && u.id && mapIdToType[u.id]) {
-          set.add(mapIdToType[u.id]);
-        }
-      });
-    });
-    return set;
-  })();
+  // 职位→类型映射（保持与 store 一致）
+  const posToType: Record<string, CharacterType> = {
+    chief: CharacterType.RULER,
+    elder: CharacterType.RESEARCH_LEADER,
+    high_priest: CharacterType.FAITH_LEADER,
+    archmage: CharacterType.MAGE_LEADER,
+    chief_judge: CharacterType.CIVIL_LEADER,
+    general: CharacterType.GENERAL,
+    diplomat: CharacterType.DIPLOMAT,
+    // 进阶职位归属同一类型
+    king: CharacterType.RULER,
+    emperor: CharacterType.RULER,
+    president: CharacterType.RULER,
+    grand_scholar: CharacterType.RESEARCH_LEADER,
+    academy_head: CharacterType.RESEARCH_LEADER,
+    archbishop: CharacterType.FAITH_LEADER,
+    pope: CharacterType.FAITH_LEADER,
+    royal_archmage: CharacterType.MAGE_LEADER,
+    speaker: CharacterType.CIVIL_LEADER,
+    grand_marshal: CharacterType.GENERAL
+  };
+
+  const unlockedPositions = (gameState?.characterSystem?.unlockedPositions || []) as string[];
+  // 仅渲染“已解锁且已就任”的职位卡片（未就任的职位不显示，满足“永不出现空缺”）
+  const positionEntries = unlockedPositions
+    .map((pos) => ({ pos, character: byPosition[pos] || null, type: posToType[pos] }))
+    .filter((e) => !!e.character);
   
   // 获取可用人物
   const availableCharacters = (getAvailableCharacters?.() || []) as Character[];
 
-   // 获取人物效果
-   const characterEffects = calculateCharacterEffects?.() || [];
+
 
   // 处理任命人物（需要职位参数）
   const handleAppointCharacter = (characterId: string, position: CharacterPosition) => {
@@ -75,9 +72,9 @@ export function CharacterTab({}: CharacterTabProps) {
   // 获取健康状态显示
   const getHealthStatusDisplay = (status: HealthStatus) => {
     const statusMap = {
-      [HealthStatus.GOOD]: { text: '好', color: 'text-green-600' },
-      [HealthStatus.FAIR]: { text: '中', color: 'text-yellow-600' },
-      [HealthStatus.POOR]: { text: '差', color: 'text-red-600' }
+      [HealthStatus.GOOD]: { text: '好', color: 'text-emerald-400' },
+      [HealthStatus.FAIR]: { text: '中', color: 'text-amber-400' },
+      [HealthStatus.POOR]: { text: '差', color: 'text-rose-400' }
     };
     return statusMap[status];
   };
@@ -96,7 +93,7 @@ export function CharacterTab({}: CharacterTabProps) {
     return typeMap[type];
   };
 
-  // 获取职位显示名称
+  // 获取职位显示名称（支持从职位字符串直接获取）
   const getPositionDisplay = (character: Character) => {
     const positionMap = {
       'chief': '酋长',
@@ -120,52 +117,62 @@ export function CharacterTab({}: CharacterTabProps) {
     return positionMap[character.position as keyof typeof positionMap] || character.position;
   };
 
-  // 渲染在职人物
+  // 渲染在职人物（仅展示已就任的职位卡片）
   const renderActiveCharacters = () => {
     return (
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-100">在职人物</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(activeCharacters)
-            .filter(([type]) => unlockedCharacterTypes.has(type as CharacterType))
-            .map(([type, character]) => (
-            <div key={type} className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-              <div className="flex justify-between items-start mb-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {positionEntries.map(({ pos, character, type }) => (
+            <div key={pos} className="bg-gradient-to-b from-gray-700 to-gray-800 rounded-2xl ring-1 ring-gray-600 p-4 w-64 min-h-[20rem] shadow-lg">
+              {/* 肖像占位（后续可替换为真实肖像） */}
+              <div className="mb-3">
+                <div className="w-full h-28 bg-gray-600/40 rounded-md flex items-center justify-center text-xs text-gray-300">
+                  肖像占位
+                </div>
+              </div>
+
+              <div className="flex justify-between items-start mb-2">
                 <div>
-                  <h4 className="font-medium text-gray-900">
-                    {getCharacterTypeDisplay(type as CharacterType)}
+                  <h4 className="font-medium text-amber-300">
+                    {getCharacterTypeDisplay((type || CharacterType.RULER) as CharacterType)}
                   </h4>
-                  <p className="text-sm text-gray-600">
-                    {character ? getPositionDisplay(character) : '空缺'}
+                  <p className="text-sm text-gray-400">
+                    {character ? getPositionDisplay(character) : ''}
                   </p>
                 </div>
-                
               </div>
-              
-              {character ? (
+
+              {character && (
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-sm font-medium">{character.name}</span>
+                    <span className="text-sm font-medium">
+                      {character.name}
+                      {(() => {
+                        const genderLabel = character.gender === 'female' ? '女' : '男';
+                        return ` · ${genderLabel} · ${character.age}`;
+                      })()}
+                    </span>
                     <span className={`text-sm ${getHealthStatusDisplay(character.healthStatus).color}`}>
                       健康: {getHealthStatusDisplay(character.healthStatus).text}
                     </span>
                   </div>
-                  
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="text-center">
-                      <div className="text-gray-600">武力</div>
-                      <div className="font-medium">{character.attributes.force}</div>
+
+                  <div className="space-y-1 text-sm">
+                    <div className="text-left">
+                      <span className="text-gray-400">武力 </span>
+                      <span className="font-medium text-amber-400">{renderStars(character.attributes.force)}</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-gray-600">智力</div>
-                      <div className="font-medium">{character.attributes.intelligence}</div>
+                    <div className="text-left">
+                      <span className="text-gray-400">智力 </span>
+                      <span className="font-medium text-amber-400">{renderStars(character.attributes.intelligence)}</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-gray-600">魅力</div>
-                      <div className="font-medium">{character.attributes.charisma}</div>
+                    <div className="text-left">
+                      <span className="text-gray-400">魅力 </span>
+                      <span className="font-medium text-amber-400">{renderStars(character.attributes.charisma)}</span>
                     </div>
                   </div>
-                  
+
                   {character.traits.length > 0 && (
                     <div className="mt-2">
                       <div className="text-xs text-gray-600 mb-1">特性:</div>
@@ -174,9 +181,11 @@ export function CharacterTab({}: CharacterTabProps) {
                           <span
                             key={index}
                             className={`px-2 py-1 rounded text-xs ${
-                              trait.type === 'positive' 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-red-100 text-red-800'
+                              trait.type === 'positive'
+                                ? 'bg-green-100 text-green-800'
+                                : trait.type === 'negative'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
                             }`}
                             title={trait.description}
                           >
@@ -186,7 +195,7 @@ export function CharacterTab({}: CharacterTabProps) {
                       </div>
                     </div>
                   )}
-                  
+
                   {character.buffs.length > 0 && (
                     <div className="mt-2">
                       <div className="text-xs text-gray-600 mb-1">Buff:</div>
@@ -206,11 +215,6 @@ export function CharacterTab({}: CharacterTabProps) {
                       </div>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-gray-400 text-sm">职位空缺</p>
-                  <p className="text-gray-500 text-xs mt-1">该职位将由相关科技自动解锁并自动就任</p>
                 </div>
               )}
             </div>
@@ -259,18 +263,18 @@ export function CharacterTab({}: CharacterTabProps) {
                     </span>
                   </div>
                   
-                  <div className="grid grid-cols-3 gap-2 text-sm mb-3">
-                    <div className="text-center">
-                      <div className="text-gray-600">武力</div>
-                      <div className="font-medium">{character.attributes.force}</div>
+                  <div className="space-y-1 text-sm mb-3">
+                    <div className="text-left">
+                      <span className="text-gray-500">武力 </span>
+                      <span className="font-medium text-amber-500">{renderStars(character.attributes.force)}</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-gray-600">智力</div>
-                      <div className="font-medium">{character.attributes.intelligence}</div>
+                    <div className="text-left">
+                      <span className="text-gray-500">智力 </span>
+                      <span className="font-medium text-amber-500">{renderStars(character.attributes.intelligence)}</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-gray-600">魅力</div>
-                      <div className="font-medium">{character.attributes.charisma}</div>
+                    <div className="text-left">
+                      <span className="text-gray-500">魅力 </span>
+                      <span className="font-medium text-amber-500">{renderStars(character.attributes.charisma)}</span>
                     </div>
                   </div>
                   
@@ -282,9 +286,11 @@ export function CharacterTab({}: CharacterTabProps) {
                           <span
                             key={index}
                             className={`px-2 py-1 rounded text-xs ${
-                              trait.type === 'positive' 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-red-100 text-red-800'
+                              trait.type === 'positive'
+                                ? 'bg-green-100 text-green-800'
+                                : trait.type === 'negative'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
                             }`}
                             title={trait.description}
                           >
@@ -320,38 +326,12 @@ export function CharacterTab({}: CharacterTabProps) {
     );
   };
 
-  // 渲染人物效果
-  const renderCharacterEffects = () => {
-    if (characterEffects.length === 0) return null;
-    
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">人物效果</h3>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {characterEffects.map((effect, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                <span className="text-sm text-gray-700">{effect.description}</span>
-                <span className={`text-sm font-medium ${
-                  effect.value > 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {effect.value > 0 ? '+' : ''}{effect.value}{effect.isPercentage ? '%' : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
+
 
   return (
     <div className="space-y-6">
       {/* 在职人物 */}
       {renderActiveCharacters()}
-      
-      {/* 人物效果 */}
-      {renderCharacterEffects()}
       
       {/* 人物系统提示：自动解锁与自动继任 */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 text-sm text-gray-300">

@@ -160,10 +160,35 @@ export const ResourcePanel = () => {
   const keysFromState: ResourceKey[] = Object.keys(resources || {});
   const allKeys: ResourceKey[] = Array.from(new Set([...keysFromConfig, ...keysFromState]));
 
-  // 排序优先：核心资源排前，其余按字母序
-  const preferred: ResourceKey[] = ['food', 'wood', 'stone', 'tools', 'population'];
-  const others = allKeys.filter(k => !preferred.includes(k)).sort();
-  const orderedKeys = ([...preferred.filter(k => allKeys.includes(k)), ...others].filter(k => k !== 'leather' && k !== 'housing')) as ResourceKey[];
+  // 分组排序（新增资源时请参考此分组规则）：
+  // 1) 人口（始终第一）；
+  // 2) 基础资源：木材、石料、食物（最常用基础）；
+  // 3) 高级生产性资源：工具、布革、铜、铁、武器等（由生产链产出，影响效率或军备）；
+  // 4) 生物类资源：牲畜、马等（多用于军事或事件）；
+  // 5) 特殊/抽象资源：货币、魔力、研究点、信仰、水晶等（不直接参与基础建造）。
+  // 注意：
+  // - 若新增资源，请将 key 放入对应分组；若未归类，将自动进入“其余资源（字母序）”并排在最后。
+  // - housing 与 leather 行被过滤，不在资源面板显示。
+  const GROUP_POP: ResourceKey[] = ['population'];
+  const GROUP_BASIC: ResourceKey[] = ['wood', 'stone', 'food'];
+  const GROUP_ADVANCED: ResourceKey[] = ['tools', 'cloth', 'copper', 'iron', 'weapons'];
+  const GROUP_BIO: ResourceKey[] = ['livestock', 'horses'];
+  const GROUP_SPECIAL: ResourceKey[] = ['currency', 'magic', 'researchPoints', 'faith', 'crystal'];
+
+  const flatGroups = [...GROUP_POP, ...GROUP_BASIC, ...GROUP_ADVANCED, ...GROUP_BIO, ...GROUP_SPECIAL];
+
+  // 过滤掉不显示的 key
+  const filteredAll = allKeys.filter(k => k !== 'leather' && k !== 'housing');
+
+  // 已分组的存在键（保持分组顺序与组内声明顺序）
+  const groupedOrdered = flatGroups.filter(k => filteredAll.includes(k));
+
+  // 其余未分组键（按字母序追加到最后）
+  const remaining = filteredAll
+    .filter(k => !flatGroups.includes(k))
+    .sort();
+
+  const orderedKeys = ([...groupedOrdered, ...remaining]) as ResourceKey[];
 
   // 可见性判定：人口/住房始终显示；其余按解锁或非零展示；开发者模式全显
   const visibleList = orderedKeys.filter((key) => {

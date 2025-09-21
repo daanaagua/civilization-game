@@ -170,6 +170,8 @@ function EffectTag({ effect, onHover }: EffectTagProps) {
   const getEffectColor = (type: EffectType, value: number) => {
     // 腐败度：值越高颜色越红
     if (type === EffectType.CORRUPTION) {
+      // 约定：腐败度“减少”为正面（绿色），增加为负面（红/橙/黄）
+      if (value <= 0) return 'bg-green-900/50 border-green-500 text-green-300';
       if (value > 75) return 'bg-red-900/50 border-red-500 text-red-300';
       if (value > 50) return 'bg-orange-900/50 border-orange-500 text-orange-300';
       if (value > 25) return 'bg-yellow-900/50 border-yellow-500 text-yellow-300';
@@ -399,9 +401,15 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   }
 
   // 从标签列表中过滤掉“科技来源”的效果（合并为单一“科技”徽章显示）
+  // 同时过滤掉“人物来源”的效果（改由本组件按职位聚合渲染，避免重复与未知标签）
   const displayEffects = effects.filter((e: any) => {
     const srcType = e?.source?.type ?? e?.sourceType;
-    return srcType !== EffectSourceType.TECHNOLOGY && srcType !== 'technology';
+    return (
+      srcType !== EffectSourceType.TECHNOLOGY &&
+      srcType !== 'technology' &&
+      srcType !== EffectSourceType.CHARACTER &&
+      srcType !== 'character'
+    );
   });
 
   // 按类型分组效果，确保鲁棒性
@@ -425,6 +433,206 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
   }, {} as Record<string, Effect[]>)
 
   const [showAllEffects, setShowAllEffects] = useState(false);
+
+  // 读取在职人物（按职位）
+  const activeByPosition: Record<string, any> = useGameStore(
+    (s) => ((s.gameState.characterSystem as any)?.activeByPosition || {})
+  );
+
+  // 职位 -> 中文标签
+  const positionLabel = (pos: string) => {
+    const map: Record<string, string> = {
+      chief: '酋长',
+      king: '国王',
+      emperor: '皇帝',
+      president: '总统',
+      elder: '长老',
+      grand_scholar: '大学士',
+      academy_head: '学院院长',
+      high_priest: '大祭司',
+      archbishop: '大主教',
+      pope: '教宗',
+      archmage: '大法师',
+      royal_archmage: '御用大法师',
+      chief_judge: '大法官',
+      speaker: '议长',
+      general: '将军',
+      grand_marshal: '大元帅',
+      diplomat: '外交官'
+    };
+    return map[pos] || pos;
+  };
+
+  // 资源名翻译（与侧边栏一致）
+  function getResLabel(res: string) {
+    const map: Record<string, string> = {
+      food: '食物',
+      wood: '木材',
+      stone: '石材',
+      tools: '工具',
+      iron: '铁',
+      copper: '铜',
+      cloth: '布革',
+      weapons: '武器',
+      livestock: '牲畜',
+      horses: '马',
+      researchPoints: '研究点',
+      currency: '货币',
+      magic: '魔力',
+      faith: '信仰',
+      crystal: '水晶'
+    };
+    return map[res] || res.replace(/_/g, ' ');
+  }
+
+  // 将单条效果转为“名称 与 数值文本”
+  const effectLineOf = (eff: any) => {
+    const type = eff?.type;
+    const target = eff?.target ?? eff?.resource;
+    const raw = Number(eff?.value || 0);
+    const isPct = eff?.isPercentage ?? (raw > 0 && raw < 1);
+    const val = isPct ? `${(raw * 100 >= 0 ? '+' : '')}${(raw * 100).toFixed(2)}%` : `${raw >= 0 ? '+' : ''}${raw.toFixed(2)}`;
+
+    // 名称映射
+    if (type === 'resource_multiplier' || type === 'resource_production' || type === 'resource_production_bonus') {
+      if (target && target !== 'all') return { name: `${getResLabel(String(target))}效率`, value: val };
+      return { name: '生产效率', value: val };
+    }
+    if (type === 'population_growth' || type === 'population_growth_bonus') {
+      return { name: '人口增长率', value: isPct ? val : `${raw >= 0 ? '+' : ''}${raw}%` };
+    }
+    if (type === 'research_speed' || type === 'research_speed_bonus') {
+      return { name: '科技研发速度', value: val };
+    }
+    if (type === 'stability' || type === EffectType.STABILITY) {
+      // 稳定度通常是点数
+      const v = Number(eff?.value || 0);
+      return { name: '稳定度', value: `${v >= 0 ? '+' : ''}${Math.round(v)}` };
+    }
+    if (type === 'corruption' || type === EffectType.CORRUPTION) {
+      const v = Number(eff?.value || 0);
+      return { name: '腐败度', value: `${v >= 0 ? '+' : ''}${Math.round(v)}` };
+    }
+    if (type === 'resource_efficiency') {
+      if (target && target !== 'all') return { name: `${getResLabel(String(target))}效率`, value: val };
+      return { name: '资源效率', value: val };
+    }
+    if (type === 'faith_gain') return { name: '信仰获取', value: val };
+    if (type === 'magic_gain') return { name: '魔力获取', value: val };
+    if (type === 'trade_income') return { name: '贸易收益', value: val };
+
+    // 兜底
+    const name = eff?.name || (target ? `${String(type)}(${String(target)})` : String(type || '效果'));
+    return { name, value: val };
+  };
+
+  // 计算每个职位的人物效果明细（属性折算 + 特性 + Buff）
+  const characterEffectsByPos: Record<string, Array<{ name: string; value: string }>> = (() => {
+    const out: Record<string, Array<{ name: string; value: string }>> = {};
+    let mapping: any = null;
+    try {
+      // 复用 store 中使用的映射，确保口径一致
+      mapping = (require('@/lib/character-data') as any).CHARACTER_ATTRIBUTE_EFFECTS || null;
+    } catch {
+      mapping = null;
+    }
+
+    Object.entries(activeByPosition).forEach(([pos, ch]: [string, any]) => {
+      if (!ch) return;
+      const lines: Array<{ name: string; value: string }> = [];
+
+      // 1) 属性折算
+      if (mapping && ch.type && mapping[ch.type]) {
+        const attrs = ch.attributes || {};
+        const m = mapping[ch.type];
+        const applyOne = (key: 'force' | 'intelligence' | 'charisma') => {
+          const def = m[key];
+          const pts = Number(attrs?.[key] || 0);
+          if (def && pts > 0) {
+            const val = Number(def.value || 0) * pts;
+            const eff = {
+              type: def.type,
+              target: def.target,
+              value: val,
+              isPercentage: def.value < 1
+            };
+            const line = effectLineOf(eff);
+            if (line && Number.isFinite(Number(val)) && Math.abs(val) > 0) lines.push(line);
+          }
+        };
+        applyOne('force');
+        applyOne('intelligence');
+        applyOne('charisma');
+      }
+
+      // 2) 特性效果
+      (ch.traits || []).forEach((t: any) => {
+        // 2.1 显式映射常见特性（与全局下沉口径一致），以便悬浮明细直接显示
+        if (t?.id === 'industrious') {
+          const eff = { type: 'resource_production_bonus', target: 'all', value: 0.05, isPercentage: true, name: '生产效率' };
+          const line = effectLineOf(eff);
+          lines.push(line);
+        } else if (t?.id === 'bookish') {
+          const eff = { type: 'resource_production_bonus', target: 'all', value: -0.04, isPercentage: true, name: '生产效率' };
+          const line = effectLineOf(eff);
+          lines.push(line);
+        } else if (t?.id === 'wasteful') {
+          const eff = { type: 'resource_production_bonus', target: 'all', value: 0.05, isPercentage: true, name: '生产效率' };
+          const line = effectLineOf(eff);
+          lines.push(line);
+        }
+        // 2.2 读取特性自带的 effects（如果有）
+        (t?.effects || []).forEach((eff: any) => {
+          const line = effectLineOf(eff);
+          // 过滤 0 值
+          const vnum = Number(eff?.isPercentage ? (eff.value * 100) : eff.value);
+          if (Number.isFinite(vnum) && Math.abs(vnum) > 0) lines.push(line);
+        });
+      });
+
+      // 3) Buff 效果
+      (ch.buffs || []).forEach((b: any) => {
+        (b?.effects || []).forEach((eff: any) => {
+          const line = effectLineOf(eff);
+          const vnum = Number(eff?.isPercentage ? (eff.value * 100) : eff.value);
+          if (Number.isFinite(vnum) && Math.abs(vnum) > 0) lines.push(line);
+        });
+      });
+
+      // 合并同名指标（名称相同的做数值合并）
+      const merged: Record<string, number> = {};
+      const isPctName = (name: string) =>
+        ['效率', '速度', '收益', '获取', '增长率'].some((k) => name.includes(k));
+      lines.forEach((ln) => {
+        // 解析数值
+        const m = ln.value.match(/([+-]?\d+(\.\d+)?)%$/);
+        if (m) {
+          const n = parseFloat(m[1]);
+          merged[ln.name] = (merged[ln.name] || 0) + n;
+        } else {
+          // 非百分比，则按点数合并
+          const n = parseFloat(ln.value);
+          if (!isNaN(n)) merged[ln.name] = (merged[ln.name] || 0) + n;
+        }
+      });
+      const finalLines = Object.entries(merged).map(([name, num]) => {
+        const isPct = isPctName(name);
+        const txt = isPct
+          ? `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`
+          : `${num >= 0 ? '+' : ''}${Math.round(num)}`;
+        return { name, value: txt };
+      });
+
+      if (finalLines.length > 0) {
+        out[pos] = finalLines;
+      }
+    });
+
+    return out;
+  })();
+
+  // 人物职位标签悬浮控制
+  const [hoverCharPos, setHoverCharPos] = useState<string | null>(null);
 
   return (
     <div className={`bg-gray-800/50 rounded-lg p-4 ${className || ''}`} onMouseMove={handleMouseMove}>
@@ -455,6 +663,20 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
           </div>
         )}
 
+        {/* 人物效果（按职位聚合为单一徽章） */}
+        {Object.entries(characterEffectsByPos).map(([pos, lines]) => (
+          <div
+            key={`charpos_${pos}`}
+            className="px-3 py-1 rounded-full border text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-amber-900/40 border-amber-500/50 text-amber-200"
+            onMouseEnter={() => setHoverCharPos(pos)}
+            onMouseLeave={() => setHoverCharPos(null)}
+            title={positionLabel(pos)}
+          >
+            {positionLabel(pos)}
+          </div>
+        ))}
+
+        {/* 其余系统效果标签（已剔除科技与人物来源） */}
         {Object.entries(groupedEffects).map(([key, effectGroup]) => {
           // 对于同类型的效果，显示合并后的值
           const firstEffect = effectGroup[0];
@@ -508,6 +730,24 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 人物职位浮框明细 */}
+      {hoverCharPos && characterEffectsByPos[hoverCharPos] && (
+        <div
+          className="fixed z-50 bg-gray-900 border border-gray-600 rounded-lg p-3 shadow-xl max-w-sm"
+          style={{ left: mousePosition.x + 10, top: mousePosition.y - 10, transform: 'translateY(-100%)' }}
+        >
+          <div className="text-white font-semibold mb-2">{positionLabel(hoverCharPos)}效果</div>
+          <div className="space-y-1">
+            {characterEffectsByPos[hoverCharPos].map((line, idx) => (
+              <div key={idx} className="flex justify-between text-xs">
+                <span className="text-gray-400">{line.name}:</span>
+                <span className={line.value.includes('-') ? 'text-red-400' : 'text-green-400'}>{line.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       

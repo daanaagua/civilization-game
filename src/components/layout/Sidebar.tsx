@@ -50,12 +50,31 @@ export function Sidebar({}: SidebarProps) {
     const keysFromState = Object.keys(resources || {});
     const allKeys = Array.from(new Set([...keysFromConfig, ...keysFromState]));
 
-    // 排序：核心资源优先，其余按字母序
-    const preferred = ['food','wood','stone','tools','population'];
-    const ordered = [
-      ...preferred.filter(k => allKeys.includes(k)),
-      ...allKeys.filter(k => !preferred.includes(k)).sort()
-    ].filter(k => k !== 'leather' && k !== 'housing');
+    // 分组排序（与 ResourcePanel 一致；新增资源时请参照分组规则）
+    // 1) 人口（始终第一）
+    // 2) 基础资源：木材、石料、食物（最常用基础）
+    // 3) 高级生产性资源：工具、布革、铜、铁、武器等（由生产链产出，影响效率或军备）
+    // 4) 生物类资源：牲畜、马等（多用于军事或事件）
+    // 5) 特殊/抽象资源：货币、魔力、研究点、信仰、水晶等（不直接参与基础建造）
+    // 注意：未归类的新资源自动排到最后（字母序）；housing/leather 被过滤不显示
+    const GROUP_POP = ['population'];
+    const GROUP_BASIC = ['wood', 'stone', 'food'];
+    const GROUP_ADV = ['tools', 'cloth', 'copper', 'iron', 'weapons'];
+    const GROUP_BIO = ['livestock', 'horses'];
+    const GROUP_SPECIAL = ['currency', 'magic', 'researchPoints', 'faith', 'crystal'];
+
+    const flatGroups = [...GROUP_POP, ...GROUP_BASIC, ...GROUP_ADV, ...GROUP_BIO, ...GROUP_SPECIAL];
+
+    // 过滤不显示
+    const filteredAll = allKeys.filter(k => k !== 'leather' && k !== 'housing');
+
+    // 已分组的（保持声明顺序）
+    const grouped = flatGroups.filter(k => filteredAll.includes(k));
+
+    // 未分组的（字母序）
+    const rest = filteredAll.filter(k => !flatGroups.includes(k)).sort();
+
+    const ordered = [...grouped, ...rest];
 
     // 可见性：人口/住房始终显示；devMode 全显；否则 解锁/数值非0/速率非0
     const visible = ordered.filter((key) => {
