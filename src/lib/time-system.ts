@@ -118,3 +118,12 @@ export class GameTimeSystem {
 
 // 全局游戏时间系统实例
 export const gameTimeSystem = new GameTimeSystem();
+
+export const GAME_DAYS_PER_SECOND = 2; // 现实1秒 = 游戏2天
+export const GAME_DAYS_PER_MONTH = 30; // 每月30天
+export const GAME_MONTHS_PER_YEAR = 12; // 每年12个月
+
+export function monthsToSeconds(months: number): number {
+  // 1 游戏月 = 30 游戏天；1 游戏天 = 0.5 现实秒
+  return months * GAME_DAYS_PER_MONTH / GAME_DAYS_PER_SECOND;
+}

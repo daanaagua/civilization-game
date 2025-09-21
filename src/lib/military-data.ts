@@ -7,7 +7,7 @@ export const UNIT_TYPES: Record<string, UnitType> = {
     id: 'tribal_militia',
     name: '部落民兵',
     description: '招募快速，成本低廉，战斗力较弱，适合防守',
-    unlockCondition: 'none', // 游戏开始即可
+    unlockCondition: 'militia_training', // 通过“民兵训练”科技解锁
     recruitmentCost: {
       food: 15,
       wood: 8,

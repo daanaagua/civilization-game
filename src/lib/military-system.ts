@@ -12,7 +12,7 @@ export class MilitarySystem {
     this.state = {
       units: [],
       trainingQueue: [],
-      availableUnitTypes: ['tribal_militia'], // 默认解锁部落民兵
+      availableUnitTypes: [], // 由科技动态解锁（不再默认解锁）
       isTraining: false
     }
   }
@@ -123,7 +123,7 @@ export class MilitarySystem {
   }
 
   // 更新训练进度（内部 state）
-  updateTraining(): void {
+  updateTrainingInternal(): void {
     const currentTime = Date.now()
     const completedTraining: TrainingQueue[] = []
 
@@ -390,7 +390,7 @@ export class MilitarySystem {
     this.state = {
       units: data.units || [],
       trainingQueue: data.trainingQueue || [],
-      availableUnitTypes: data.availableUnitTypes || ['tribal_militia'],
+      availableUnitTypes: data.availableUnitTypes || [],
       isTraining: data.isTraining || false,
       currentTrainingType: data.currentTrainingType
     }
@@ -449,7 +449,12 @@ export class MilitarySystem {
     const unitType = getUnitType(unitTypeId)
     if (!unitType) return { success: false, reason: '未知兵种' }
 
-    if (!military.availableUnitTypes.includes(unitTypeId)) {
+    // 基于科技校验是否解锁（避免依赖 availableUnitTypes 的外部同步）
+    const researchedTechs = gameState.technologies
+      ? Object.keys(gameState.technologies).filter(id => gameState.technologies[id]?.researched)
+      : []
+    const unlockedByTech = unitType.unlockCondition === 'none' || researchedTechs.includes(unitType.unlockCondition)
+    if (!unlockedByTech) {
       return { success: false, reason: '兵种未解锁' }
     }
 

@@ -332,6 +332,57 @@ export const TECHNOLOGIES: Record<string, Technology> = {
   },
 
   // 2.2 军事科技
+  militia_training: {
+    id: 'militia_training',
+    name: '民兵训练',
+    description: '组织最基础的部落民兵，进行简单的队列与武器训练。',
+    category: 'military',
+    cost: { wood: 10 },
+    researchTime: 60,
+    requires: ['fire'],
+    unlocks: [
+      // 可选：声明性解锁，当前系统不强依赖此字段
+      // { type: 'unit', id: 'tribal_militia', name: '部落民兵' }
+    ],
+    effects: [],
+    unlocked: false,
+    researched: false
+  },
+
+  // 解锁侦察兵的前置科技（先于外交官训练）
+  scouting_tech: {
+    id: 'scouting_tech',
+    name: '侦察学',
+    description: '基础侦察与生存技能，训练侦察兵用于探索与发现国家。',
+    category: 'military',
+    cost: { wood: 20 },
+    researchTime: 90,
+    requires: ['fire'],
+    unlocks: [
+      // { type: 'unit', id: 'scout', name: '侦察兵' }
+    ],
+    effects: [],
+    unlocked: false,
+    researched: false
+  },
+
+  // 外交互动解锁科技（必须在侦察学之后）
+  diplomat_training: {
+    id: 'diplomat_training',
+    name: '外交官训练',
+    description: '培养基础外交能力，允许与已发现国家进行贸易、赠礼、宣战等互动。',
+    category: 'social',
+    cost: { wood: 40, stone: 20 },
+    researchTime: 180,
+    requires: ['scouting_tech'],
+    unlocks: [
+      // { type: 'character_position', id: 'diplomat', name: '外交官' }
+    ],
+    effects: [],
+    unlocked: false,
+    researched: false
+  },
+
   primitive_weapons: {
     id: 'primitive_weapons',
     name: '原始武器',

@@ -244,7 +244,7 @@ export interface GameState {
   diplomacy: {
     discoveredCountries: import('../types/diplomacy').Country[];
     marketPrices: import('../types/diplomacy').MarketPrices;
-    relationships: Record<string, import('../types/diplomacy').RelationshipLevel>;
+    relationships: Record<string, import('../types/diplomacy').Relationship>;
     tradeHistory: import('../types/diplomacy').TradeRecord[];
     giftHistory: import('../types/diplomacy').GiftRecord[];
     warHistory: import('../types/diplomacy').WarRecord[];
@@ -520,5 +520,5 @@ export interface NonPauseEvent {
 export interface ActiveEvent {
   event: PauseEvent;
   triggeredAt: number;
-  characterInvolved?: Character;
+  characterInvolved?: import('./character').Character;
 }

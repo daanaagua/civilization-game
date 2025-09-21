@@ -28,12 +28,12 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
   const [trainingAmounts, setTrainingAmounts] = useState<Record<string, number>>({});
   const isPaused = useGameStore(state => state.gameState.isPaused);
 
-  // 获取已研究的科技
-  const researchedTechs = gameState.technologies ? 
-    Object.keys(gameState.technologies).filter(techId => 
-      gameState.technologies[techId]?.researched
-    ) : [];
-  
+  // 获取已研究的科技（统一使用 selectors）
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getResearchedSet } = require('@/lib/selectors');
+  const researchedTechSet: Set<string> = getResearchedSet(gameState);
+  const researchedTechs = Array.from(researchedTechSet);
+
   // 获取可用的兵种类型
   const availableUnitTypes = getAvailableUnitTypes(researchedTechs);
   

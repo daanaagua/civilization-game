@@ -21,6 +21,12 @@ export function DiplomacyTab({ gameState, onUpdateGameState }: DiplomacyTabProps
     canAfford
   } = useGameStore();
 
+  // 统一选择器：获取已研究科技集合
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getResearchedSet } = require('@/lib/selectors');
+  const researchedSet: Set<string> = getResearchedSet(gameState);
+  
+
   const discoveredCountries = getDiscoveredCountries();
 
   // 渲染国家卡片列表
@@ -57,6 +63,8 @@ export function DiplomacyTab({ gameState, onUpdateGameState }: DiplomacyTabProps
     );
   };
 
+  const diplomatUnlocked = researchedSet.has('diplomat_training');
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-6">
@@ -64,7 +72,13 @@ export function DiplomacyTab({ gameState, onUpdateGameState }: DiplomacyTabProps
         <h2 className="text-2xl font-bold">外交系统</h2>
       </div>
 
-      {renderCountriesList()}
+      {!diplomatUnlocked ? (
+        <div className="bg-blue-900/30 border border-blue-700 text-blue-200 p-4 rounded">
+          需要研究“外交官训练”后才能与已发现国家进行贸易、赠礼和宣战等互动
+        </div>
+      ) : (
+        renderCountriesList()
+      )}
     </div>
   );
 }

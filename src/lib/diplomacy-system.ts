@@ -6,7 +6,9 @@ import {
   DiplomaticAction, 
   RaidEvent, 
   MercenaryUnit,
-  DiplomaticEffect
+  DiplomaticEffect,
+  Relationship,
+  Country
 } from '../types/diplomacy';
 import { 
   NATION_TEMPLATES, 
@@ -57,7 +59,35 @@ export function getRelationshipLevel(relationshipValue: number): RelationshipLev
   return 'friendly';
 }
 
-// 生成新国家
+// 计算关系自然衰减（兼容旧调用）
+export function calculateRelationshipDecay(relationship: Relationship): number {
+  // 使用配置的基础衰减率，并在战争状态下加速衰减
+  let decay = -DIPLOMACY_CONFIG.relationshipDecayRate;
+  if (relationship.atWar) {
+    decay -= 0.5;
+  }
+  return decay;
+}
+
+// 新增：根据发现顺序生成初始关系（兼容旧存档/旧调用）
+export function generateInitialRelationship(discoveryOrder: number): Relationship {
+  let initialRelationship: number;
+  if (discoveryOrder <= 3) {
+    initialRelationship = 40 + Math.random() * 40;
+  } else if (discoveryOrder === 4) {
+    initialRelationship = 20 + Math.random() * 60;
+  } else {
+    initialRelationship = 10 + Math.random() * 80;
+  }
+  const value = Math.round(initialRelationship);
+  return {
+    level: getRelationshipLevel(value),
+    value,
+    atWar: false,
+  };
+}
+
+// 生成随机的市场价格
 export function generateNation(discoveryOrder: number, gameTime: number): Nation {
   // 随机选择国家模板
   const template = NATION_TEMPLATES[Math.floor(Math.random() * NATION_TEMPLATES.length)];
@@ -128,24 +158,103 @@ export function calculateTradePrice(
   return { unitPrice, totalCost, relationshipChange };
 }
 
-// 执行贸易
+// 执行贸易（支持新旧两种调用方式）
 export function executeTrade(
   nation: Nation,
   resource: keyof MarketPrices,
   quantity: number,
   isBuying: boolean,
   gameTime: number
-): { success: boolean; tradeRecord?: TradeRecord; error?: string } {
+): { success: boolean; tradeRecord?: TradeRecord; error?: string };
+export function executeTrade(
+  state: GameState,
+  countryId: string,
+  ourOffer: Partial<Resources>,
+  theirOffer: Partial<Resources>
+): { success: boolean; newResources?: Partial<Resources>; newRelationship?: Relationship; tradeRecord?: any; error?: string };
+export function executeTrade(...args: any[]): any {
+  // 旧接口：executeTrade(state, countryId, ourOffer, theirOffer)
+  if (args.length >= 4 && args[0] && typeof args[0] === 'object' && 'resources' in args[0] && 'diplomacy' in args[0]) {
+    const state = args[0] as GameState;
+    const countryId = args[1] as string;
+    const ourOffer = (args[2] || {}) as Partial<Resources>;
+    const theirOffer = (args[3] || {}) as Partial<Resources>;
+
+    // 仅允许交易 MarketPrices 中定义的资源
+    const tradableKeys = Object.keys(BASE_MARKET_PRICES) as (keyof MarketPrices)[];
+
+    const calcValue = (bundle: Partial<Resources>): number => {
+      let total = 0;
+      for (const key of tradableKeys) {
+        const qty = (bundle as any)[key] || 0;
+        if (qty) total += (state.diplomacy.marketPrices as any)[key] * qty;
+      }
+      return total;
+    };
+
+    const ourValue = calcValue(ourOffer);
+    const theirValue = calcValue(theirOffer);
+
+    if (ourValue === 0 && theirValue === 0) {
+      return { success: false, error: '无效的交易：没有可交易的资源' };
+    }
+
+    // 允许一定误差范围
+    const fair = ourValue === 0 || theirValue === 0 ? true : (Math.min(ourValue, theirValue) / Math.max(ourValue, theirValue) >= 0.8);
+    if (!fair) {
+      return { success: false, error: '交易不公平，未能达成' };
+    }
+
+    // 生成资源变更：收到他们的，付出我们的
+    const newResources: Partial<Resources> = {};
+    for (const key of tradableKeys) {
+      const give = (ourOffer as any)[key] || 0;
+      const receive = (theirOffer as any)[key] || 0;
+      if (give || receive) {
+        (newResources as any)[key] = ((state.resources as any)[key] || 0) - give + receive;
+      }
+    }
+
+    // 关系小幅提升，基于交易总额
+    const totalVolume = ourValue + theirValue;
+    const relChange = Math.min(1, totalVolume * 0.001);
+    const currentRel = state.diplomacy.relationships[countryId] || { level: 'neutral', value: 50, atWar: false } as Relationship;
+    const newValue = Math.max(0, Math.min(100, currentRel.value + relChange));
+    const newRelationship: Relationship = {
+      level: getRelationshipLevel(newValue),
+      value: Math.round(newValue * 10) / 10,
+      atWar: currentRel.atWar || false,
+    };
+
+    // 交易记录（简化）
+    const tradeRecord = {
+      id: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      countryId,
+      countryName: (state.diplomacy.discoveredCountries.find(c => c.id === countryId)?.name) || '未知国家',
+      timestamp: state.gameTime,
+      ourOffer,
+      theirOffer,
+      relationshipChange: relChange,
+      totalVolume,
+    };
+
+    return { success: true, newResources, newRelationship, tradeRecord };
+  }
+
+  // 新接口：executeTrade(nation, resource, quantity, isBuying, gameTime)
+  const nation = args[0] as Nation;
+  const resource = args[1] as keyof MarketPrices;
+  const quantity = args[2] as number;
+  const isBuying = args[3] as boolean;
+  const gameTime = args[4] as number;
+
   if (nation.isDestroyed) {
     return { success: false, error: '该国家已被消灭' };
   }
-  
   if (nation.isAtWar) {
     return { success: false, error: '战争期间无法进行贸易' };
   }
-  
   const { unitPrice, totalCost, relationshipChange } = calculateTradePrice(nation, resource, quantity, isBuying);
-  
   const tradeRecord: TradeRecord = {
     id: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     nationId: nation.id,
@@ -157,7 +266,6 @@ export function executeTrade(
     totalCost,
     relationshipChange
   };
-  
   return { success: true, tradeRecord };
 }
 
@@ -193,17 +301,74 @@ export function executeGift(
   nation: Nation,
   giftValue: number,
   gameTime: number
-): { success: boolean; diplomaticAction?: DiplomaticAction; error?: string } {
+): { success: boolean; diplomaticAction?: DiplomaticAction; error?: string };
+export function executeGift(
+  state: GameState,
+  countryId: string,
+  gift: Partial<Resources>
+): { success: boolean; newResources?: Partial<Resources>; newRelationship?: Relationship; giftRecord?: any; error?: string };
+export function executeGift(...args: any[]): any {
+  // 旧接口：executeGift(state, countryId, gift)
+  if (args.length === 3 && args[0] && typeof args[0] === 'object' && 'resources' in args[0] && 'diplomacy' in args[0]) {
+    const state = args[0] as GameState;
+    const countryId = args[1] as string;
+    const gift = (args[2] || {}) as Partial<Resources>;
+
+    const tradableKeys = Object.keys(BASE_MARKET_PRICES) as (keyof MarketPrices)[];
+    const calcValue = (bundle: Partial<Resources>): number => {
+      let total = 0;
+      for (const key of tradableKeys) {
+        const qty = (bundle as any)[key] || 0;
+        if (qty) total += (state.diplomacy.marketPrices as any)[key] * qty;
+      }
+      return total;
+    };
+
+    // 资源扣除
+    const newResources: Partial<Resources> = {};
+    for (const key of tradableKeys) {
+      const give = (gift as any)[key] || 0;
+      if (give) {
+        (newResources as any)[key] = ((state.resources as any)[key] || 0) - give;
+      }
+    }
+
+    const giftValue = calcValue(gift);
+    const efficiency = DIPLOMACY_CONFIG.giftEfficiencyRate;
+    const relChange = Math.max(0, giftValue * efficiency);
+
+    const currentRel = state.diplomacy.relationships[countryId] || { level: 'neutral', value: 50, atWar: false } as Relationship;
+    const newValue = Math.max(0, Math.min(100, currentRel.value + relChange));
+    const newRelationship: Relationship = {
+      level: getRelationshipLevel(newValue),
+      value: Math.round(newValue * 10) / 10,
+      atWar: currentRel.atWar || false,
+    };
+
+    const giftRecord = {
+      id: `gift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      countryId,
+      countryName: (state.diplomacy.discoveredCountries.find(c => c.id === countryId)?.name) || '未知国家',
+      timestamp: state.gameTime,
+      giftDetails: gift,
+      relationshipChange: relChange,
+    };
+
+    return { success: true, newResources, newRelationship, giftRecord };
+  }
+
+  // 新接口：executeGift(nation, giftValue, gameTime)
+  const nation = args[0] as Nation;
+  const giftValue = args[1] as number;
+  const gameTime = args[2] as number;
+
   if (nation.isDestroyed) {
     return { success: false, error: '该国家已被消灭' };
   }
-  
   if (nation.isAtWar) {
     return { success: false, error: '战争期间无法赠礼' };
   }
-  
   const relationshipChange = calculateGiftEffect(giftValue, nation);
-  
   const diplomaticAction: DiplomaticAction = {
     id: `gift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type: 'gift',
@@ -213,7 +378,6 @@ export function executeGift(
     result: `提升关系 +${relationshipChange.toFixed(1)}`,
     relationshipChange
   };
-  
   return { success: true, diplomaticAction };
 }
 
@@ -429,6 +593,8 @@ export class DiplomacySystem {
   static generateMarketPrices = generateMarketPrices;
   static calculateRelationshipDiscount = calculateRelationshipDiscount;
   static getRelationshipLevel = getRelationshipLevel;
+  // 兼容旧调用名
+  static calculateRelationshipLevel = getRelationshipLevel;
   static generateNation = generateNation;
   static calculateTradePrice = calculateTradePrice;
   static executeTrade = executeTrade;
@@ -441,6 +607,10 @@ export class DiplomacySystem {
   static updateNationRelationships = updateNationRelationships;
   static applyRelationshipChange = applyRelationshipChange;
   static getNationEffects = getNationEffects;
+  // 兼容旧调用：关系衰减
+  static calculateRelationshipDecay = calculateRelationshipDecay;
+  // 新增：初始关系生成（旧接口）
+  static generateInitialRelationship = generateInitialRelationship;
 }
 
 export default {

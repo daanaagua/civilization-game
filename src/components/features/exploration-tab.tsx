@@ -33,6 +33,12 @@ interface ExplorationTabProps {
 
 export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabProps) {
   const { discoverCountry } = useGameStore();
+
+  // 统一选择器：获取已研究科技集合
+  // 避免在各组件重复实现
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getResearchedSet } = require('@/lib/selectors');
+  const researchedSet: Set<string> = getResearchedSet(gameState);
   
   const [explorationSystem] = useState(() => {
     const system = new ExplorationSystem();
@@ -55,6 +61,11 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [isExploring, setIsExploring] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<string>('');
+  // 本地计算型探险点：由 selectors 统一计算
+  const [ongoingMissions, setOngoingMissions] = useState<{ id: string; cost: number }[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { computeExplorationPoints } = require('@/lib/selectors');
+  const explorationPoints = computeExplorationPoints(gameState, getUnitType, ongoingMissions);
   const [attackUnits, setAttackUnits] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   
@@ -86,6 +97,11 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
       alert('请选择探索单位');
       return;
     }
+    // 探险点数门槛：每次派遣消耗1点
+    if (explorationPoints < 1) {
+      alert('探险点数不足，训练侦察兵或冒险家以获取探险点');
+      return;
+    }
     
     const explorationUnits = (gameState.military?.units || []).filter(unit => 
       selectedUnits.includes(unit.id)
@@ -96,6 +112,9 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
       return;
     }
     
+    // 占用1点探险点（本地进行中任务）
+    const missionId = `m_${Date.now()}`;
+    setOngoingMissions(prev => [...prev, { id: missionId, cost: 1 }]);
     setIsExploring(true);
     
     try {
@@ -134,7 +153,7 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
         },
         exploration: {
           discoveredLocations: categorized,
-          explorationHistory: exported.explorationHistory,
+          explorationHistory: exported.explorationHistory
         },
       };
       
@@ -156,6 +175,8 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     } catch (error) {
       alert(error instanceof Error ? error.message : '探索失败');
     } finally {
+      // 释放本地占用的探险点
+      setOngoingMissions(prev => prev.filter(m => m.id !== missionId));
       setIsExploring(false);
     }
   };
@@ -435,10 +456,19 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     );
   };
   
+  // 科技门禁：需要“侦察学”
+  const scoutingUnlocked = researchedSet.has('scouting_tech');
+
   return (
     <div className="space-y-6">
       {/* 探索控制区域 */}
-      {renderExplorationControls()}
+      {!scoutingUnlocked ? (
+        <div className="bg-amber-900/30 border border-amber-700 text-amber-200 p-4 rounded">
+          需要研究“侦察学”后才能派遣侦察兵进行探索
+        </div>
+      ) : (
+        renderExplorationControls()
+      )}
       
       {/* 已发现位置 */}
       {renderDiscoveredLocations()}

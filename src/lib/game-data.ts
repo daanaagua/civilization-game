@@ -21,7 +21,7 @@ export const BUILDINGS: Record<string, Building> = {
     name: '储藏点',
     description: '储存各种资源，防止损失。每个储藏点增加所有资源的储存上限。',
     type: 'storage',
-    cost: { wood: 25, stone: 15, tools: 2 },
+    cost: { wood: 25, stone: 15 },
     produces: { storage_capacity: 100 },
     requires: ['primitive_storage'],
     unlocked: false,
@@ -104,7 +104,7 @@ export const BUILDINGS: Record<string, Building> = {
     name: '工坊',
     description: '制作工具和器具的专门场所。需要手工艺技术解锁。',
     type: 'production',
-    cost: { wood: 55, stone: 40, tools: 6 },
+    cost: { wood: 55, stone: 40 },
     produces: { tools: 0.4 },
     consumes: { wood: 0.2, stone: 0.1 },
     requires: ['tool_making'],
@@ -371,7 +371,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     category: 'production',
     cost: { wood: 25, stone: 20 },
     researchTime: 15, // 15秒
-    requires: ['tool_making'],
+    requires: ['fire_making'],
     unlocked: false,
     researched: false,
     effects: [
@@ -529,6 +529,21 @@ export const TECHNOLOGIES: Record<string, Technology> = {
   },
   
   // 军事科技
+  militia_training: {
+    id: 'militia_training',
+    name: '民兵训练',
+    description: '建立基础的民兵组织，进行最初级的训练。',
+    category: 'military',
+    cost: { wood: 10 },
+    researchTime: 60,
+    requires: ['fire_making'],
+    unlocked: false,
+    researched: false,
+    effects: [
+      // 保持为空，解锁由兵种的 unlockCondition 判定
+    ],
+  },
+
   primitive_weapons: {
     id: 'primitive_weapons',
     name: '原始武器',

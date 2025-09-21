@@ -19,7 +19,7 @@ import { ExplorationSystem } from './exploration-system';
 import { CombatSystem } from './combat-system';
 import { DiplomacySystem } from './diplomacy-system';
 import { Country, Relationship, RelationshipLevel, MarketPrices, TradeRecord, GiftRecord, WarRecord, MercenaryUnit, SpecialTreasure, RaidEvent, DiplomaticEffect } from '@/types/diplomacy';
-import { DIPLOMACY_CONFIG, COUNTRY_TEMPLATES, BASE_MARKET_PRICES } from './diplomacy-data';
+import { BASE_MARKET_PRICES } from './diplomacy-data';
 
 // 初始游戏状态
 const initialGameState: GameState = {
@@ -48,7 +48,14 @@ const initialGameState: GameState = {
     researchPoints: 0,
     copper: 0,
     iron: 0,
+    livestock: 0,
     horses: 0,
+    cloth: 0,
+    weapons: 0,
+    crystal: 0,
+    magic: 0,
+    faith: 0,
+    currency: 0,
   },
   
   resourceRates: {
@@ -60,7 +67,14 @@ const initialGameState: GameState = {
     researchPoints: 0,
     copper: 0,
     iron: 0,
+    livestock: 0,
     horses: 0,
+    cloth: 0,
+    weapons: 0,
+    crystal: 0,
+    magic: 0,
+    faith: 0,
+    currency: 0,
   },
   
   resourceLimits: {
@@ -73,7 +87,14 @@ const initialGameState: GameState = {
     researchPoints: 1000,
     copper: 500,
     iron: 300,
+    livestock: 100,
     horses: 100,
+    cloth: 200,
+    weapons: 200,
+    crystal: 50,
+    magic: 50,
+    faith: 100,
+    currency: 10000,
   },
   
   buildings: {} as Record<string, BuildingInstance>,
@@ -87,8 +108,7 @@ const initialGameState: GameState = {
   researchState: {
     currentResearch: null,
     researchQueue: [],
-    researchPoints: 0,
-    researchPointsPerSecond: 0,
+    researchSpeed: 1,
   } as ResearchState,
   
   characterSystem: {
@@ -130,7 +150,8 @@ const initialGameState: GameState = {
       countries: [],
       events: []
     },
-    explorationHistory: []
+    explorationHistory: [],
+    explorationPoints: 0
   },
   
   // 外交系统初始状态
@@ -3134,9 +3155,9 @@ export const useGameStore = create<GameStore>()(persist(
       set((state) => ({
         gameState: {
           ...state.gameState,
-          researchState: {
-            ...state.gameState.researchState,
-            researchPointsPerSecond,
+          resourceRates: {
+            ...state.gameState.resourceRates,
+            researchPoints: researchPointsPerSecond,
           },
         },
       }));
@@ -3588,13 +3609,34 @@ export const useGameStore = create<GameStore>()(persist(
       const result = militarySystem.trainUnit(gameState, unitType);
       
       if (result.success) {
-        set((state) => ({
-          gameState: {
-            ...state.gameState,
-            military: result.newMilitaryState!,
-            resources: result.newResources!
-          }
-        }));
+        // 训练成功后，若为探索单位则+1隐藏探险点
+        try {
+          const { getUnitType } = require('./military-data');
+          const ut = getUnitType(unitType);
+          const isExplorer = !!ut?.isExplorer;
+          set((state) => ({
+            gameState: {
+              ...state.gameState,
+              military: result.newMilitaryState!,
+              resources: result.newResources!,
+              exploration: {
+                ...state.gameState.exploration,
+                explorationPoints: (state.gameState.exploration?.explorationPoints || 0) + (isExplorer ? 1 : 0),
+                discoveredLocations: state.gameState.exploration.discoveredLocations,
+                explorationHistory: state.gameState.exploration.explorationHistory
+              }
+            }
+          }));
+        } catch {
+          // 回退：若动态导入失败，仅应用原更新
+          set((state) => ({
+            gameState: {
+              ...state.gameState,
+              military: result.newMilitaryState!,
+              resources: result.newResources!
+            }
+          }));
+        }
         return true;
       }
       return false;
@@ -4122,11 +4164,13 @@ export const useGameStore = create<GameStore>()(persist(
         
         get().addNotification({
           type: 'success',
+          title: '贸易成功',
           message: `与${result.tradeRecord!.countryName}的贸易成功完成！`
         });
       } else {
         get().addNotification({
           type: 'error',
+          title: '贸易失败',
           message: result.error || '贸易失败'
         });
       }
@@ -4157,11 +4201,13 @@ export const useGameStore = create<GameStore>()(persist(
         
         get().addNotification({
           type: 'success',
+          title: '赠礼成功',
           message: `成功向${result.giftRecord!.countryName}赠送礼物，关系得到改善！`
         });
       } else {
         get().addNotification({
           type: 'error',
+          title: '赠礼失败',
           message: result.error || '赠礼失败'
         });
       }
@@ -4191,7 +4237,7 @@ export const useGameStore = create<GameStore>()(persist(
                 [countryId]: {
                   ...gameState.gameState.diplomacy.relationships[countryId],
                   level: 'hostile',
-                  value: -100,
+                  value: 0,
                   atWar: true
                 }
               },
@@ -4202,6 +4248,7 @@ export const useGameStore = create<GameStore>()(persist(
         
         get().addNotification({
           type: 'warning',
+          title: '战争宣告',
           message: `已向${country.name}宣战！`
         });
       }
@@ -4254,10 +4301,11 @@ export const useGameStore = create<GameStore>()(persist(
         const relationship = updatedRelationships[countryId];
         if (!relationship.atWar) {
           const decay = DiplomacySystem.calculateRelationshipDecay(relationship);
+          const newValue = Math.max(0, Math.min(100, relationship.value + decay));
           updatedRelationships[countryId] = {
             ...relationship,
-            value: Math.max(-100, Math.min(100, relationship.value + decay)),
-            level: DiplomacySystem.calculateRelationshipLevel(relationship.value + decay)
+            value: newValue,
+            level: DiplomacySystem.getRelationshipLevel(newValue)
           };
         }
       });
@@ -4281,29 +4329,31 @@ export const useGameStore = create<GameStore>()(persist(
       });
       
       if (hostileCountries.length > 0) {
-        const raidEvent = DiplomacySystem.generateRaidEvent(hostileCountries);
-        if (raidEvent) {
-          set((gameState) => ({
-            gameState: {
-              ...gameState.gameState,
-              diplomacy: {
-                ...gameState.gameState.diplomacy,
-                raidEvents: [...gameState.gameState.diplomacy.raidEvents, raidEvent]
-              }
+        // 随机挑选一个敌对国家，生成袭扰事件
+        const idx = Math.floor(Math.random() * hostileCountries.length);
+        const source = hostileCountries[idx];
+        const raidEvent = DiplomacySystem.generateRaidEvent(source as any, state.gameTime, 1);
+        
+        set((gameState) => ({
+          gameState: {
+            ...gameState.gameState,
+            diplomacy: {
+              ...gameState.gameState.diplomacy,
+              raidEvents: [...gameState.gameState.diplomacy.raidEvents, raidEvent]
             }
-          }));
-          
-          get().triggerPauseEvent({
-            id: `raid_${raidEvent.id}`,
-            type: 'raid',
-            title: '敌国袭扰',
-            description: `${raidEvent.countryName}的军队正在袭扰我们的边境！`,
-            choices: [
-              { text: '派兵抵御', effects: { stability: -5 } },
-              { text: '加强防御', effects: { resources: { wood: -50, stone: -30 } } }
-            ]
-          });
-        }
+          }
+        }));
+        
+        get().triggerPauseEvent({
+          id: `raid_${raidEvent.id}`,
+          type: 'raid',
+          title: '敌国袭扰',
+          description: `${source.name}的军队正在袭扰我们的边境！`,
+          choices: [
+            { text: '派兵抵御', effects: { stability: -5 } },
+            { text: '加强防御', effects: { resources: { wood: -50, stone: -30 } } }
+          ]
+        });
       }
     },
 
@@ -4352,14 +4402,18 @@ export const useGameStore = create<GameStore>()(persist(
         };
       }
       
-      // 确保 researchState 存在
+      // 确保 researchState 存在并兼容新结构
       if (persistedState?.gameState && !persistedState.gameState.researchState) {
         persistedState.gameState.researchState = {
           currentResearch: null,
           researchQueue: [],
-          researchPoints: 0,
-          researchPointsPerSecond: 0,
+          researchSpeed: 1,
         };
+      } else if (persistedState?.gameState?.researchState) {
+        const rs: any = persistedState.gameState.researchState;
+        if (typeof rs.researchSpeed !== 'number') rs.researchSpeed = 1;
+        if ('researchPoints' in rs) delete rs.researchPoints;
+        if ('researchPointsPerSecond' in rs) delete rs.researchPointsPerSecond;
       }
       
       // 确保 statistics 存在（兼容旧存档）
