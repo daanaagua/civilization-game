@@ -225,7 +225,8 @@ export class ResourceManager {
         if (buildingData.canAssignWorkers && buildingData.maxWorkers) {
           const assignedWorkers = building.assignedWorkers || 0;
           const maxWorkers = buildingData.maxWorkers;
-          efficiency = Math.max(0.1, assignedWorkers / maxWorkers);
+          // 按设计：无工人则无产出，不设最低效率
+          efficiency = assignedWorkers / maxWorkers;
         }
         
         Object.entries(buildingData.produces).forEach(([resource, baseRate]) => {

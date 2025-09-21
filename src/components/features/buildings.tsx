@@ -133,7 +133,7 @@ const BuildingCard = ({ building, count, onBuild, canAfford }: BuildingCardProps
             {Object.entries(building.produces).map(([resource, amount]) => {
               let efficiency = 1;
               if (canAssignWorkers && maxWorkers > 0) {
-                efficiency = Math.max(0.1, assignedWorkers / (maxWorkers * count));
+                efficiency = assignedWorkers / (maxWorkers * count);
               }
               const actualAmount = amount * efficiency;
               

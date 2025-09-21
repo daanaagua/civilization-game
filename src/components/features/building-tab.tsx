@@ -36,10 +36,12 @@ import {
   getBuildingsByCategory,
   isBuildingUnlocked
 } from '@/lib/building-data';
+import AggregateWorkerControls from './AggregateWorkerControls';
 import { BuildingSystem, BuildingUtils } from '@/lib/building-system';
 import { useGameStore } from '@/lib/game-store';
 import { useEffect } from 'react';
 import { bootstrapRegistry } from '@/lib/registry/bootstrap';
+import { getResearchedSet } from '@/lib/selectors';
 import { getVisibleFromRegistry } from '@/lib/facade/visibility-facade';
 import { registry } from '@/lib/registry/index';
 import { createPopulationSelectors } from '@/lib/slices';
@@ -66,7 +68,7 @@ const categoryColors = {
 export function BuildingTab() {
   const [selectedCategory, setSelectedCategory] = useState<BuildingCategory>('housing');
   const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null);
-  const [buildQuantity, setBuildQuantity] = useState(1);
+  // 取消建造数量选择：点击一次仅建一座
   
   const gameState = useGameStore(state => state.gameState);
   const constructBuilding = useGameStore(state => state.constructBuilding);
@@ -92,12 +94,8 @@ export function BuildingTab() {
     bootstrapRegistry({ includeDemoSeed: false }).catch(() => {});
   }, []);
   
-  // 从 store 推断“已拥有科技”ID 集合（回退友好）
-  const ownedTechIds = useMemo(() => {
-    const t1 = (gameState as any)?.technologies?.researched as string[] | undefined;
-    const t2 = (gameState as any)?.researchedTechIds as string[] | undefined;
-    return new Set<string>([...(t1 || []), ...(t2 || [])]);
-  }, [gameState]);
+  // 从 store 正确构造“已研究科技”集合
+  const ownedTechIds = useMemo(() => getResearchedSet(gameState), [gameState]);
   
   // 通过统一 gating 选择器获取可见建筑（若 registry 为空则回退到旧逻辑）
   const registryVisibleBuildings = useMemo(() => {
@@ -134,9 +132,8 @@ export function BuildingTab() {
   }, [selectedCategory, buildingSystem, registryHasAnyBuildings, registryVisibleBuildings]);
 
   // 处理建造建筑
-  const handleBuildBuilding = (buildingId: string, quantity: number) => {
+  const handleBuildBuilding = (buildingId: string) => {
     const success = constructBuilding(buildingId);
-    
     if (success) {
       addNotification({
         type: 'success',
@@ -318,39 +315,24 @@ export function BuildingTab() {
 
                         <Separator />
 
-                        {/* 建造控制 */}
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setBuildQuantity(Math.max(1, buildQuantity - 1))}
-                              disabled={buildQuantity <= 1}
-                            >
-                              <Minus className="w-4 h-4" />
-                            </Button>
-                            <span className="px-3 py-1 border border-white/10 rounded text-center min-w-[3rem]">
-                              {buildQuantity}
-                            </span>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setBuildQuantity(buildQuantity + 1)}
-                              disabled={buildLimit ? buildQuantity >= (buildLimit.maximum - buildLimit.current) : false}
-                            >
-                              <Plus className="w-4 h-4" />
-                            </Button>
+                        {/* 工人分配（聚合控制：对该建筑类型所有实例的已分配/上限） */}
+                        {building.maxWorkers > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="font-medium">人口分配</h4>
+                            <AggregateWorkerControls buildingId={building.id} />
                           </div>
-                          
+                        )}
+
+                        {/* 建造：点击一次仅建一座 */}
+                        <div className="space-y-2">
                           <Button
                             className="w-full"
-                            onClick={() => handleBuildBuilding(building.id, buildQuantity)}
+                            onClick={() => handleBuildBuilding(building.id)}
                             disabled={!canConstruct.canBuild}
                           >
                             <Building className="w-4 h-4 mr-2" />
-                            建造 {buildQuantity > 1 ? `x${buildQuantity}` : ''}
+                            建造
                           </Button>
-                          
                           {!canConstruct.canBuild && (
                             <div className="text-xs text-gray-500">
                               {canConstruct.reason || '无法建造此建筑'}
@@ -377,111 +359,7 @@ export function BuildingTab() {
         ))}
       </Tabs>
 
-      {/* 已建造建筑管理 */}
-      {Object.keys(managementState.buildings).length > 0 && (
-        <Card className="bg-transparent shadow-none border border-white/10">
-          <CardHeader>
-            <CardTitle>建筑管理</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {Object.values(managementState.buildings).map(instance => {
-                const building = getBuildingDefinition(instance.buildingId);
-                if (!building) return null;
-                
-                const productionResult = buildingSystem.calculateBuildingProduction(instance.id ?? instance.buildingId);
-                
-                return (
-                  <Card key={instance.id} className="bg-transparent shadow-none border border-white/10">
-                    <CardContent className="pt-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h4 className="font-medium">{building.name}</h4>
-                          <p className="text-sm text-gray-500">
-                            数量: {instance.count || 1} | 等级: {instance.level}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {instance.status === 'building' && (
-                            <Badge variant="outline" className="text-gray-400">
-                              <Clock className="w-3 h-3 mr-1" />
-                              建造中
-                            </Badge>
-                          )}
-                          {instance.status === 'completed' && (
-                            <Badge variant="outline" className="text-gray-400">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              已完成
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 建造进度 */}
-                      {instance.status === 'building' && instance.constructionProgress !== undefined && (
-                        <div className="mb-3">
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>建造进度</span>
-                            <span>{instance.constructionProgress.toFixed(1)}%</span>
-                          </div>
-                          <Progress value={instance.constructionProgress} className="h-2" />
-                        </div>
-                      )}
-
-                      {/* 工人分配 */}
-                      {instance.status === 'completed' && building.maxWorkers > 0 && (
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium mb-2 block">工人分配</label>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleWorkerAssignment(instance.id ?? instance.buildingId, Math.max(0, instance.assignedWorkers - 1))}
-                                disabled={instance.assignedWorkers <= 0}
-                              >
-                                <Minus className="w-4 h-4" />
-                              </Button>
-                              <span className="px-3 py-1 border border-white/10 rounded text-center min-w-[3rem]">
-                                {instance.assignedWorkers}
-                              </span>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleWorkerAssignment(instance.id ?? instance.buildingId, Math.min(building.maxWorkers, instance.assignedWorkers + 1))}
-                                disabled={instance.assignedWorkers >= building.maxWorkers || managementState.workerAssignment.availableWorkers <= 0}
-                              >
-                                <Plus className="w-4 h-4" />
-                              </Button>
-                              <span className="text-sm text-gray-500">/ {building.maxWorkers}</span>
-                            </div>
-                          </div>
-
-                          {/* 生产显示 */}
-                          {productionResult.production.length > 0 && (
-                            <div>
-                              <label className="text-sm font-medium mb-2 block">当前生产</label>
-                              <div className="space-y-1">
-                                {productionResult.production.map(prod => (
-                                  <div key={prod.resource} className="text-sm">
-                                    <span className="text-gray-300">+{prod.actualRate.toFixed(1)}</span>
-                                    <span className="text-gray-500 ml-1">{prod.resource}</span>
-                                    <span className="text-gray-500 ml-1">({(prod.efficiency * 100).toFixed(0)}% 效率)</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 建筑管理模块已移除 */}
     </div>
   );
 }

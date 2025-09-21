@@ -890,34 +890,83 @@ export const useGameStore = create<GameStore>()(persist(
           totalPlayTime: (prevStats.totalPlayTime || 0) + adjustedDelta,
         };
         
-        // 计算资源上限
+        // 计算资源上限（基于已建储存建筑的 storage 定义聚合，无需工人即可生效）
         const calculateResourceLimits = () => {
-          const baseLimit = {
+          // 基础上限（可按需扩展）
+          const baseLimit: Record<string, number> = {
             food: 100,
             wood: 200,
             stone: 150,
             tools: 50,
-            population: 10,
-            housing: 10,
+            researchPoints: 1000,
+            copper: 500,
+            iron: 300,
+            livestock: 100,
+            horses: 100,
+            cloth: 200,
+            weapons: 200,
+            crystal: 50,
+            magic: 50,
+            faith: 100,
+            currency: 10000,
+            // 人口与住房单独处理
           };
-          
-          // 储藏点上限基于人口：每10人口可以建造1个储藏点
-          const population = state.gameState.resources.population;
-          const maxStorageBuildings = Math.floor(population / 10);
-          const actualStorageCount = Math.min(
-            state.gameState.buildings.storage?.count || 0,
-            maxStorageBuildings
-          );
-          const storageBonus = actualStorageCount * 100;
-          
-          return {
-            food: baseLimit.food + storageBonus,
-            wood: baseLimit.wood + storageBonus,
-            stone: baseLimit.stone + storageBonus,
-            tools: baseLimit.tools + storageBonus,
-            population: state.gameState.resources.housing + 1, // 人口上限等于住房数量 + 1（0住房时有一个免费人口）
-            housing: baseLimit.housing,
-          };
+
+          // 以当前状态中的上限为准，若不存在则回退到 baseLimit
+          const currentLimitKeys = Object.keys(state.gameState.resourceLimits || {});
+          const allKeys = new Set<string>([...Object.keys(baseLimit), ...currentLimitKeys]);
+
+          // 聚合“百分比（all/单资源）”与“定值（all/单资源）”两类加成
+          let percentAll = 0; // 对所有资源的百分比总加成（基于基础上限）
+          const percentByRes: Record<string, number> = {};
+          let flatAll = 0; // 对所有资源的定值总加成
+          const flatByRes: Record<string, number> = {};
+
+          // 遍历所有已建成的储存类建筑实例
+          Object.values(state.gameState.buildings || {}).forEach((inst: any) => {
+            if (!inst) return;
+            // 仅对已完成/已建造的实例生效
+            if ((inst.isConstructed === false) || (typeof inst.status === 'string' && inst.status !== 'completed')) return;
+
+            const def = getBuildingDefinition(inst.buildingId);
+            const storageArr = (def as any)?.storage as Array<any> | undefined;
+            if (!storageArr || storageArr.length === 0) return;
+
+            storageArr.forEach(s => {
+              const isPct = !!s.isPercentage;
+              const cap = Number(s.capacity || 0);
+              if (!cap) return;
+
+              if (String(s.resource) === 'all') {
+                if (isPct) percentAll += cap;
+                else flatAll += cap;
+              } else {
+                const res = String(s.resource);
+                if (isPct) {
+                  percentByRes[res] = (percentByRes[res] || 0) + cap;
+                } else {
+                  flatByRes[res] = (flatByRes[res] || 0) + cap;
+                }
+              }
+            });
+          });
+
+          // 计算最终上限：base + base*(percentAll+percentRes)/100 + flatAll + flatRes
+          const limits: Record<string, number> = {};
+          allKeys.forEach((k) => {
+            if (k === 'population' || k === 'housing') return; // 下面单独处理
+            const base = (baseLimit as any)?.[k] ?? ((state.gameState.resourceLimits as any)?.[k] ?? 0);
+            const pct = (percentAll + (percentByRes[k] || 0)) / 100;
+            const extra = Math.floor(base * pct) + (flatAll + (flatByRes[k] || 0));
+            limits[k] = Math.max(0, base + extra);
+          });
+
+          // 人口上限 = housing + 1（0住房时有一个免费人口）
+          limits.population = (state.gameState.resources.housing || 0) + 1;
+          // housing 本身当作统计值，不作为可用上限资源参与 all 的计算
+          limits.housing = (state.gameState.resourceLimits.housing ?? 10);
+
+          return limits as any;
         };
         
         const resourceLimits = calculateResourceLimits();
@@ -1502,17 +1551,61 @@ export const useGameStore = create<GameStore>()(persist(
     addNotification: (notification) => {
       const id = Date.now().toString();
       const timestamp = Date.now();
-      
-      set((state) => ({
-        uiState: {
-          ...state.uiState,
-          notifications: [
-            ...state.uiState.notifications,
-            { ...notification, id, timestamp },
-          ],
-        },
-      }));
-      
+
+      // 将通知同步记录为“非暂停事件”，并做最近2秒内的标题+描述去重以避免重复
+      set((state) => {
+        const mappedType =
+          notification.type === 'success' ? 'positive' :
+          notification.type === 'error' ? 'negative' :
+          notification.type === 'warning' ? 'warning' : 'notification';
+
+        const title = notification.title || '通知';
+        const description = notification.message || '';
+
+        const recentHistory = state.gameState.events.slice(-5);
+        const isDuplicate = recentHistory.some((e: any) =>
+          e && e.title === title && e.description === description && (timestamp - (e.timestamp || 0)) < 2000
+        );
+
+        // 构造新的通知列表
+        const newNotifications = [
+          ...state.uiState.notifications,
+          { ...notification, id, timestamp },
+        ];
+
+        // 构造历史与最新事件（若非重复）
+        let newEvents = state.gameState.events;
+        let newRecent = state.gameState.recentEvents;
+        if (!isDuplicate) {
+          const historyItem: any = {
+            id: `notif_${id}`,
+            title,
+            description,
+            type: mappedType,
+            priority: 'low',
+            timestamp,
+            isRead: false,
+            isResolved: true
+          };
+          newEvents = [...state.gameState.events, historyItem];
+          const appended = [...state.gameState.recentEvents, historyItem];
+          while (appended.length > 3) appended.shift();
+          newRecent = appended;
+        }
+
+        return {
+          uiState: {
+            ...state.uiState,
+            notifications: newNotifications,
+          },
+          gameState: {
+            ...state.gameState,
+            events: newEvents,
+            recentEvents: newRecent,
+          },
+        };
+      });
+
       // 向全局派发通知事件，供事件系统桥接到 UI Toast
       if (typeof window !== 'undefined') {
         try {
@@ -1521,8 +1614,8 @@ export const useGameStore = create<GameStore>()(persist(
           // ignore
         }
       }
-      
-      // 自动移除通知
+
+      // 自动移除通知（仅影响 Toast 显示，不影响历史与“最新事件”的记录）
       if (notification.duration) {
         setTimeout(() => {
           get().removeNotification(id);
@@ -1587,7 +1680,7 @@ export const useGameStore = create<GameStore>()(persist(
                 const assignedWorkers = building.assignedWorkers || 0;
                 const maxWorkers = buildingData.maxWorkers;
                 // 效率 = 分配工人数 / 最大工人数，最低10%效率
-                efficiency = Math.max(0.1, assignedWorkers / maxWorkers);
+                efficiency = assignedWorkers / maxWorkers;
               }
               
               newRates[resource as keyof typeof newRates] += rate * building.count * efficiency;
@@ -1997,6 +2090,14 @@ export const useGameStore = create<GameStore>()(persist(
           message: `部落迎来了新成员！当前人口：${resources.population + 1}`,
           duration: 3000,
         });
+
+        // 同步记录为非暂停事件：进入历史与“最新事件”（最多保留3条）
+        get().triggerNonPauseEvent({
+          id: `population_growth_${Date.now()}`,
+          title: '人口增长',
+          description: `部落迎来了新成员！当前人口：${resources.population + 1}`,
+          type: 'positive'
+        } as any);
       }
     },
 
@@ -2295,6 +2396,7 @@ export const useGameStore = create<GameStore>()(persist(
       const event = (RANDOM_EVENTS as any)[eventId];
       if (!event) return;
       
+      // 先应用效果
       set((state) => {
         const base = {
           resources: state.gameState.resources,
@@ -2331,17 +2433,55 @@ export const useGameStore = create<GameStore>()(persist(
           }
         };
       });
-      
-      // 显示事件
-      get().showEvent({
+
+      // 标准化历史项
+      const historyItem: any = {
         id: event.id,
         title: event.name,
-        description: event.description,
-        type: event.type,
+        description: event.description || '',
+        type: event.type || 'notification',
+        priority: event.priority || 'medium',
         timestamp: Date.now(),
-        effects: event.effects
-      } as any);
+        isRead: false,
+        isResolved: !Array.isArray(event.options) // 有 options 认为是暂停事件
+      };
+
+      // 写入历史 + 最近（若为非暂停）
+      set((state) => {
+        const nextState: any = {
+          gameState: {
+            ...state.gameState,
+            events: [...state.gameState.events, historyItem],
+          }
+        };
+        if (!Array.isArray(event.options)) {
+          const newRecent = [...state.gameState.recentEvents, historyItem];
+          while (newRecent.length > 3) newRecent.shift();
+          nextState.gameState.recentEvents = newRecent;
+        }
+        return nextState;
+      });
       
+      // 暂停类：进入 activeEvents；非暂停类：仅展示卡片（不弹模态）
+      if (Array.isArray(event.options)) {
+        get().triggerPauseEvent({
+          id: event.id,
+          title: event.name,
+          description: event.description,
+          options: event.options
+        } as any);
+      } else {
+        // 非暂停走信息卡片 + 通知（保持原行为）
+        get().showEvent({
+          id: event.id,
+          title: event.name,
+          description: event.description,
+          type: event.type,
+          timestamp: Date.now(),
+          effects: event.effects
+        } as any);
+      }
+
       // 添加通知
       get().addNotification({
         type: event.type === 'positive' ? 'success' : event.type === 'negative' ? 'error' : 'info',
@@ -2726,12 +2866,31 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     triggerNonPauseEvent: (event: NonPauseEvent) => {
-      set((state) => ({
-        gameState: {
-          ...state.gameState,
-          recentEvents: [...state.gameState.recentEvents, event].slice(-10), // 只保留最近10个事件
-        },
-      }));
+      // 标准化历史事件条目（用于 UI 展示）
+      const historyItem: any = {
+        id: (event as any).id,
+        title: (event as any).title || (event as any).name || '事件',
+        description: (event as any).description || '',
+        type: (event as any).type || 'notification',
+        priority: (event as any).priority || 'medium',
+        timestamp: Date.now(),
+        isRead: false,
+        isResolved: true // 非暂停事件默认视为已处理
+      };
+      set((state) => {
+        const newRecent = [...state.gameState.recentEvents, historyItem];
+        // 只保留最近3条
+        while (newRecent.length > 3) newRecent.shift();
+        return {
+          gameState: {
+            ...state.gameState,
+            // 历史累积
+            events: [...state.gameState.events, historyItem],
+            // 最近展示
+            recentEvents: newRecent,
+          },
+        };
+      });
     },
 
     handlePauseEventChoice: (eventId: string, choiceIndex: number) => {

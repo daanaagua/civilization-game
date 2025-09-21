@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Clock, History, AlertCircle, HelpCircle, ChevronRight, X } from 'lucide-react';
 import { useGameStore } from '@/lib/game-store';
 import { checkChoiceAvailability, getResourceDisplayName } from '@/lib/event-utils';
@@ -59,9 +59,27 @@ export interface GameEvent {
   category?: string; // 事件分类
 }
 
+type DisplayEvent = {
+  id: string;
+  title?: string;
+  name?: string;
+  description?: string;
+  type?: string; // 'notification' | 'choice' | 'positive' | 'negative' | 'neutral' | ...
+  priority?: string; // 'low' | 'medium' | 'high' | 'urgent' | ...
+  timestamp?: number;
+  duration?: number;
+  choices?: any[];
+  consequences?: string[];
+  isRead?: boolean;
+  isResolved?: boolean;
+  selectedChoiceId?: string;
+  icon?: string;
+  category?: string;
+};
+
 // 事件项组件
 interface EventItemProps {
-  event: GameEvent;
+  event: DisplayEvent;
   onChoiceSelect?: (eventId: string, choiceId: string) => void;
   onMarkAsRead?: (eventId: string) => void;
   isCompact?: boolean;
@@ -69,7 +87,7 @@ interface EventItemProps {
 
 function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: EventItemProps) {
   // 选择事件默认展开，通知事件默认不展开
-  const [isExpanded, setIsExpanded] = useState(event.type === EventType.CHOICE && !event.isResolved);
+  const [isExpanded, setIsExpanded] = useState(event.type === 'choice' && !event.isResolved);
   const gameState = useGameStore(state => state.gameState);
 
   const getPriorityColor = (priority: EventPriority) => {
@@ -89,7 +107,7 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
 
   const getEventIcon = () => {
     if (event.icon) return event.icon;
-    return event.type === EventType.CHOICE ? '❓' : 'ℹ️';
+    return event.type === 'choice' ? '❓' : 'ℹ️';
   };
 
   const formatTimestamp = (timestamp: number) => {
@@ -150,7 +168,7 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
             {event.description}
           </p>
           
-          {event.type === EventType.CHOICE && event.choices && (
+          {event.type === 'choice' && event.choices && (
             <div className="space-y-2">
               {!event.isResolved ? (
                 // 未解决的选择事件 - 显示所有选项（默认展开）
@@ -233,7 +251,7 @@ function EventItem({ event, onChoiceSelect, onMarkAsRead, isCompact = false }: E
 
 // 历史事件弹窗组件
 interface EventHistoryModalProps {
-  events: GameEvent[];
+  events: DisplayEvent[];
   isOpen: boolean;
   onClose: () => void;
   onChoiceSelect?: (eventId: string, choiceId: string) => void;
@@ -254,8 +272,10 @@ function EventHistoryModal({
 
   const filteredEvents = events.filter(event => {
     if (filter === 'all') return true;
-    if (filter === 'unresolved') return !event.isResolved && event.type === EventType.CHOICE;
-    return event.type === filter;
+    if (filter === 'unresolved') return !event.isResolved && event.type === 'choice';
+    if (filter === EventType.CHOICE) return event.type === 'choice';
+    if (filter === EventType.NOTIFICATION) return event.type === 'notification';
+    return true;
   });
 
   const sortedEvents = [...filteredEvents].sort((a, b) => {
@@ -343,43 +363,32 @@ function EventHistoryModal({
 
 // 主要的事件面板组件
 interface EventsPanelProps {
-  events?: GameEvent[];
   onChoiceSelect?: (eventId: string, choiceId: string) => void;
   onMarkAsRead?: (eventId: string) => void;
   className?: string;
 }
 
 export function EventsPanel({ 
-  events = [], 
   onChoiceSelect, 
   onMarkAsRead, 
   className 
 }: EventsPanelProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
 
-  // 获取最近的3条事件
-  const recentEvents = events
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 3);
+  // 统一从 store 读取事件数据源
+  const gameState = useGameStore(s => s.gameState);
+  const events = (gameState.events as unknown as DisplayEvent[]) || [];
+  const recentEvents = (gameState.recentEvents as unknown as DisplayEvent[]) || [];
 
-  // 未读事件数量
+  // 未读事件数量（字段可能不存在，按可选处理）
   const unreadCount = events.filter(event => !event.isRead).length;
   
-  // 未处理的选择事件数量
+  // 未处理的选择事件数量（按字符串类型判断）
   const unresolvedChoiceCount = events.filter(
-    event => event.type === EventType.CHOICE && !event.isResolved
+    event => event.type === 'choice' && !event.isResolved
   ).length;
 
-  useEffect(() => {
-    if (recentEvents.length > 0) {
-      const timer = setTimeout(() => {
-        setIsScrolling(true);
-        setTimeout(() => setIsScrolling(false), 3000);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [recentEvents.length]);
+
 
   return (
     <>
@@ -411,9 +420,7 @@ export function EventsPanel({
         
         <div className="p-4">
           {recentEvents.length > 0 ? (
-            <div className={`space-y-3 transition-all duration-500 ${
-              isScrolling ? 'animate-pulse' : ''
-            }`}>
+            <div className="space-y-3">
               {recentEvents.map((event) => (
                 <EventItem
                   key={event.id}

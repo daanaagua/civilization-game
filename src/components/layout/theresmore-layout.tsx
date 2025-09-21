@@ -395,7 +395,10 @@ const OverviewPanel = () => {
               <div className="p-4 space-y-2 max-h-60 overflow-y-auto">
                 {gameState.recentEvents.map((event) => (
                   <div key={event.id} className="text-sm text-gray-300 p-2 bg-gray-900 rounded">
-                    {event.name}
+                    <div className="font-semibold text-white">{(event as any).title || (event as any).name || '事件'}</div>
+                    {((event as any).description) && (
+                      <div className="text-xs text-gray-400 mt-1">{(event as any).description}</div>
+                    )}
                   </div>
                 ))}
               </div>
