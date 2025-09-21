@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Info } from 'lucide-react';
-import { Effect, EffectType, EffectSourceType } from '@/lib/effects-system';
+import { Effect, EffectType, EffectSourceType, globalEffectsSystem } from '@/lib/effects-system';
 import { AllEffectsModal } from '@/components/ui/AllEffectsModal';
 import { useGameStore } from '@/lib/game-store';
 
@@ -255,7 +255,7 @@ function EffectTooltip({ effect, position }: EffectTooltipProps) {
       const stabilityEffects = getStabilityEffects(effect.value);
       return (
         <div className="space-y-1">
-          <div className="text-gray-300 mb-2">稳定度影响以下游戏机制：</div>
+          <div className="text-gray-300">稳定度影响以下游戏机制：</div>
           {stabilityEffects.map((item, index) => (
             <div key={index} className="flex justify-between text-xs">
               <span className="text-gray-400">{item.name}:</span>
@@ -276,7 +276,7 @@ function EffectTooltip({ effect, position }: EffectTooltipProps) {
           {corruptionEffects.map((item, index) => (
             <div key={index} className="flex justify-between text-xs">
               <span className="text-gray-400">{item.name}:</span>
-              <span className={item.value.includes('-') ? 'text-red-400' : 'text-green-400'}>
+              <span className={(parseFloat(item.value.replace('%','').replace('+','')) || 0) < 0 ? 'text-green-400' : (parseFloat(item.value.replace('%','').replace('+','')) || 0) > 0 ? 'text-red-400' : 'text-gray-400'}>
                 {item.value}
               </span>
             </div>
@@ -764,7 +764,13 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
             {characterEffectsByPos[hoverCharPos].map((line, idx) => (
               <div key={idx} className="flex justify-between text-xs">
                 <span className="text-gray-400">{line.name}:</span>
-                <span className={line.value.includes('-') ? 'text-red-400' : 'text-green-400'}>{line.value}</span>
+                {(() => {
+                  const num = parseFloat(line.value.replace('%','').replace('+','')) || 0;
+                  const cls = line.name === '腐败度'
+                    ? (num < 0 ? 'text-green-400' : num > 0 ? 'text-red-400' : 'text-gray-400')
+                    : (num > 0 ? 'text-green-400' : num < 0 ? 'text-red-400' : 'text-gray-400');
+                  return <span className={cls}>{line.value}</span>;
+                })()}
               </div>
             ))}
           </div>

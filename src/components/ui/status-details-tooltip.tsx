@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useGameStore } from '@/lib/game-store';
+import { globalEffectsSystem, EffectSourceType } from '@/lib/effects-system';
 
 interface StatusDetailsTooltipProps {
   statusType: 'stability' | 'corruption';
@@ -110,6 +111,24 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
         color: 'text-red-400'
       });
     }
+
+    // 人物来源的稳定度贡献（点数，一律按实际数值显示）
+    try {
+      const charStability = globalEffectsSystem
+        .getEffectsBySourceType(EffectSourceType.CHARACTER)
+        .filter((e: any) => String(e?.type).toLowerCase() === 'stability');
+
+      charStability.forEach((e: any) => {
+        const val = Number(e?.value) || 0;
+        if (!val) return;
+        const name = e?.source?.name || '人物';
+        factors.push({
+          source: name,
+          effect: val,
+          color: val >= 0 ? 'text-green-400' : 'text-red-400'
+        });
+      });
+    } catch {}
 
     return factors;
   };

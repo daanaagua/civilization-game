@@ -319,6 +319,7 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
     return map[res] || res.replace(/_/g, ' ');
   };
   const upsertEffect = (name: string, addValuePct: number, source: string) => {
+    // 百分比型效果合并（以 % 展示）
     const existing = allEffects.get(name);
     const valueStr = addValuePct > 0 ? `+${addValuePct}%` : `${addValuePct}%`;
     if (existing) {
@@ -326,6 +327,21 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
       const totalValue = existingValue + addValuePct;
       allEffects.set(name, {
         value: totalValue === 0 ? '0%' : `${totalValue > 0 ? '+' : ''}${totalValue}%`,
+        sources: [...existing.sources, source]
+      });
+    } else {
+      allEffects.set(name, { value: valueStr, sources: [source] });
+    }
+  };
+  // 数值型效果合并（不带 %，用于 稳定度/腐败度 等点数）
+  const upsertNumberEffect = (name: string, delta: number, source: string) => {
+    const existing = allEffects.get(name);
+    const valueStr = delta > 0 ? `+${Math.round(delta)}` : `${Math.round(delta)}`;
+    if (existing) {
+      const existingValue = parseFloat(existing.value.replace('+', '')) || 0;
+      const totalValue = existingValue + delta;
+      allEffects.set(name, {
+        value: totalValue === 0 ? '0' : `${totalValue > 0 ? '+' : ''}${Math.round(totalValue)}`,
         sources: [...existing.sources, source]
       });
     } else {
@@ -361,6 +377,12 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
           }
           case 'research_speed_bonus': {
             upsertEffect('科技研发速度', normalizePercent(effect.value), tech.name);
+            break;
+          }
+          case 'stability_bonus': {
+            const v = Number(effect.value) || 0;
+            // 科技稳定度加成（当前设计为点数），并入“稳定度”
+            upsertNumberEffect('稳定度', v, tech.name);
             break;
           }
           default:
@@ -435,7 +457,13 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
       upsertEffect('贸易收益', val, sourceName); return;
     }
     if (rawType === 'stability') {
-      upsertEffect('稳定度', val, sourceName); return;
+      // 人物稳定度一律按点数累计（当前版本没有人物稳定度百分比设计）
+      upsertNumberEffect('稳定度', Number(eff.value) || 0, sourceName);
+      return;
+    }
+    // 腐败度：按点数累计（负数为减少腐败，正值为增加腐败）
+    if (rawType === 'corruption') {
+      upsertNumberEffect('腐败度', Number(eff.value) || 0, sourceName); return;
     }
 
     // 军事类
@@ -482,30 +510,44 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
 
         {/* 效果列表 */}
         <div className="space-y-3">
-          {Array.from(allEffects.entries()).map(([effectName, effectData]) => {
-            const isPositive = effectData.value.includes('+');
-            const isNegative = effectData.value.includes('-');
-            const isNeutral = effectData.value === '0%';
-            
-            return (
-              <div key={effectName} className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-300">{effectName}:</span>
-                  <span className={`font-semibold ${
-                    isPositive ? 'text-green-400' : 
-                    isNegative ? 'text-red-400' : 'text-gray-400'
-                  }`}>
-                    {effectData.value}
-                  </span>
-                </div>
-                {effectData.sources.length > 0 && (
-                  <div className="text-xs text-gray-500 ml-2">
-                    来源: {effectData.sources.join(', ')}
+          {(() => {
+            // 排序：将“稳定度”“腐败度”置底，其余按名称排序
+            const entries = Array.from(allEffects.entries()).sort((a, b) => {
+              const order = (name: string) => {
+                if (name === '稳定度') return 1000;
+                if (name === '腐败度') return 1001;
+                return 0;
+              };
+              const oa = order(a[0]); const ob = order(b[0]);
+              if (oa !== ob) return oa - ob;
+              return a[0].localeCompare(b[0], 'zh-Hans');
+            });
+            return entries.map(([effectName, effectData]) => {
+              return (
+                <div key={effectName} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-300">{effectName}:</span>
+                    {(() => {
+                      const num = parseFloat(effectData.value.replace('%','').replace('+','')) || 0;
+                      const colorClass = effectName === '腐败度'
+                        ? (num < 0 ? 'text-green-400' : num > 0 ? 'text-red-400' : 'text-gray-400')
+                        : (num > 0 ? 'text-green-400' : num < 0 ? 'text-red-400' : 'text-gray-400');
+                      return (
+                        <span className={`font-semibold ${colorClass}`}>
+                          {effectData.value}
+                        </span>
+                      );
+                    })()}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {effectData.sources.length > 0 && (
+                    <div className="text-xs text-gray-500 ml-2">
+                      来源: {effectData.sources.join(', ')}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {/* 当前状态 */}

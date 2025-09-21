@@ -799,9 +799,7 @@ export const useGameStore = create<GameStore>()(persist(
       resourceManager = initializeResourceManager(newGameState.resources, newGameState.resourceLimits);
       
       // 重置并初始化效果系统
-      globalEffectsSystem.clear();
-      globalEffectsSystem.updateFromGameState(newGameState);
-      set((s) => ({ ...s, effectsVersion: s.effectsVersion + 1 }));
+      get().updateEffectsSystem();
       
       // 计算初始资源速率
       get().calculateResourceRates();
@@ -3866,12 +3864,12 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     updateEffectsSystem: () => {
-      // 先下沉/刷新“人物效果”至全局效果系统，确保后续汇总包含最新人物变化
+      // 先用当前状态重建基础/科技/建筑等效果，再下沉人物效果，避免被后续重建覆盖
+      const state = get().gameState;
+      globalEffectsSystem.updateFromGameState(state);
       try {
         get().updateCharacterSystem();
       } catch {}
-      const state = get().gameState;
-      globalEffectsSystem.updateFromGameState(state);
       set((s) => ({ ...s, effectsVersion: s.effectsVersion + 1 }));
     },
 
