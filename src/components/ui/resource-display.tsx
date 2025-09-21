@@ -161,13 +161,13 @@ export const ResourcePanel = () => {
   const allKeys: ResourceKey[] = Array.from(new Set([...keysFromConfig, ...keysFromState]));
 
   // 排序优先：核心资源排前，其余按字母序
-  const preferred: ResourceKey[] = ['food', 'wood', 'stone', 'tools', 'population', 'housing'];
+  const preferred: ResourceKey[] = ['food', 'wood', 'stone', 'tools', 'population'];
   const others = allKeys.filter(k => !preferred.includes(k)).sort();
-  const orderedKeys: ResourceKey[] = [...preferred.filter(k => allKeys.includes(k)), ...others];
+  const orderedKeys = ([...preferred.filter(k => allKeys.includes(k)), ...others].filter(k => k !== 'leather' && k !== 'housing')) as ResourceKey[];
 
   // 可见性判定：人口/住房始终显示；其余按解锁或非零展示；开发者模式全显
   const visibleList = orderedKeys.filter((key) => {
-    if (key === 'population' || key === 'housing') return true;
+    if (key === 'population') return true;
     if (settings?.devMode) return true;
 
     const isUnlocked = Array.isArray(unlockedResources) && unlockedResources.includes(key);
@@ -181,8 +181,8 @@ export const ResourcePanel = () => {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 select-none">
       {visibleList.map((resource) => (
         <ResourceDisplay
-          key={resource}
-          resource={resource}
+          key={resource as ResourceKey}
+          resource={resource as ResourceKey}
           showRate={resource !== 'housing'}
         />
       ))}

@@ -51,15 +51,15 @@ export function Sidebar({}: SidebarProps) {
     const allKeys = Array.from(new Set([...keysFromConfig, ...keysFromState]));
 
     // 排序：核心资源优先，其余按字母序
-    const preferred = ['food','wood','stone','tools','population','housing'];
+    const preferred = ['food','wood','stone','tools','population'];
     const ordered = [
       ...preferred.filter(k => allKeys.includes(k)),
       ...allKeys.filter(k => !preferred.includes(k)).sort()
-    ];
+    ].filter(k => k !== 'leather' && k !== 'housing');
 
     // 可见性：人口/住房始终显示；devMode 全显；否则 解锁/数值非0/速率非0
     const visible = ordered.filter((key) => {
-      if (key === 'population' || key === 'housing') return true;
+      if (key === 'population') return true;
       if (settings?.devMode) return true;
       const isUnlocked = Array.isArray(unlockedResources) && unlockedResources.includes(key);
       const amount = (resources as any)?.[key] ?? 0;
