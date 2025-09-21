@@ -520,9 +520,29 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
     if (type === 'faith_gain') return { name: '信仰获取', value: val };
     if (type === 'magic_gain') return { name: '魔力获取', value: val };
     if (type === 'trade_income') return { name: '贸易收益', value: val };
+    // 军事类映射
+    if (type === 'military' || type === 'military_strength' || type === 'army') {
+      const sub = String(target || '').toLowerCase();
+      if (sub.includes('combat') || sub === 'combat_power') return { name: '军队战斗力', value: isPct ? val : `${raw >= 0 ? '+' : ''}${Math.round(raw)}` };
+      if (sub.includes('morale')) return { name: '军队士气', value: isPct ? val : `${raw >= 0 ? '+' : ''}${Math.round(raw)}` };
+      if (sub.includes('supply') || sub.includes('consumption')) return { name: '军需消耗', value: isPct ? val : `${raw >= 0 ? '+' : ''}${Math.round(raw)}` };
+      // 默认归为“军力”
+      return { name: '军力', value: isPct ? val : `${raw >= 0 ? '+' : ''}${Math.round(raw)}` };
+    }
 
     // 兜底
-    const name = eff?.name || (target ? `${String(type)}(${String(target)})` : String(type || '效果'));
+    // 兜底：尽量将英文 target 翻译成中文
+    const translateFallback = (t?: string, tar?: string) => {
+      if (!t) return '效果';
+      if ((t === 'military' || t === 'army') && tar) {
+        const s = tar.toLowerCase();
+        if (s.includes('combat') || s === 'combat_power') return '军队战斗力';
+        if (s.includes('morale')) return '军队士气';
+        if (s.includes('supply') || s.includes('consumption')) return '军需消耗';
+      }
+      return t.replace(/_/g, ' ');
+    };
+    const name = eff?.name || (target ? `${translateFallback(String(type), String(target))}` : translateFallback(String(type)));
     return { name, value: val };
   };
 

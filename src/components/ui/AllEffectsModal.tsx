@@ -4,6 +4,7 @@ import React from 'react';
 import { X, Shield, Zap, TrendingUp, TrendingDown, Users, Home, Hammer, Beaker, Sword, Crown, Wheat, TreePine, Mountain, Wrench, Coins, AlertTriangle, Building, BookOpen, Info } from 'lucide-react';
 import { useGameStore } from '@/lib/game-store';
 import { Buff, BuffEffect } from '@/types/game';
+import { globalEffectsSystem, EffectSourceType } from '@/lib/effects-system';
 
 // 直接效果接口
 interface DirectEffect {
@@ -303,7 +304,17 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
       wood: '木材',
       stone: '石材',
       tools: '工具',
-      iron: '铁'
+      iron: '铁',
+      copper: '铜',
+      cloth: '布革',
+      weapons: '武器',
+      livestock: '牲畜',
+      horses: '马',
+      researchPoints: '研究点',
+      currency: '货币',
+      magic: '魔力',
+      faith: '信仰',
+      crystal: '水晶'
     };
     return map[res] || res.replace(/_/g, ' ');
   };
@@ -394,6 +405,51 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
     });
   });
   
+  // 添加“人物效果”（来自全局效果系统，source.type === 'character'）
+  const characterEffects = globalEffectsSystem.getEffectsBySourceType(EffectSourceType.CHARACTER);
+  characterEffects.forEach((eff: any) => {
+    // 统一百分比值
+    const val = eff.isPercentage ? (eff.value * 100) : eff.value;
+    const sourceName = eff?.source?.name || '人物';
+
+    // 支持资源定向与全局
+    const rawType = String(eff.type || '');
+    const target = (eff as any).target;
+
+    // 通用映射：生产、人口、科研、贸易、军队士气、稳定度
+    if (rawType === 'resource_production' || rawType === 'resource_production_bonus') {
+      if (typeof target === 'string' && target && target !== 'all') {
+        upsertEffect(`${getResLabel(target)}效率`, val, sourceName);
+      } else {
+        upsertEffect('生产效率', val, sourceName);
+      }
+      return;
+    }
+    if (rawType === 'population_growth' || rawType === 'population_growth_bonus') {
+      upsertEffect('人口增长率', val, sourceName); return;
+    }
+    if (rawType === 'research_speed' || rawType === 'research_speed_bonus') {
+      upsertEffect('科技研发速度', val, sourceName); return;
+    }
+    if (rawType === 'trade_income') {
+      upsertEffect('贸易收益', val, sourceName); return;
+    }
+    if (rawType === 'stability') {
+      upsertEffect('稳定度', val, sourceName); return;
+    }
+
+    // 军事类
+    if (rawType === 'military' || rawType === 'military_strength' || rawType === 'army') {
+      const sub = String(target || '').toLowerCase();
+      if (sub.includes('morale')) { upsertEffect('军队士气', val, sourceName); return; }
+      if (sub.includes('combat') || sub === 'combat_power') { upsertEffect('军队战斗力', val, sourceName); return; }
+      if (sub.includes('supply') || sub.includes('consumption')) { upsertEffect('军需消耗', val, sourceName); return; }
+      upsertEffect('军力', val, sourceName); return;
+    }
+
+    // 兜底：未知类型一律不计入，避免污染“全部效果”
+  });
+
   // 确保所有基础效果都显示，即使值为0
   const baseEffects = ['人口增长率', '生产效率', '科技研发速度', '贸易收益', '军队士气'];
   baseEffects.forEach(effectName => {
