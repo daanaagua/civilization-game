@@ -42,10 +42,14 @@ export class ExplorationSystem {
     // 计算探索成功率
     const successRate = this.calculateExplorationSuccessRate(explorationUnits);
     const isSuccessful = Math.random() < successRate;
+    // 怜悯机制：若最近两次均失败，则本次强制成功，避免连续“迷失方向”
+    const recent = this.explorationHistory.slice(-2);
+    const recentAllFail = recent.length === 2 && recent.every(r => !r.success);
+    const finalSuccess = isSuccessful || recentAllFail;
     
     let result: ExplorationResult;
     
-    if (isSuccessful) {
+    if (finalSuccess) {
       result = this.generateSuccessfulExploration(explorationUnits);
     } else {
       result = this.generateFailedExploration(explorationUnits);
@@ -77,10 +81,11 @@ export class ExplorationSystem {
     });
     
     // 基础成功率 + 探索力量加成
-    const baseSuccessRate = 0.3;
+    const baseSuccessRate = 0.4; // 提高基础成功率
     const powerBonus = Math.min(0.5, totalExplorationPower * 0.1);
     
-    return Math.min(0.9, baseSuccessRate + powerBonus);
+    // 至少40%，至多95%，并叠加单位贡献
+    return Math.min(0.95, Math.max(0.4, baseSuccessRate + powerBonus));
   }
   
   // 生成成功的探索结果
@@ -102,6 +107,18 @@ export class ExplorationSystem {
       case 'resource':
         event = this.generateResourceEvent();
         break;
+    }
+    
+    // 保底事件：若成功但既没有 discovery 也没有 event，则给予小额资源奖励
+    if (!discovery && !event) {
+      event = {
+        id: `fallback_${Date.now()}`,
+        type: 'resource',
+        title: '发现浆果',
+        description: '探索队在林间发现了可食用的浆果，带回了一些。',
+        effects: { resources: { food: 10 } },
+        timestamp: Date.now()
+      };
     }
     
     return {
@@ -190,12 +207,13 @@ export class ExplorationSystem {
     const randomEvent = getRandomEvent();
     
     if (!randomEvent) {
+      // 无事件时也给出小额正向奖励，避免“空跑”
       return {
         id: `event_${Date.now()}`,
         type: 'random',
-        title: '平安无事',
-        description: '这次探索未发生任何特殊事件。',
-        effects: {},
+        title: '发现浆果',
+        description: '探索队在林间找到一些可食用的浆果，补充了口粮。',
+        effects: { resources: { food: 10 } },
         timestamp: Date.now()
       };
     }

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ACHIEVEMENTS } from '@/lib/game-data';
 import { EffectSourceType, EffectType } from '@/lib/effects-system';
+import { isTestScoutingEnabled, setTestScoutingEnabled } from '@/lib/feature-flags';
 
 // 稳定度效果计算
 const getStabilityEffect = (stability: number): string => {
@@ -52,6 +53,19 @@ const ResourcesPanel = () => {
     { key: 'faith', name: '信仰', icon: '⛪', color: 'text-yellow-400' },
     { key: 'influence', name: '影响力', icon: '👑', color: 'text-red-400' }
   ];
+
+  // 运行参数（从 store）
+  const gameSettings = useGameStore(s => s.gameState.settings);
+  const setGameSpeed = useGameStore(s => s.setGameSpeed);
+  const setEventsPollIntervalMs = useGameStore(s => s.setEventsPollIntervalMs);
+  const setEventsDebugEnabled = useGameStore(s => s.setEventsDebugEnabled);
+
+  // 测试开关（localStorage 持久化）
+  const [testScouting, setTestScouting] = useState<boolean>(isTestScoutingEnabled());
+  const handleToggleTestScouting = (v: boolean) => {
+    setTestScouting(v);
+    setTestScoutingEnabled(v);
+  };
 
   return (
     <div className="space-y-4">
@@ -505,6 +519,17 @@ const OverviewPanel = () => {
 // 设置面板
 const SettingsPanel = () => {
   const { resetGame } = useGameStore();
+  // 运行参数（从 store）
+  const gameSettings = useGameStore(s => s.gameState.settings);
+  const setGameSpeed = useGameStore(s => s.setGameSpeed);
+  const setEventsPollIntervalMs = useGameStore(s => s.setEventsPollIntervalMs);
+  const setEventsDebugEnabled = useGameStore(s => s.setEventsDebugEnabled);
+  // 测试开关（localStorage 持久化）
+  const [testScouting, setTestScouting] = useState<boolean>(isTestScoutingEnabled());
+  const handleToggleTestScouting = (v: boolean) => {
+    setTestScouting(v);
+    setTestScoutingEnabled(v);
+  };
 
   const handleReset = () => {
     if (window.confirm('确定要重置游戏吗？这将清除所有进度！')) {
@@ -623,6 +648,65 @@ const SettingsPanel = () => {
         </div>
       </div>
       
+      {/* 运行参数 */}
+      <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-100 mb-2">运行参数</h3>
+          {/* 游戏速度 */}
+          <div className="mb-4">
+            <p className="text-gray-400 text-sm mb-2">游戏速度（当前：{gameSettings.gameSpeed}x）</p>
+            <div className="flex flex-wrap gap-2">
+              {[1,5,10,50].map(sp => (
+                <button
+                  key={sp}
+                  onClick={() => setGameSpeed(sp)}
+                  className={`px-3 py-1 rounded text-sm ${gameSettings.gameSpeed===sp ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  {sp}x
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* 事件轮询频率 */}
+          <div className="mb-4">
+            <p className="text-gray-400 text-sm mb-2">事件轮询频率（毫秒） 200 - 10000</p>
+            <input
+              type="number"
+              min={200}
+              max={10000}
+              step={100}
+              value={gameSettings.eventsPollIntervalMs}
+              onChange={(e) => setEventsPollIntervalMs(Number(e.target.value))}
+              className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-gray-100 w-40"
+            />
+            <p className="text-xs text-gray-500 mt-1">数值越小检查越频繁；越大越省资源</p>
+          </div>
+          {/* 事件调试日志 */}
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={gameSettings.eventsDebugEnabled}
+              onChange={(e) => setEventsDebugEnabled(e.target.checked)}
+            />
+            <span className="text-gray-300 text-sm">输出事件调试日志</span>
+          </label>
+        </div>
+      </div>
+
+      {/* 测试开关 */}
+      <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-2">
+        <h3 className="text-lg font-semibold text-gray-100 mb-2">测试开关</h3>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={testScouting}
+            onChange={(e) => handleToggleTestScouting(e.target.checked)}
+          />
+          <span className="text-gray-300 text-sm">开局自动研究“侦察学”并赠送3名斥候</span>
+        </label>
+        <p className="text-xs text-gray-500">需新开一局或重置后生效</p>
+      </div>
+
       {/* 游戏控制 */}
       <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4">
         <div>

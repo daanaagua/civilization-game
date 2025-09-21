@@ -17,7 +17,7 @@ import {
   MERCENARY_UNITS,
   SPECIAL_TREASURES 
 } from './diplomacy-data';
-import { GameState } from '../types/game';
+import { GameState, Resources } from '../types/game';
 
 // 生成随机的市场价格
 export function generateMarketPrices(): MarketPrices {
@@ -169,9 +169,9 @@ export function executeTrade(
 export function executeTrade(
   state: GameState,
   countryId: string,
-  ourOffer: Partial<Resources>,
-  theirOffer: Partial<Resources>
-): { success: boolean; newResources?: Partial<Resources>; newRelationship?: Relationship; tradeRecord?: any; error?: string };
+  ourOffer: Partial<GameState['resources']>,
+  theirOffer: Partial<GameState['resources']>
+): { success: boolean; newResources?: Partial<GameState['resources']>; newRelationship?: Relationship; tradeRecord?: any; error?: string };
 export function executeTrade(...args: any[]): any {
   // 旧接口：executeTrade(state, countryId, ourOffer, theirOffer)
   if (args.length >= 4 && args[0] && typeof args[0] === 'object' && 'resources' in args[0] && 'diplomacy' in args[0]) {
@@ -305,8 +305,8 @@ export function executeGift(
 export function executeGift(
   state: GameState,
   countryId: string,
-  gift: Partial<Resources>
-): { success: boolean; newResources?: Partial<Resources>; newRelationship?: Relationship; giftRecord?: any; error?: string };
+  gift: Partial<GameState['resources']>
+): { success: boolean; newResources?: Partial<GameState['resources']>; newRelationship?: Relationship; giftRecord?: any; error?: string };
 export function executeGift(...args: any[]): any {
   // 旧接口：executeGift(state, countryId, gift)
   if (args.length === 3 && args[0] && typeof args[0] === 'object' && 'resources' in args[0] && 'diplomacy' in args[0]) {

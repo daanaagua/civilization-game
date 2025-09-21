@@ -336,7 +336,8 @@ export class BuildingSystem {
 
     Object.values(this.gameState.buildings || {}).forEach(instance => {
       if (instance.assignedWorkers > 0) {
-        assignments[instance.id] = instance.assignedWorkers;
+        const key = instance.id ?? instance.buildingId;
+        assignments[key] = instance.assignedWorkers;
         assignedWorkers += instance.assignedWorkers;
       }
     });
@@ -398,10 +399,12 @@ export class BuildingSystem {
    * 计算建筑效率
    */
   private calculateBuildingEfficiency(instance: BuildingInstance): number {
-    let efficiency = instance.workerEfficiency;
+    const workerEff = instance.workerEfficiency ?? 1;
+    const condition = instance.condition ?? 100;
+    let efficiency = workerEff;
     
     // 建筑状况影响效率
-    efficiency *= instance.condition / 100;
+    efficiency *= condition / 100;
     
     // TODO: 添加科技加成
     // TODO: 添加其他效率因子
@@ -569,7 +572,8 @@ export class BuildingSystem {
     // 更新建筑状况（随时间缓慢下降）
     if (instance.status === 'completed') {
       const conditionDecay = 0.01 * deltaTime / (24 * 60 * 60); // 每天下降0.01
-      instance.condition = Math.max(0, instance.condition - conditionDecay);
+      const currentCondition = instance.condition ?? 100;
+      instance.condition = Math.max(0, currentCondition - conditionDecay);
     }
   }
 }

@@ -33,10 +33,17 @@ import {
   BUILDING_DEFINITIONS, 
   BUILDING_CATEGORIES, 
   getBuildingDefinition,
-  getBuildingsByCategory 
+  getBuildingsByCategory,
+  isBuildingUnlocked
 } from '@/lib/building-data';
 import { BuildingSystem, BuildingUtils } from '@/lib/building-system';
 import { useGameStore } from '@/lib/game-store';
+import { useEffect } from 'react';
+import { bootstrapRegistry } from '@/lib/registry/bootstrap';
+import { getVisibleFromRegistry } from '@/lib/facade/visibility-facade';
+import { registry } from '@/lib/registry/index';
+import { createPopulationSelectors } from '@/lib/slices';
+import { makeGameStorePopulationProvider } from '@/lib/adapters/population-adapter';
 
 const categoryIcons = {
   housing: Home,
@@ -71,15 +78,60 @@ export function BuildingTab() {
   const canConstructBuilding = useGameStore(state => state.canConstructBuilding);
   const getBuildingConstructionCost = useGameStore(state => state.getBuildingConstructionCost);
   
+  // 统一人口选择器（零侵入适配现有 store）
+  const popProvider = useMemo(() => makeGameStorePopulationProvider(), []);
+  const popSelectors = useMemo(() => createPopulationSelectors(popProvider), [popProvider]);
+  const popOverview = useGameStore(state => popSelectors.getOverview(state));
+
   const buildingSystem = useMemo(() => new BuildingSystem(gameState), [gameState]);
   const managementState = useMemo(() => buildingSystem.getBuildingManagementState(), [buildingSystem]);
   
-  // 获取分类下的建筑
+  // 启动时确保注册中心引导完成（不强制注入 demo 种子）
+  useEffect(() => {
+    // 仅第一次挂载时尝试引导；避免引入 demo 数据造成未解锁建筑提前显示
+    bootstrapRegistry({ includeDemoSeed: false }).catch(() => {});
+  }, []);
+  
+  // 从 store 推断“已拥有科技”ID 集合（回退友好）
+  const ownedTechIds = useMemo(() => {
+    const t1 = (gameState as any)?.technologies?.researched as string[] | undefined;
+    const t2 = (gameState as any)?.researchedTechIds as string[] | undefined;
+    return new Set<string>([...(t1 || []), ...(t2 || [])]);
+  }, [gameState]);
+  
+  // 通过统一 gating 选择器获取可见建筑（若 registry 为空则回退到旧逻辑）
+  const registryVisibleBuildings = useMemo(() => {
+    try {
+      const { buildings } = getVisibleFromRegistry({ ownedTechIds });
+      return buildings;
+    } catch {
+      return [];
+    }
+  }, [ownedTechIds]);
+
+  // 注册中心是否已启用（有任何建筑被注册）
+  const registryHasAnyBuildings = useMemo(() => {
+    try {
+      return registry.listBuildings().length > 0;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // 获取分类下的建筑：
+  // - 若注册中心启用，则仅使用 registry 的可见结果进行过滤映射（不回退旧逻辑，避免提前曝光）
+  // - 若注册中心未启用，则回退旧系统解锁判断
   const categoryBuildings = useMemo(() => {
-    return getBuildingsByCategory(selectedCategory).filter(building => 
-      buildingSystem.isBuildingUnlocked(building.id)
-    );
-  }, [selectedCategory, buildingSystem]);
+    const baseList = getBuildingsByCategory(selectedCategory);
+    if (registryHasAnyBuildings) {
+      const idsInCategory = new Set(baseList.map(b => b.id));
+      const visibleIds = new Set(registryVisibleBuildings.map(b => b.id));
+      // 同时要求：分类命中 + registry 可见 + 科技前置解锁
+      return baseList.filter(b => idsInCategory.has(b.id) && visibleIds.has(b.id) && isBuildingUnlocked(b.id, ownedTechIds));
+    }
+    // 回退：始终以科技前置为准
+    return baseList.filter(b => isBuildingUnlocked(b.id, ownedTechIds));
+  }, [selectedCategory, buildingSystem, registryHasAnyBuildings, registryVisibleBuildings]);
 
   // 处理建造建筑
   const handleBuildBuilding = (buildingId: string, quantity: number) => {
@@ -130,11 +182,11 @@ export function BuildingTab() {
               <span className="text-gray-500">总建筑数</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-white font-semibold">{managementState.workerAssignment.assignedWorkers}</span>
+              <span className="text-white font-semibold">{popOverview.assigned}</span>
               <span className="text-gray-500">已分配工人</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-white font-semibold">{managementState.workerAssignment.availableWorkers}</span>
+              <span className="text-white font-semibold">{popOverview.surplus}</span>
               <span className="text-gray-500">盈余人口</span>
             </div>
           </div>
@@ -337,7 +389,7 @@ export function BuildingTab() {
                 const building = getBuildingDefinition(instance.buildingId);
                 if (!building) return null;
                 
-                const productionResult = buildingSystem.calculateBuildingProduction(instance.id);
+                const productionResult = buildingSystem.calculateBuildingProduction(instance.id ?? instance.buildingId);
                 
                 return (
                   <Card key={instance.id} className="bg-transparent shadow-none border border-white/10">
@@ -385,7 +437,7 @@ export function BuildingTab() {
                               <Button
                                 variant="secondary"
                                 size="sm"
-                                onClick={() => handleWorkerAssignment(instance.id, Math.max(0, instance.assignedWorkers - 1))}
+                                onClick={() => handleWorkerAssignment(instance.id ?? instance.buildingId, Math.max(0, instance.assignedWorkers - 1))}
                                 disabled={instance.assignedWorkers <= 0}
                               >
                                 <Minus className="w-4 h-4" />
@@ -396,7 +448,7 @@ export function BuildingTab() {
                               <Button
                                 variant="secondary"
                                 size="sm"
-                                onClick={() => handleWorkerAssignment(instance.id, Math.min(building.maxWorkers, instance.assignedWorkers + 1))}
+                                onClick={() => handleWorkerAssignment(instance.id ?? instance.buildingId, Math.min(building.maxWorkers, instance.assignedWorkers + 1))}
                                 disabled={instance.assignedWorkers >= building.maxWorkers || managementState.workerAssignment.availableWorkers <= 0}
                               >
                                 <Plus className="w-4 h-4" />

@@ -29,9 +29,6 @@ export function GameHeader() {
   const togglePause = useGameStore(state => state.togglePause);
   const resetGame = useGameStore(state => state.resetGame);
   const startGame = useGameStore(state => state.startGame);
-  // 新增：开发用速度选择器所需的状态与方法
-  const gameSpeed = useGameStore(state => state.gameState.settings.gameSpeed);
-  const setGameSpeed = useGameStore(state => state.setGameSpeed);
   const setActiveTab = useGameStore(state => state.setActiveTab);
 
   // 从gameState中获取statistics，避免未定义错误
@@ -40,8 +37,7 @@ export function GameHeader() {
   // 使用store中的totalPlayTime避免水合错误
   const playTime = statistics.totalPlayTime;
 
-  // 开发模式下使用的速度档位（尽量精简）
-  const devSpeedOptions = [1, 5, 10, 50] as const;
+
 
   return (
     <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
@@ -81,32 +77,7 @@ export function GameHeader() {
             <span>{!isRunning ? '开始' : isPaused ? '继续' : '暂停'}</span>
           </button>
 
-          {/* 开发模式：速度选择器（仅 dev 环境显示，不影响生产） */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="hidden md:flex items-center space-x-2" aria-label="开发模式速度选择器">
-              <span className="text-xs text-gray-300/80 select-none">速度</span>
-              <div className="inline-flex rounded-md overflow-hidden border border-gray-600">
-                {devSpeedOptions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setGameSpeed(s)}
-                    className={
-                      `px-2.5 py-1 text-xs transition-colors ` +
-                      (gameSpeed === s
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600')
-                    }
-                    title={`设置游戏速度为 ${s}x（仅开发）`}
-                    aria-pressed={gameSpeed === s}
-                  >
-                    {s}x
-                  </button>
-                ))}
-              </div>
-              <span className="text-[10px] leading-none px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 border border-purple-500/30 select-none">DEV</span>
-            </div>
-          )}
+
 
           <button
             onClick={resetGame}

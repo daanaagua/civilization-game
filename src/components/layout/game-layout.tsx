@@ -32,6 +32,7 @@ import {
   Swords,
   Star
 } from 'lucide-react';
+import { isTestScoutingEnabled, setTestScoutingEnabled } from '@/lib/feature-flags';
 
 type TabType = 'overview' | 'resources' | 'buildings' | 'technology' | 'characters' | 'exploration' | 'military' | 'settings';
 
@@ -188,8 +189,8 @@ const OverviewPanel = () => {
             {Object.values(gameState.characterSystem.activeCharacters)
               .filter(Boolean)
               .slice(0, 3)
-              .map((id) => {
-                const character = gameState.characterSystem.allCharacters[id as string];
+              .map((val) => {
+                const character = typeof val === 'string' ? gameState.characterSystem.allCharacters[val] : val;
                 if (!character) return null;
                 return (
                   <div key={character.id} className="flex justify-between items-center text-sm">
@@ -238,10 +239,72 @@ const SettingsPanel = () => {
   const resetGame = useGameStore(state => state.resetGame);
   const saveGame = useGameStore(state => state.saveGame);
   const openInheritanceShop = useGameStore(state => state.showInheritanceShop);
+
+  // 运行参数
+  const gameSettings = useGameStore(s => s.gameState.settings);
+  const setGameSpeed = useGameStore(s => s.setGameSpeed);
+  const setEventsPollIntervalMs = useGameStore(s => s.setEventsPollIntervalMs);
+  const setEventsDebugEnabled = useGameStore(s => s.setEventsDebugEnabled);
+
+  // 测试开关
+  const [testScouting, setTestScouting] = useState<boolean>(isTestScoutingEnabled());
+  const handleToggleTestScouting = (v: boolean) => {
+    setTestScouting(v);
+    setTestScoutingEnabled(v);
+  };
   
   return (
     <div className="space-y-6">
       <InheritanceShop />
+      <div className="card">
+        <h3 className="font-semibold text-stone-900 mb-4">运行参数</h3>
+        <div className="space-y-4">
+          {/* 游戏速度 */}
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-stone-600">游戏速度</span>
+              <span className="text-stone-900 font-semibold">{gameSettings.gameSpeed}x</span>
+            </div>
+            <div className="mt-2 flex gap-2">
+              {[1,5,10,50].map(sp => (
+                <button
+                  key={sp}
+                  onClick={() => setGameSpeed(sp)}
+                  className={`px-3 py-1 rounded text-sm ${gameSettings.gameSpeed===sp ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-100 hover:bg-slate-600'}`}
+                >
+                  {sp}x
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* 事件轮询频率 */}
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-stone-600">事件轮询频率 (ms)</span>
+              <span className="text-stone-900 font-medium">{gameSettings.eventsPollIntervalMs}</span>
+            </div>
+            <input
+              type="number"
+              min={200}
+              max={10000}
+              step={100}
+              value={gameSettings.eventsPollIntervalMs}
+              onChange={(e) => setEventsPollIntervalMs(Number(e.target.value))}
+              className="mt-2 w-full bg-slate-800 text-slate-100 px-3 py-2 rounded border border-slate-700"
+            />
+          </div>
+          {/* 事件调试日志 */}
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={gameSettings.eventsDebugEnabled}
+              onChange={(e) => setEventsDebugEnabled(e.target.checked)}
+            />
+            <span className="text-stone-700">输出事件调试日志</span>
+          </label>
+        </div>
+      </div>
+
       <div className="card">
         <h3 className="font-semibold text-stone-900 mb-4">继承点商店</h3>
         <div className="space-y-4">
@@ -321,6 +384,21 @@ const SettingsPanel = () => {
       
       {/* 继承点商店弹窗（已由 InheritanceShop 自行控制显示，故移除本地弹窗实现） */}
       
+      <div className="card">
+        <h3 className="font-semibold text-stone-900 mb-4">测试开关</h3>
+        <div className="space-y-2">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={testScouting}
+              onChange={(e) => handleToggleTestScouting(e.target.checked)}
+            />
+            <span className="text-stone-700">开局自动研究“侦察学”并赠送3名斥候</span>
+          </label>
+          <p className="text-xs text-stone-500">需新开一局或重置后生效</p>
+        </div>
+      </div>
+
       <div className="card">
         <h3 className="font-semibold text-stone-900 mb-4">游戏信息</h3>
         <div className="space-y-2 text-sm">

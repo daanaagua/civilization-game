@@ -78,39 +78,51 @@ export type BuildingEffectType =
 
 // 建筑实例
 export interface BuildingInstance {
-  id: string; // 实例ID
+  // 兼容旧聚合条目：id 可选
+  id?: string; // 实例ID
   buildingId: string; // 建筑定义ID
-  
+
+  // 可选：显示/兼容字段（store 有写入）
+  name?: string;
+
   // 实例数量（同类建筑的数量汇总）
-  count: number;
-  
+  count: number; // 旧系统聚合，现系统可置为 1
+
   // 建造状态
-  status: 'building' | 'completed' | 'upgrading';
+  status?: 'building' | 'completed' | 'upgrading';
   constructionProgress?: number; // 建造进度（0-100）
   constructionStartTime?: number; // 建造开始时间
-  
+
+  // 兼容新建造路径：立即完成且有布尔标记
+  isConstructed?: boolean;
+  lastProductionTime?: number;
+
   // 工人分配
-  assignedWorkers: number; // 当前分配的工人数
-  workerEfficiency: number; // 工人效率（默认1.0）
-  
+  assignedWorkers: number; // 当前分配的工人数（默认0）
+  workerEfficiency?: number; // 工人效率（默认1.0）
+
   // 建筑等级和升级
   level: number; // 建筑等级（默认1）
   upgradeProgress?: number; // 升级进度（0-100）
-  
+  upgrades?: any[]; // 兼容 store 中数组写法
+
   // 生产状态（仅生产建筑）
-  isActive: boolean; // 是否激活生产
+  isActive?: boolean; // 是否激活生产
   currentProduction?: {
     resource: keyof Resources;
     rate: number; // 当前生产率
     totalProduced: number; // 累计产出
   }[];
-  
+
+  // 建筑效果（兼容 store 的对象写法）
+  effects?: any;
+
   // 维护成本
   maintenanceCost?: Partial<Resources>; // 每天维护成本
-  
+
   // 建筑状态
-  condition: number; // 建筑状况（0-100）
-  lastMaintenance: number; // 上次维护时间
+  condition?: number; // 建筑状况（0-100）
+  lastMaintenance?: number; // 上次维护时间
 }
 
 // 建筑管理状态

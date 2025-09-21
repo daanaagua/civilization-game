@@ -106,7 +106,8 @@ export const UNIT_TYPES: Record<string, UnitType> = {
     },
     combatTraits: ['探索', '高速移动'],
     category: 'special',
-    isExplorer: true
+    isExplorer: true,
+    explorationPointValue: 1
   },
 
   // 进阶兵种
@@ -240,7 +241,8 @@ export const UNIT_TYPES: Record<string, UnitType> = {
     },
     combatTraits: ['野外生存', '探索专精', '领导力'],
     category: 'special',
-    isExplorer: true
+    isExplorer: true,
+    explorationPointValue: 2
   },
 
   iron_warrior: {

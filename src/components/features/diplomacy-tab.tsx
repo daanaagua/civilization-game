@@ -23,7 +23,7 @@ export function DiplomacyTab({ gameState, onUpdateGameState }: DiplomacyTabProps
 
   // 统一选择器：获取已研究科技集合
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getResearchedSet } = require('@/lib/selectors');
+  const { getResearchedSet, hasCapability } = require('@/lib/selectors');
   const researchedSet: Set<string> = getResearchedSet(gameState);
   
 
@@ -63,7 +63,7 @@ export function DiplomacyTab({ gameState, onUpdateGameState }: DiplomacyTabProps
     );
   };
 
-  const diplomatUnlocked = researchedSet.has('diplomat_training');
+  const diplomatUnlocked = hasCapability(gameState, 'cap.diplomacy') || researchedSet.has('diplomat_training');
 
   return (
     <div className="space-y-6">

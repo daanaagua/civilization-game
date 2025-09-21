@@ -12,6 +12,7 @@ export interface UnitType {
   combatTraits: string[];
   category: 'basic' | 'advanced' | 'elite' | 'special';
   isExplorer: boolean; // 是否为探索单位（侦察兵/冒险家）
+  explorationPointValue?: number; // 探险点权重（例如：scout=1, adventurer=2）
 }
 
 export interface ResourceCost {

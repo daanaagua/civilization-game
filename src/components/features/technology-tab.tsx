@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { TECHNOLOGIES, TECHNOLOGY_CATEGORIES } from '@/lib/technology-data';
 import { Technology } from '@/types/game';
@@ -11,6 +11,8 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { bootstrapRegistry } from '@/lib/registry/bootstrap';
+import { getVisibleFromRegistry } from '@/lib/facade/visibility-facade';
 import { 
   FlaskConical, 
   Sword, 
@@ -188,6 +190,30 @@ export default function TechnologyTab() {
   
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
+  // 启动时引导注册中心（幂等），启用 demo 种子以便展示示例数据
+  useEffect(() => {
+    bootstrapRegistry({ includeDemoSeed: true }).catch(() => {});
+  }, []);
+  
+  // 推断已拥有科技集合（回退友好）
+  const ownedTechIds = useMemo(() => {
+    const t1 = (gameState as any)?.technologies ? Object.values((gameState as any).technologies)
+      .filter((t: any) => t?.researched)
+      .map((t: any) => t.id) : [];
+    const t2 = (gameState as any)?.researchedTechIds || [];
+    return new Set<string>([...t1, ...t2]);
+  }, [gameState]);
+  
+  // 通过统一 gating 获取 registry 可见科技 id 列表
+  const registryVisibleTechIds = useMemo(() => {
+    try {
+      const { techs } = getVisibleFromRegistry({ ownedTechIds });
+      return techs.map(t => t.id);
+    } catch {
+      return [];
+    }
+  }, [ownedTechIds]);
+  
   const currentResearch = gameState.researchState?.currentResearch || null;
   const currentTech = currentResearch ? gameState.technologies[currentResearch.technologyId] : null;
   const currentProgressPercent = currentTech && currentResearch
@@ -205,20 +231,39 @@ export default function TechnologyTab() {
   };
   
   const getFilteredTechnologies = () => {
-    // 只显示“可见”的科技：
-    // - 初始已解锁（unlocked === true），例如“生火”
-    // - 或所有前置科技均已研究完成（requires 全满足）
-    let technologies = Object.values(TECHNOLOGIES).filter((tech) => {
+    const hasNeighbor = ((gameState.diplomacy?.discoveredCountries) || []).length > 0;
+    // 基本集合：unlocked 或满足前置
+    let base = Object.values(TECHNOLOGIES).filter((tech) => {
       const requires = tech.requires || [];
       const prereqMet = requires.length === 0 || requires.every((req) => gameState.technologies[req]?.researched);
-      return tech.unlocked || prereqMet;
+      // 外交官训练需发现邻国后才可见
+      const neighborGate = (tech.id !== 'diplomat_training') || hasNeighbor;
+      return (tech.unlocked || prereqMet) && neighborGate;
     });
-    
-    if (selectedCategory !== 'all') {
-      technologies = technologies.filter(tech => tech.category === selectedCategory);
+
+    // 注册中心集合（用于扩展/排序），但不再“覆盖”基本集合，避免隐藏初始科技如“生火”
+    if (registryVisibleTechIds.length > 0) {
+      const fromRegistry = Object.values(TECHNOLOGIES).filter(t => registryVisibleTechIds.includes(t.id));
+      const map = new Map(base.map(t => [t.id, t]));
+      fromRegistry.forEach(t => map.set(t.id, t));
+      // 合并后再次用统一的 gating 规则过滤：仅显示默认解锁或已满足前置的科技
+      let merged = Array.from(map.values()).filter((tech) => {
+        const requires = tech.requires || [];
+        const prereqMet = requires.length === 0 || requires.every((req) => gameState.technologies[req]?.researched);
+        // 外交官训练需发现邻国后才可见
+        const neighborGate = (tech.id !== 'diplomat_training') || hasNeighbor;
+        return (tech.unlocked || prereqMet) && neighborGate;
+      });
+      if (selectedCategory !== 'all') {
+        merged = merged.filter(t => t.category === selectedCategory);
+      }
+      return merged;
     }
-    
-    return technologies;
+
+    if (selectedCategory !== 'all') {
+      base = base.filter(tech => tech.category === selectedCategory);
+    }
+    return base;
   };
   
   const availableTechnologies = getAvailableTechnologies();

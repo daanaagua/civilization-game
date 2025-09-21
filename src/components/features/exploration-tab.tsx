@@ -7,6 +7,8 @@ import { CombatSystem } from '../../lib/combat-system';
 import { getUnitType } from '../../lib/military-data';
 import { getDungeonById } from '../../lib/dungeon-data';
 import { useGameStore } from '@/lib/game-store';
+import { GlobalEventBus } from '@/lib/event-bus';
+import { runEffects } from '@/lib/events/effect-runner';
 
 interface ExplorationTabProps {
   gameState: {
@@ -33,12 +35,16 @@ interface ExplorationTabProps {
 
 export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabProps) {
   const { discoverCountry } = useGameStore();
+  const addNotification = useGameStore(state => state.addNotification);
 
   // 统一选择器：获取已研究科技集合
   // 避免在各组件重复实现
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getResearchedSet } = require('@/lib/selectors');
-  const researchedSet: Set<string> = getResearchedSet(gameState);
+  const { getResearchedSet, hasCapability } = require('@/lib/selectors');
+  // 使用 store 的实时 gameState 优先，避免父级 props 未刷新导致的门禁误判
+  const storeGameState = useGameStore(state => state.gameState);
+  const researchedSet: Set<string> = getResearchedSet(storeGameState ?? gameState);
+  const isPaused = useGameStore(state => !!state.gameState?.isPaused);
   
   const [explorationSystem] = useState(() => {
     const system = new ExplorationSystem();
@@ -93,22 +99,34 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
   
   // 处理探索
   const handleExplore = async () => {
+    if (isPaused) {
+      addNotification({
+        type: 'warning',
+        title: '游戏已暂停',
+        message: '暂停时无法进行探索。请先恢复游戏。'
+      });
+      return;
+    }
     if (selectedUnits.length === 0) {
-      alert('请选择探索单位');
+      addNotification({
+        type: 'warning',
+        title: '未选择单位',
+        message: '请选择至少一个探索单位'
+      });
       return;
     }
-    // 探险点数门槛：每次派遣消耗1点
-    if (explorationPoints < 1) {
-      alert('探险点数不足，训练侦察兵或冒险家以获取探险点');
-      return;
-    }
+
     
     const explorationUnits = (gameState.military?.units || []).filter(unit => 
       selectedUnits.includes(unit.id)
     );
     
     if (!explorationSystem.hasExplorationUnits(explorationUnits)) {
-      alert('选择的单位中没有可用的探索单位');
+      addNotification({
+        type: 'error',
+        title: '不可用单位',
+        message: '选择的单位中没有可用的探索单位'
+      });
       return;
     }
     
@@ -116,6 +134,7 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     const missionId = `m_${Date.now()}`;
     setOngoingMissions(prev => [...prev, { id: missionId, cost: 1 }]);
     setIsExploring(true);
+    GlobalEventBus.emit('ExploreStarted', { partyId: missionId, at: Date.now() });
     
     try {
       // 模拟探索时间
@@ -157,23 +176,63 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
         },
       };
       
-      // 如果有资源奖励，添加到资源中
-      if (result.event?.effects?.resources) {
-        const updatedResources = { ...gameState.resources };
-        Object.entries(result.event.effects.resources).forEach(([resource, amount]) => {
-          updatedResources[resource] = (updatedResources[resource] || 0) + (amount as number);
-        });
-        updates.resources = updatedResources;
+      // 用 effect-runner 统一应用探索事件效果（资源/稳定度/腐败等）
+      if (result.event?.effects) {
+        const effectsArr: Array<{ kind: string; payload?: any }> = [];
+        if (result.event.effects.resources) {
+          effectsArr.push({ kind: 'resources.add', payload: result.event.effects.resources });
+        }
+        if (typeof (result.event.effects as any).stability === 'number') {
+          effectsArr.push({ kind: 'stability.add', payload: (result.event.effects as any).stability });
+        }
+        if (typeof (result.event.effects as any).corruption === 'number') {
+          effectsArr.push({ kind: 'corruption.add', payload: (result.event.effects as any).corruption });
+        }
+        if (effectsArr.length > 0) {
+          const draft: any = {
+            resources: { ...(gameState.resources || {}) },
+            stability: (useGameStore.getState().gameState.stability ?? 0),
+            corruption: (useGameStore.getState().gameState.corruption ?? 0)
+          };
+          runEffects(
+            { mutate: (fn) => fn(draft) },
+            effectsArr as any
+          );
+          updates.resources = draft.resources;
+          // 可选：同时把稳定度/腐败更新回去（父级 onUpdateGameState 合并时应能覆盖）
+          updates.stability = draft.stability;
+          updates.corruption = draft.corruption;
+        }
       }
       
+      if (result.event) {
+        GlobalEventBus.emit('TriggeredEvent', {
+          eventId: (result.event as any).id ?? 'exploration_event',
+          at: Date.now(),
+          context: result
+        });
+      }
       onUpdateGameState(updates);
+      GlobalEventBus.emit('ExploreEnded', { partyId: missionId, at: Date.now(), result });
       
       // 显示探索结果
-      alert(`探索结果：\n${result.description}`);
+      addNotification({
+        type: 'info',
+        title: '探索结果',
+        message: result.description
+      });
       
       setSelectedUnits([]);
     } catch (error) {
-      alert(error instanceof Error ? error.message : '探索失败');
+      {
+        const msg = error instanceof Error ? error.message : '探索失败';
+        addNotification({
+          type: 'error',
+          title: '探索失败',
+          message: msg
+        });
+        GlobalEventBus.emit('ExploreEnded', { partyId: missionId, at: Date.now(), result: { error: msg } });
+      }
     } finally {
       // 释放本地占用的探险点
       setOngoingMissions(prev => prev.filter(m => m.id !== missionId));
@@ -264,7 +323,7 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
       <div className="bg-gray-800 p-4 rounded-lg">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-white">探索控制</h3>
-          <div className="flex space-x-3">
+          <div className="flex items-center space-x-4">
             <button
               onClick={() => setShowHistory(!showHistory)}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -318,7 +377,14 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
           <div className="flex flex-col justify-center">
             <button
               onClick={handleExplore}
-              disabled={selectedUnits.length === 0 || isExploring}
+              disabled={selectedUnits.length === 0 || isExploring || isPaused}
+              title={
+                isPaused
+                  ? '暂停时无法进行探索'
+                  : selectedUnits.length === 0
+                    ? '请选择探索单位'
+                    : undefined
+              }
               className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
             >
               {isExploring ? '探索中...' : '开始探索'}
@@ -457,7 +523,9 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
   };
   
   // 科技门禁：需要“侦察学”
-  const scoutingUnlocked = researchedSet.has('scouting_tech');
+  const scoutingUnlocked =
+    hasCapability(storeGameState ?? gameState, 'cap.scouting') ||
+    researchedSet.has('scouting_tech');
 
   return (
     <div className="space-y-6">

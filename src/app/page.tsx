@@ -16,6 +16,7 @@ import { CharacterTab } from '@/components/features/character-tab';
 import { DiplomacyTab } from '@/components/features/diplomacy-tab';
 import { EventNotificationToast } from '@/components/ui/event-notification-toast';
 import { EventType, type GameEvent } from '@/components/features/EventsPanel';
+import { isTestScoutingEnabled, setTestScoutingEnabled } from '@/lib/feature-flags';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
@@ -30,6 +31,15 @@ export default function Home() {
   const setPollIntervalMs = useGameStore(state => state.setEventsPollIntervalMs);
   const eventsDebugEnabled = useGameStore(state => state.gameState.settings.eventsDebugEnabled);
   const setEventsDebugEnabled = useGameStore(state => state.setEventsDebugEnabled);
+  // 游戏速度
+  const gameSpeed = useGameStore(state => state.gameState.settings.gameSpeed);
+  const setGameSpeed = useGameStore(state => state.setGameSpeed);
+  // 测试开关（localStorage 持久化）
+  const [testScouting, setTestScouting] = useState<boolean>(isTestScoutingEnabled());
+  const handleToggleTestScouting = (v: boolean) => {
+    setTestScouting(v);
+    setTestScoutingEnabled(v);
+  };
   // 使用全局的 activeTab 与 setActiveTab，避免与其它组件（如 GameHeader）脱节
   const activeTab = useGameStore(state => state.uiState.activeTab);
   const setActiveTab = useGameStore(state => state.setActiveTab);
@@ -219,7 +229,7 @@ export default function Home() {
             </div>
 
             {/* 事件调试日志开关 */}
-            <div className="mb-4">
+            <div className="mb-6">
               <label htmlFor="events-debug" className="inline-flex items-center gap-3 cursor-pointer select-none">
                 <input
                   id="events-debug"
@@ -231,6 +241,37 @@ export default function Home() {
                 <span className="text-sm text-gray-300">启用事件系统调试日志</span>
               </label>
               <p className="text-gray-400 text-xs mt-1">开启后将输出境内事件触发计算（概率、时间间隔）与实际触发记录，便于排查问题。</p>
+            </div>
+
+            {/* 游戏速度 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">游戏速度</label>
+              <div className="flex items-center gap-2">
+                {[1,5,10,50].map(sp => (
+                  <button
+                    key={sp}
+                    onClick={() => setGameSpeed(sp)}
+                    className={`px-3 py-1 rounded text-sm ${gameSpeed===sp ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                  >
+                    {sp}x
+                  </button>
+                ))}
+                <span className="text-gray-400 text-sm ml-2">当前：{gameSpeed}x</span>
+              </div>
+            </div>
+
+            {/* 测试开关 */}
+            <div className="mb-2">
+              <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={testScouting}
+                  onChange={(e) => handleToggleTestScouting(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm text-gray-300">开局自动研究“侦察学”并赠送3名斥候（测试）</span>
+              </label>
+              <p className="text-gray-400 text-xs mt-1">此项需新开一局或重置后生效。</p>
             </div>
           </div>
         );

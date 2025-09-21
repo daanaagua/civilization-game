@@ -6,6 +6,8 @@ import { MilitaryUnit, UnitType, TrainingQueue } from '../../types/military';
 import { MilitarySystem } from '../../lib/military-system';
 import { getUnitType, getAvailableUnitTypes } from '../../lib/military-data';
 import { CombatSystem } from '../../lib/combat-system';
+import { bootstrapRegistry } from '@/lib/registry/bootstrap';
+import { getVisibleFromRegistry } from '@/lib/facade/visibility-facade';
 
 interface MilitaryTabProps {
   gameState: {
@@ -27,15 +29,34 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
   const [militarySystem] = useState(() => new MilitarySystem());
   const [trainingAmounts, setTrainingAmounts] = useState<Record<string, number>>({});
   const isPaused = useGameStore(state => state.gameState.isPaused);
+  
+  // 启动时确保注册中心引导（幂等），启用 demo 种子便于示例展示
+  useEffect(() => {
+    bootstrapRegistry({ includeDemoSeed: true }).catch(() => {});
+  }, []);
 
   // 获取已研究的科技（统一使用 selectors）
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getResearchedSet } = require('@/lib/selectors');
+  const { getResearchedSet, hasCapability } = require('@/lib/selectors');
   const researchedTechSet: Set<string> = getResearchedSet(gameState);
   const researchedTechs = Array.from(researchedTechSet);
+  const canTrainMilitiaCap = hasCapability(gameState, 'cap.train.militia') || researchedTechSet.has('militia_training');
 
   // 获取可用的兵种类型
-  const availableUnitTypes = getAvailableUnitTypes(researchedTechs);
+  // 统一 gating：若 registry 存在单位注册项，则仅使用 registry 的可见单位；否则回退旧逻辑
+  const availableUnitTypes = (() => {
+    try {
+      const { units } = getVisibleFromRegistry({ ownedTechIds: new Set(researchedTechs) });
+      if (units && units.length > 0) {
+        // 将可见单位 id 映射回旧的单位定义，保持渲染/交互不变
+        const ids = new Set(units.map(u => u.id));
+        return getAvailableUnitTypes(researchedTechs).filter(ut => ids.has(ut.id));
+      }
+    } catch {
+      // ignore and fallback
+    }
+    return getAvailableUnitTypes(researchedTechs);
+  })();
   
   // 获取当前军队
   const currentUnits = gameState.military?.units || [];
@@ -134,6 +155,10 @@ export function MilitaryTab({ gameState, onUpdateGameState }: MilitaryTabProps) 
         <h3 className="text-lg font-semibold text-white mb-4">可训练军事单位</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {availableUnitTypes.map(unitType => {
+            // 能力门禁：部落民兵需要 cap.train.militia（兼容已研究militia_training）
+            if (unitType.id === 'tribal_militia' && !canTrainMilitiaCap) {
+              return null;
+            }
             const trainingAmount = trainingAmounts[unitType.id] || 1;
             
             return (

@@ -111,6 +111,7 @@ export interface Technology {
   requires?: string[]; // 前置科技
   unlocks?: TechnologyUnlock[]; // 解锁内容
   effects?: TechnologyEffect[];
+  grantsCapabilities?: string[];
   unlocked: boolean;
   researched: boolean;
   researchProgress?: number; // 当前研究进度（0-100）
@@ -124,13 +125,18 @@ export type TechnologyCategory =
   | 'research';  // 研究科技
 
 export interface TechnologyEffect {
+  // 扩展兼容：老版本与新版本并存
   type: TechnologyEffectType;
-  target: string;
+  // 一部分效果使用 target（如 resource_multiplier 的目标资源）
+  target?: string;
+  // 另一部分效果使用 resource 字段（如 resource_limit/resource_rate）
+  resource?: keyof Resources;
   value: number;
-  description: string;
+  description?: string;
 }
 
 export type TechnologyEffectType = 
+  // 旧版/更抽象的效果分类
   | 'resource_production_bonus' // 资源生产加成
   | 'resource_storage_bonus'    // 资源储存加成
   | 'building_efficiency_bonus' // 建筑效率加成
@@ -139,7 +145,13 @@ export type TechnologyEffectType =
   | 'military_bonus'            // 军事加成
   | 'population_growth_bonus'   // 人口增长加成
   | 'global_bonus'              // 全局加成
-  | 'resource_multiplier';      // 资源倍率（与现有实现保持一致）
+  | 'resource_multiplier'       // 资源倍率（与现有实现保持一致）
+  // 新版在 game-store 中实际使用的枚举
+  | 'resource_rate'             // 资源速率（通过计算应用）
+  | 'resource_limit'            // 资源上限
+  | 'building_unlock'           // 建筑解锁
+  | 'stability'                 // 稳定度变更
+  | 'corruption';               // 腐败度变更
 
 export interface TechnologyUnlock {
   type: 'building' | 'character' | 'resource' | 'upgrade';
@@ -149,12 +161,13 @@ export interface TechnologyUnlock {
 
 // 科技研究状态
 export interface ResearchState {
-  currentResearch?: {
+  // 允许为 null，且不强制 estimatedCompletionTime
+  currentResearch: {
     technologyId: string;
-    progress: number; // 0-100
+    progress: number; // 0-100（或直接按秒累计）
     startTime: number;
-    estimatedCompletionTime: number;
-  };
+    estimatedCompletionTime?: number;
+  } | null;
   researchQueue: string[]; // 研究队列
   researchSpeed: number; // 研究速度倍数
 }
@@ -194,9 +207,10 @@ export interface GameState {
   
   // 人物
   characterSystem: {
-    activeCharacters: { [position: string]: string }; // 职位 -> 人物ID
-    availableCharacters: string[]; // 可用人物ID列表
-    allCharacters: { [id: string]: Character }; // 所有人物数据
+    // 与 store 对齐：三处均持有 Character 对象
+    activeCharacters: { [id: string]: import('./character').Character };
+    availableCharacters: import('./character').Character[];
+    allCharacters: { [id: string]: import('./character').Character };
     unlockedPositions: string[]; // 已解锁的职位
   };
   
@@ -238,6 +252,8 @@ export interface GameState {
       events: import('../types/military').DiscoveredLocation[];
     };
     explorationHistory: import('../types/military').ExplorationResult[];
+    // 仅内部用于探索概率计算的隐藏指标（不在UI展示）
+    explorationPoints?: number;
   };
   
   // 外交系统状态
@@ -402,7 +418,9 @@ export interface BuffSummary {
 // 游戏事件实例
 export interface GameEventInstance {
   id: string;
-  name: string;
+  // 兼容不同来源的命名：允许使用 name 或 title
+  name?: string;
+  title?: string;
   description: string;
   timestamp: number;
   type: 'positive' | 'negative' | 'neutral';

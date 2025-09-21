@@ -344,6 +344,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
       // 可选：声明性解锁，当前系统不强依赖此字段
       // { type: 'unit', id: 'tribal_militia', name: '部落民兵' }
     ],
+    grantsCapabilities: ['cap.train.militia'],
     effects: [],
     unlocked: false,
     researched: false
@@ -361,6 +362,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocks: [
       // { type: 'unit', id: 'scout', name: '侦察兵' }
     ],
+    grantsCapabilities: ['cap.scouting'],
     effects: [],
     unlocked: false,
     researched: false
@@ -378,6 +380,7 @@ export const TECHNOLOGIES: Record<string, Technology> = {
     unlocks: [
       // { type: 'character_position', id: 'diplomat', name: '外交官' }
     ],
+    grantsCapabilities: ['cap.diplomacy'],
     effects: [],
     unlocked: false,
     researched: false

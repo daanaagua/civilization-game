@@ -910,7 +910,11 @@ export class EventSystemManager {
   shouldTriggerAdventureEvent(currentTime: number): boolean {
     // 只有在有任职人物时才可能触发冒险事件（当前无 scout/adventurer 概念）
     const cs = this.gameState.characterSystem;
-    const activeIds = cs ? (Object.values(cs.activeCharacters || {}) as (string | null)[]).filter(Boolean) as string[] : [];
+    const activeIds = cs
+      ? (Object.values(cs.activeCharacters || {}) as any[])
+          .map((v) => (typeof v === 'string' ? v : v?.id))
+          .filter(Boolean) as string[]
+      : [];
     const hasActiveAdventure = activeIds.length > 0;
 
     if (!hasActiveAdventure) return false;

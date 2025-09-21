@@ -5,14 +5,21 @@ import { formatNumber } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/tooltip';
 import { StatusDetailsTooltip } from '@/components/ui/status-details-tooltip';
 import { ResourceDetailsTooltip } from '@/components/ui/resource-details-tooltip';
+import { useMemo } from 'react';
+import { createPopulationSelectors } from '@/lib/slices';
+import { makeGameStorePopulationProvider } from '@/lib/adapters/population-adapter';
 
 interface SidebarProps {}
 
 
 
 export function Sidebar({}: SidebarProps) {
-  const { gameState, population, maxPopulation, clickResource } = useGameStore();
+  const { gameState, clickResource } = useGameStore();
   const { resources, stability } = gameState;
+  // 统一人口选择器（零侵入适配现有 store）
+  const provider = useMemo(() => makeGameStorePopulationProvider(), []);
+  const selectors = useMemo(() => createPopulationSelectors(provider), [provider]);
+  const overview = useGameStore(state => selectors.getOverview(state));
   
   // 使用游戏状态中的实际腐败度
   const corruption = gameState.corruption;
@@ -89,8 +96,22 @@ export function Sidebar({}: SidebarProps) {
                </div>
              </Tooltip>
             
+            {/* 人口（统一选择器渲染的可见区块） */}
+            <Tooltip content={`当前人口: ${formatNumber(overview.current, 0)}\n最大人口: ${formatNumber(overview.cap, 0)}\n盈余人口: ${formatNumber(overview.surplus, 0)}\n\n人口增长受住房限制影响`}>
+              <div 
+                className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600"
+              >
+                <div className="flex items-center">
+                  <span>人口</span>
+                </div>
+                <span className="font-bold">
+                  {formatNumber(overview.current, 0)}/{formatNumber(overview.cap, 0)} {/* 人口显示为整数 */}
+                </span>
+              </div>
+            </Tooltip>
+            
             {/* 人口 */}
-             <Tooltip content={`当前人口: ${formatNumber(population, 0)}\n最大人口: ${formatNumber(maxPopulation, 0)}\n\n人口增长受住房限制影响`}>
+             <Tooltip content={`当前人口: ${formatNumber(overview.current, 0)}\n最大人口: ${formatNumber(overview.cap, 0)}\n\n人口增长受住房限制影响`}>
                <div 
                  className="inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white transition-all duration-200 bg-gray-800 border-gray-600 hidden"
                >
@@ -98,7 +119,7 @@ export function Sidebar({}: SidebarProps) {
                    <span>人口</span>
                  </div>
                  <span className="font-bold">
-                   {formatNumber(population, 0)}/{formatNumber(maxPopulation, 0)} {/* 人口显示为整数 */}
+                   {formatNumber(overview.current, 0)}/{formatNumber(overview.cap, 0)} {/* 人口显示为整数 */}
                  </span>
                </div>
              </Tooltip>

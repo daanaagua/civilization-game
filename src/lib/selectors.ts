@@ -1,7 +1,8 @@
-// Centralized selectors for gating and visibility
-// These utilities avoid touching game-store types and keep UI logic consistent.
-
+/** Centralized selectors for gating and visibility
+ * These utilities avoid touching game-store types and keep UI logic consistent.
+ */
 import { MilitaryUnit } from '../types/military';
+import { TECHNOLOGIES } from './technology-data';
 
 export type AnyGameState = any;
 
@@ -84,4 +85,20 @@ export function computeExplorationPoints(
   }, 0);
   const used = (ongoingMissions || []).reduce((s, m) => s + (m.cost || 1), 0);
   return Math.max(0, total - used);
+}
+
+// Capabilities: derive from researched techs → TECHNOLOGIES[techId].grantsCapabilities
+export function getCapabilitiesSet(gameState: AnyGameState): Set<string> {
+  const researched = getResearchedSet(gameState);
+  const caps = new Set<string>();
+  researched.forEach((techId) => {
+    const tech: any = (TECHNOLOGIES as any)[techId];
+    const arr: string[] = tech?.grantsCapabilities || [];
+    arr.forEach((c) => caps.add(c));
+  });
+  return caps;
+}
+
+export function hasCapability(gameState: AnyGameState, capId: string): boolean {
+  return getCapabilitiesSet(gameState).has(capId);
 }
