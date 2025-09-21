@@ -11,7 +11,7 @@ export function getResearchedSet(gameState: AnyGameState): Set<string> {
   const techs = (gameState?.technologies) || {};
   const set = new Set<string>();
   Object.entries(techs).forEach(([id, t]: any) => {
-    if (t && (t.researched === true || t.unlocked === true)) {
+    if (t && t.researched === true) {
       set.add(id);
     }
   });
