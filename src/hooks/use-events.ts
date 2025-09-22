@@ -101,14 +101,27 @@ export function useEvents() {
     }
   }, [isLoaded]);
 
-  // 当事件或计数器变化时保存到本地存储
+  // 当事件或计数器变化时保存到本地存储，并同步全局 store
   useEffect(() => {
     if (isLoaded) {
       saveEventsToStorage(events, eventIdCounter);
+      // 同步全局 store 的 events/recentEvents（双保险：即便不是通过 addEvent 改变）
+      useGameStore.setState((state) => {
+        const gs = (state as any).gameState as any;
+        if (!gs) return state as any;
+        const recent = events.slice(0, 10);
+        return {
+          gameState: {
+            ...gs,
+            events,
+            recentEvents: recent
+          }
+        } as any;
+      });
     }
   }, [events, eventIdCounter, isLoaded]);
 
-  // 添加新事件
+  // 添加新事件（并同步到全局 store 的 gameState.events/recentEvents）
   const addEvent = useCallback((eventData: Omit<GameEvent, 'id' | 'timestamp'>) => {
     const newEvent: GameEvent = {
       ...eventData,
@@ -118,7 +131,23 @@ export function useEvents() {
       isResolved: eventData.type === EventType.NOTIFICATION // 提示事件自动标记为已处理
     };
 
-    setEvents(prev => [newEvent, ...prev]);
+    setEvents(prev => {
+      const next = [newEvent, ...prev];
+      // 同步写入全局 store（保持 EventsPanel 的数据源一致）
+      useGameStore.setState((state) => {
+        const gs = (state as any).gameState as any;
+        if (!gs) return state as any;
+        const recent = next.slice(0, 10);
+        return {
+          gameState: {
+            ...gs,
+            events: next,
+            recentEvents: recent
+          }
+        } as any;
+      });
+      return next;
+    });
     setEventIdCounter(prev => prev + 1);
     
     return newEvent.id;
@@ -376,11 +405,22 @@ export function useEvents() {
     }
   }, [gameState]);
 
-  // 订阅来自全局的通知事件，将其转换为非选择事件并纳入事件流
+  // 订阅来自全局的通知事件，将其转换为非选择事件并纳入事件流（加节流去重）
   useEffect(() => {
+    const lastNotifRef = { key: '', ts: 0 }; // 简单节流：20 秒内相同 key 不重复
     const handler = (e: Event) => {
       const custom = e as CustomEvent<any>;
       const data = custom.detail || {};
+      const title = data.title || '通知';
+      const message = data.message || '';
+      const key = `${title}::${message}`;
+      const now = Date.now();
+      if (lastNotifRef.key === key && now - lastNotifRef.ts < 20000) {
+        return; // 丢弃短时间内重复的相同通知
+      }
+      lastNotifRef.key = key;
+      lastNotifRef.ts = now;
+
       // 映射 Notification -> GameEvent
       const priorityMap: Record<string, EventPriority> = {
         info: EventPriority.LOW,
@@ -390,8 +430,8 @@ export function useEvents() {
       };
       const type: EventType = EventType.NOTIFICATION;
       const eventData = {
-        title: data.title || '通知',
-        description: data.message || '',
+        title,
+        description: message,
         type,
         priority: priorityMap[data.type] ?? EventPriority.LOW,
         duration: data.duration ?? 5000,

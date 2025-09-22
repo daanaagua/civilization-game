@@ -696,6 +696,42 @@ const SettingsPanel = () => {
         </div>
       </div>
 
+      {/* 开发者模式 */}
+      <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-2">
+        <h3 className="text-lg font-semibold text-gray-100 mb-2">开发者模式</h3>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            onChange={(e) => {
+              const enable = e.target.checked;
+              const game = useGameStore.getState();
+              const newState = structuredClone(game.gameState);
+              if (enable) {
+                // 1) 解锁全部科技
+                Object.keys(newState.technologies).forEach((k) => {
+                  newState.technologies[k].researched = true;
+                });
+                // 2) 资源/人口拉满（人口=住房+1）
+                const limits = newState.resourceLimits || {};
+                const res = newState.resources || {};
+                Object.keys(limits).forEach((rk) => {
+                  const lim = Number(limits[rk] ?? 0);
+                  if (rk === 'population') return;
+                  res[rk] = Math.max(res[rk] ?? 0, lim);
+                });
+                const housing = Number(newState.resourceLimits?.population ?? 0);
+                res.population = Math.max(Number(res.population ?? 0), housing + 1);
+                newState.resources = res;
+              }
+              useGameStore.setState({ gameState: newState });
+              try { game.updateEffectsSystem(); } catch {}
+              try { game.calculateResourceRates(); } catch {}
+            }}
+          />
+          <span className="text-gray-300 text-sm">一键解锁科技并资源/人口拉满（测试）</span>
+        </label>
+      </div>
+
       {/* 测试开关 */}
       <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-2">
         <h3 className="text-lg font-semibold text-gray-100 mb-2">测试开关</h3>

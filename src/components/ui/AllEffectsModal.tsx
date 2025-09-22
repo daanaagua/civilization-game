@@ -318,19 +318,25 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
     };
     return map[res] || res.replace(/_/g, ' ');
   };
+  // 百分比显示：保留两位小数并去掉多余0
+  const formatPercentString = (n: number) => {
+    const rounded = Math.round(n * 100) / 100;
+    const str = rounded.toFixed(2).replace(/\.00$/, '').replace(/(\.\d*[1-9])0$/, '$1');
+    return `${rounded > 0 ? '+' : ''}${str}%`;
+  };
+
   const upsertEffect = (name: string, addValuePct: number, source: string) => {
     // 百分比型效果合并（以 % 展示）
     const existing = allEffects.get(name);
-    const valueStr = addValuePct > 0 ? `+${addValuePct}%` : `${addValuePct}%`;
     if (existing) {
       const existingValue = parseFloat(existing.value.replace('%', '').replace('+', '')) || 0;
       const totalValue = existingValue + addValuePct;
       allEffects.set(name, {
-        value: totalValue === 0 ? '0%' : `${totalValue > 0 ? '+' : ''}${totalValue}%`,
+        value: totalValue === 0 ? '0%' : formatPercentString(totalValue),
         sources: [...existing.sources, source]
       });
     } else {
-      allEffects.set(name, { value: valueStr, sources: [source] });
+      allEffects.set(name, { value: formatPercentString(addValuePct), sources: [source] });
     }
   };
   // 数值型效果合并（不带 %，用于 稳定度/腐败度 等点数）
@@ -349,44 +355,71 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
     }
   };
 
+  // 统一处理一条效果并写入聚合表
+  const processEffect = (effect: any, sourceName: string) => {
+    const type = String(effect?.type || '').toLowerCase();
+    const target = effect?.target ?? effect?.resource;
+    // 统一百分比：优先用 isPercentage，其次倍率区间转换
+    const isPct = effect?.isPercentage === true || (typeof effect?.value === 'number' && effect.value > 0 && effect.value < 1);
+    const raw = Number(effect?.value || 0);
+    const valPct = isPct ? raw * 100 : normalizePercent(raw);
+
+    // 资源效率类
+    if (type === 'resource_multiplier' || type === 'resource_production' || type === 'resource_production_bonus' || type === 'resource_efficiency') {
+      if (typeof target === 'string' && target && target !== 'all') {
+        upsertEffect(`${getResLabel(String(target))}效率`, valPct, sourceName);
+      } else {
+        upsertEffect('生产效率', valPct, sourceName);
+      }
+      return;
+    }
+
+    // 人口、科研
+    if (type === 'population_growth' || type === 'population_growth_bonus') { upsertEffect('人口增长率', valPct, sourceName); return; }
+    if (type === 'research_speed' || type === 'research_speed_bonus') { upsertEffect('科技研发速度', valPct, sourceName); return; }
+
+    // 信仰、魔力
+    if (type === 'faith_gain') { upsertEffect('信仰获取', valPct, sourceName); return; }
+    if (type === 'magic_gain') { upsertEffect('魔力获取', valPct, sourceName); return; }
+    if (type === 'magic_efficiency') { upsertEffect('魔法效率', valPct, sourceName); return; }
+    if (type === 'magic_resistance' || type === 'magic_resist') { upsertEffect('魔法抗性', valPct, sourceName); return; }
+
+    // 稳定/腐败（点数）
+    if (type === 'stability') { upsertNumberEffect('稳定度', Number(raw) || 0, sourceName); return; }
+    if (type === 'corruption') { upsertNumberEffect('腐败度', Number(raw) || 0, sourceName); return; }
+
+    // 贸易、关系、建造
+    if (type === 'trade_income') { upsertEffect('贸易收益', valPct, sourceName); return; }
+    if (type === 'trade_efficiency') { upsertEffect('交易兑换效率', valPct, sourceName); return; }
+    if (type === 'relation_improvement' || type === 'relationship_change') { upsertEffect('关系改善速度', valPct, sourceName); return; }
+    if (type === 'building_efficiency' || type === 'build_speed') { upsertEffect('建筑建造速度', valPct, sourceName); return; }
+
+    // 事件/维护/消耗/灾害
+    if (type === 'morale_event_success') { upsertEffect('士气相关事件成功率', valPct, sourceName); return; }
+    if (type === 'maintenance_reduction') { upsertEffect('全局维护/损耗', valPct, sourceName); return; }
+    if (type === 'supply_consumption') { upsertEffect('物资消耗', valPct, sourceName); return; }
+    if (type === 'disaster_response') { upsertEffect('灾害/事件处理效率', valPct, sourceName); return; }
+
+    // 军事类（若仍存在）
+    if (type === 'military' || type === 'military_strength' || type === 'army') {
+      const sub = String(target || '').toLowerCase();
+      if (sub.includes('morale')) { upsertEffect('军队士气', valPct, sourceName); return; }
+      if (sub.includes('combat') || sub === 'combat_power') { upsertEffect('军队战斗力', valPct, sourceName); return; }
+      if (sub.includes('supply') || sub.includes('consumption')) { upsertEffect('军需消耗', valPct, sourceName); return; }
+      upsertEffect('军力', valPct, sourceName); return;
+    }
+
+    // 兜底：未知类型忽略，避免污染
+  };
+
   Object.values(gameState.technologies).forEach((tech) => {
-    if (tech.researched && tech.effects) {
+    if (tech?.researched && Array.isArray(tech.effects)) {
       tech.effects.forEach((effect: any) => {
-        switch (effect.type) {
-          case 'resource_multiplier': {
-            const val = normalizePercent(effect.value);
-            if (typeof effect.target === 'string' && effect.target && effect.target !== 'all') {
-              upsertEffect(`${getResLabel(effect.target)}效率`, val, tech.name);
-            } else {
-              upsertEffect('生产效率', val, tech.name);
-            }
-            break;
-          }
-          case 'resource_production_bonus': {
-            const val = normalizePercent(effect.value);
-            if (typeof effect.target === 'string' && effect.target && effect.target !== 'all') {
-              upsertEffect(`${getResLabel(effect.target)}效率`, val, tech.name);
-            } else {
-              upsertEffect('生产效率', val, tech.name);
-            }
-            break;
-          }
-          case 'population_growth_bonus': {
-            upsertEffect('人口增长率', normalizePercent(effect.value), tech.name);
-            break;
-          }
-          case 'research_speed_bonus': {
-            upsertEffect('科技研发速度', normalizePercent(effect.value), tech.name);
-            break;
-          }
-          case 'stability_bonus': {
-            const v = Number(effect.value) || 0;
-            // 科技稳定度加成（当前设计为点数），并入“稳定度”
-            upsertNumberEffect('稳定度', v, tech.name);
-            break;
-          }
-          default:
-            break;
+        // 兼容一些数据里把“稳定度点数”写成 stability_bonus 的情况
+        if (String(effect?.type || '') === 'stability_bonus') {
+          upsertNumberEffect('稳定度', Number(effect?.value) || 0, tech.name);
+        } else {
+          processEffect(effect, tech.name);
         }
       });
     }
@@ -395,99 +428,31 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
   // 添加Buff效果（同样区分资源特定与全局）
   const activeBuffs = getActiveBuffs();
   activeBuffs.forEach((buff) => {
-    buff.effects.forEach((effect: any) => {
-      switch (effect.type) {
-        case 'population_growth': {
-          const val = normalizePercent(effect.value);
-          upsertEffect('人口增长率', val, buff.name);
-          break;
-        }
-        case 'resource_production': {
-          const val = normalizePercent(effect.value);
-          if (typeof effect.target === 'string' && effect.target && effect.target !== 'all') {
-            upsertEffect(`${getResLabel(effect.target)}效率`, val, buff.name);
-          } else {
-            upsertEffect('生产效率', val, buff.name);
-          }
-          break;
-        }
-        case 'research_speed': {
-          const val = normalizePercent(effect.value);
-          upsertEffect('科技研发速度', val, buff.name);
-          break;
-        }
-        case 'building_efficiency': {
-          const val = normalizePercent(effect.value);
-          upsertEffect('生产效率', val, buff.name);
-          break;
-        }
-        default:
-          break;
-      }
+    (buff?.effects || []).forEach((effect: any) => {
+      processEffect(effect, buff.name);
     });
   });
   
   // 添加“人物效果”（来自全局效果系统，source.type === 'character'）
   const characterEffects = globalEffectsSystem.getEffectsBySourceType(EffectSourceType.CHARACTER);
   characterEffects.forEach((eff: any) => {
-    // 统一百分比值
-    const val = eff.isPercentage ? (eff.value * 100) : eff.value;
     const sourceName = eff?.source?.name || '人物';
-
-    // 支持资源定向与全局
-    const rawType = String(eff.type || '');
-    const target = (eff as any).target;
-
-    // 通用映射：生产、人口、科研、贸易、军队士气、稳定度
-    if (rawType === 'resource_production' || rawType === 'resource_production_bonus') {
-      if (typeof target === 'string' && target && target !== 'all') {
-        upsertEffect(`${getResLabel(target)}效率`, val, sourceName);
-      } else {
-        upsertEffect('生产效率', val, sourceName);
-      }
-      return;
-    }
-    if (rawType === 'population_growth' || rawType === 'population_growth_bonus') {
-      upsertEffect('人口增长率', val, sourceName); return;
-    }
-    if (rawType === 'research_speed' || rawType === 'research_speed_bonus') {
-      upsertEffect('科技研发速度', val, sourceName); return;
-    }
-    if (rawType === 'trade_income') {
-      upsertEffect('贸易收益', val, sourceName); return;
-    }
-    if (rawType === 'stability') {
-      // 人物稳定度一律按点数累计（当前版本没有人物稳定度百分比设计）
-      upsertNumberEffect('稳定度', Number(eff.value) || 0, sourceName);
-      return;
-    }
-    // 腐败度：按点数累计（负数为减少腐败，正值为增加腐败）
-    if (rawType === 'corruption') {
-      upsertNumberEffect('腐败度', Number(eff.value) || 0, sourceName); return;
-    }
-
-    // 军事类
-    if (rawType === 'military' || rawType === 'military_strength' || rawType === 'army') {
-      const sub = String(target || '').toLowerCase();
-      if (sub.includes('morale')) { upsertEffect('军队士气', val, sourceName); return; }
-      if (sub.includes('combat') || sub === 'combat_power') { upsertEffect('军队战斗力', val, sourceName); return; }
-      if (sub.includes('supply') || sub.includes('consumption')) { upsertEffect('军需消耗', val, sourceName); return; }
-      upsertEffect('军力', val, sourceName); return;
-    }
-
-    // 兜底：未知类型一律不计入，避免污染“全部效果”
+    processEffect(eff, sourceName);
   });
 
-  // 确保所有基础效果都显示，即使值为0
-  const baseEffects = ['人口增长率', '生产效率', '科技研发速度', '贸易收益', '军队士气'];
-  baseEffects.forEach(effectName => {
-    if (!allEffects.has(effectName)) {
-      allEffects.set(effectName, {
-        value: '0%',
-        sources: []
+  // 其他来源：建筑/事件/宝物/政策（如存在）
+  const otherSourceTypes: Array<any> = ['building','event','treasure','policy'];
+  otherSourceTypes.forEach((srcType) => {
+    try {
+      const list = globalEffectsSystem.getEffectsBySourceType(srcType as any) || [];
+      list.forEach((eff: any) => {
+        const sourceName = eff?.source?.name || getSourceTypeName(srcType);
+        processEffect(eff, sourceName);
       });
-    }
+    } catch {}
   });
+
+  // 动态展示：不再强制填充固定项目，全部来源合并后按存在值渲染
 
   const formatValue = (value: number) => {
     const sign = value > 0 ? '+' : '';
@@ -496,7 +461,7 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-4xl mx-4">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-white">全部效果</h2>
@@ -508,8 +473,8 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
           </button>
         </div>
 
-        {/* 效果列表 */}
-        <div className="space-y-3">
+        {/* 效果列表（自适应高度与列数） */}
+        <div className="max-h-[70vh] overflow-auto">
           {(() => {
             // 排序：将“稳定度”“腐败度”置底，其余按名称排序
             const entries = Array.from(allEffects.entries()).sort((a, b) => {
@@ -522,31 +487,38 @@ export function AllEffectsModal({ isOpen, onClose }: AllEffectsModalProps) {
               if (oa !== ob) return oa - ob;
               return a[0].localeCompare(b[0], 'zh-Hans');
             });
-            return entries.map(([effectName, effectData]) => {
-              return (
-                <div key={effectName} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">{effectName}:</span>
-                    {(() => {
-                      const num = parseFloat(effectData.value.replace('%','').replace('+','')) || 0;
-                      const colorClass = effectName === '腐败度'
-                        ? (num < 0 ? 'text-green-400' : num > 0 ? 'text-red-400' : 'text-gray-400')
-                        : (num > 0 ? 'text-green-400' : num < 0 ? 'text-red-400' : 'text-gray-400');
-                      return (
-                        <span className={`font-semibold ${colorClass}`}>
+            const count = entries.length;
+            const cols = count > 24 ? 3 : count > 12 ? 2 : 1;
+            const gridClass = cols === 3
+              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'
+              : cols === 2
+                ? 'grid grid-cols-1 md:grid-cols-2 gap-3'
+                : 'grid grid-cols-1 gap-3';
+            return (
+              <div className={gridClass}>
+                {entries.map(([effectName, effectData]) => {
+                  const num = parseFloat(effectData.value.replace('%','').replace('+','')) || 0;
+                  const colorClass = effectName === '腐败度'
+                    ? (num < 0 ? 'text-green-400' : num > 0 ? 'text-red-400' : 'text-gray-400')
+                    : (num > 0 ? 'text-green-400' : num < 0 ? 'text-red-400' : 'text-gray-400');
+                  return (
+                    <div key={effectName} className="space-y-0.5 p-2 rounded border border-gray-700/50 bg-gray-900/30">
+                      <div className="flex items-center justify-between leading-tight">
+                        <span className="text-gray-300 text-xs">{effectName}</span>
+                        <span className={`font-semibold text-xs ${colorClass}`}>
                           {effectData.value}
                         </span>
-                      );
-                    })()}
-                  </div>
-                  {effectData.sources.length > 0 && (
-                    <div className="text-xs text-gray-500 ml-2">
-                      来源: {effectData.sources.join(', ')}
+                      </div>
+                      {effectData.sources.length > 0 && (
+                        <div className="text-[10px] text-gray-500 leading-tight">
+                          来源: {effectData.sources.join(', ')}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            });
+                  );
+                })}
+              </div>
+            );
           })()}
         </div>
 

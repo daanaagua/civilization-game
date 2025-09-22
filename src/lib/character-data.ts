@@ -200,39 +200,54 @@ export const POSITION_UPGRADE_CONDITIONS: Record<CharacterPosition, CharacterUnl
 // 人物属性效果计算
 export const CHARACTER_ATTRIBUTE_EFFECTS = {
   [CharacterType.RULER]: {
-    force: { type: 'military', target: 'morale', value: 0.5, description: '+0.5% 全局部队士气/点' },
-    intelligence: { type: 'economic', target: 'production_speed', value: 0.5, description: '+0.5% 人口生产速度/点' },
-    charisma: { type: 'stability', target: 'base', value: 1, description: '+1 稳定度/点' }
+    // 武力→全局生产效率 +0.5%/点
+    force: { type: 'resource_production_bonus', target: 'all', value: 0.005, description: '+0.5% 生产效率/点', isPercentage: true },
+    // 智力→人口增长速度 +0.5%/点
+    intelligence: { type: 'population_growth_bonus', target: 'global', value: 0.005, description: '+0.5% 人口增长速度/点', isPercentage: true },
+    // 魅力→稳定度 +1/点（平面）
+    charisma: { type: 'stability', target: 'base', value: 1, description: '+1 稳定度/点', isPercentage: false }
   },
   [CharacterType.RESEARCH_LEADER]: {
     force: null,
-    intelligence: { type: 'research', target: 'speed', value: 2, description: '+2% 科技研发速度/点' },
-    charisma: { type: 'stability', target: 'base', value: 0.5, description: '+0.5% 稳定度/点' }
+    // 智力→研究速度 +2%/点
+    intelligence: { type: 'research_speed_bonus', target: 'global', value: 0.02, description: '+2% 科技研发速度/点', isPercentage: true },
+    // 魅力→稳定度 +0.5/点（平面）
+    charisma: { type: 'stability', target: 'base', value: 0.5, description: '+0.5 稳定度/点', isPercentage: false }
   },
   [CharacterType.FAITH_LEADER]: {
     force: null,
-    intelligence: { type: 'economic', target: 'faith_output', value: 1, description: '+1% 信仰产出/点' },
-    charisma: { type: 'stability', target: 'base', value: 1, description: '+1% 稳定度/点' }
+    // 智力→信仰获取 +1%/点
+    intelligence: { type: 'faith_gain', target: 'global', value: 0.01, description: '+1% 信仰获取/点', isPercentage: true },
+    // 魅力→稳定度 +0.5/点（平面）
+    charisma: { type: 'stability', target: 'base', value: 0.5, description: '+0.5 稳定度/点', isPercentage: false }
   },
   [CharacterType.MAGE_LEADER]: {
-    force: { type: 'military', target: 'magic_power', value: 1, description: '+1% 魔法威力/点' },
-    intelligence: { type: 'military', target: 'magic_efficiency', value: 2, description: '+2% 魔法效率/点' },
-    charisma: { type: 'military', target: 'magic_resistance', value: 0.5, description: '+0.5% 魔法抗性/点' }
+    // 法师全系只关联魔力，不得映射军力/士气
+    force: { type: 'magic_gain', target: 'global', value: 0.01, description: '+1% 魔力获取/点', isPercentage: true },
+    intelligence: { type: 'magic_efficiency', target: 'global', value: 0.02, description: '+2% 魔法效率/点', isPercentage: true },
+    charisma: { type: 'magic_resistance', target: 'global', value: 0.005, description: '+0.5% 魔法抗性/点', isPercentage: true }
   },
   [CharacterType.CIVIL_LEADER]: {
     force: null,
-    intelligence: { type: 'corruption', target: 'base', value: -1, description: '-1 腐败度/点' },
-    charisma: { type: 'stability', target: 'base', value: 0.2, description: '+0.2 稳定度/点' }
+    // 智力→全局维护/损耗 -0.5%/点
+    intelligence: { type: 'maintenance_reduction', target: 'global', value: -0.005, description: '-0.5% 全局维护/损耗/点', isPercentage: true },
+    // 魅力→稳定度 +0.2/点（平面）
+    charisma: { type: 'stability', target: 'base', value: 0.2, description: '+0.2 稳定度/点', isPercentage: false }
   },
   [CharacterType.GENERAL]: {
-    force: { type: 'military', target: 'combat_power', value: 2, description: '+2% 军队战斗力/点' },
-    intelligence: { type: 'military', target: 'supply_consumption', value: -1, description: '-1% 部队补给消耗/点' },
-    charisma: { type: 'military', target: 'morale', value: 1, description: '+1% 军队士气/点' }
+    // 武力→灾害/事件处理效率 +1%/点
+    force: { type: 'disaster_response', target: 'global', value: 0.01, description: '+1% 灾害/事件处理效率/点', isPercentage: true },
+    // 智力→物资消耗 -0.5%/点
+    intelligence: { type: 'supply_consumption', target: 'global', value: -0.005, description: '-0.5% 物资消耗/点', isPercentage: true },
+    // 魅力→士气相关事件成功率 +0.5%/点
+    charisma: { type: 'morale_event_success', target: 'global', value: 0.005, description: '+0.5% 士气相关事件成功率/点', isPercentage: true }
   },
   [CharacterType.DIPLOMAT]: {
     force: null,
-    intelligence: { type: 'economic', target: 'trade_efficiency', value: 1, description: '+1% 交易转换率/点' },
-    charisma: { type: 'global', target: 'relationship_change', value: 2, description: '+2% 关系改变率/点' }
+    // 智力→交易兑换效率 +1%/点
+    intelligence: { type: 'trade_efficiency', target: 'global', value: 0.01, description: '+1% 交易兑换效率/点', isPercentage: true },
+    // 魅力→关系改善速度 +2%/点
+    charisma: { type: 'relation_improvement', target: 'global', value: 0.02, description: '+2% 关系改善速度/点', isPercentage: true }
   }
 };
 

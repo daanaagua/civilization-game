@@ -519,7 +519,20 @@ export function EffectsPanel({ effects, className }: EffectsPanelProps) {
     }
     if (type === 'faith_gain') return { name: '信仰获取', value: val };
     if (type === 'magic_gain') return { name: '魔力获取', value: val };
+    if (type === 'magic_efficiency') return { name: '魔法效率', value: val };
+    if (type === 'magic_resistance' || type === 'magic_resist') return { name: '魔法抗性', value: val };
     if (type === 'trade_income') return { name: '贸易收益', value: val };
+    if (type === 'trade_efficiency') return { name: '交易兑换效率', value: val };
+    if (type === 'relation_improvement' || type === 'relationship_change') return { name: '关系改善速度', value: val };
+    if (type === 'disaster_response') return { name: '灾害/事件处理效率', value: val };
+    if (type === 'maintenance_reduction') return { name: '全局维护/损耗', value: val };
+    if (type === 'morale_event_success') return { name: '士气相关事件成功率', value: val };
+    if (type === 'population_growth' || type === 'population_growth_bonus') {
+      return { name: '人口增长率', value: isPct ? val : `${raw >= 0 ? '+' : ''}${raw}%` };
+    }
+    if (type === 'research_speed' || type === 'research_speed_bonus') {
+      return { name: '科技研发速度', value: val };
+    }
     // 军事类映射
     if (type === 'military' || type === 'military_strength' || type === 'army') {
       const sub = String(target || '').toLowerCase();
