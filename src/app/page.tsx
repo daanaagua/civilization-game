@@ -17,6 +17,7 @@ import { DiplomacyTab } from '@/components/features/diplomacy-tab';
 import { EventNotificationToast } from '@/components/ui/event-notification-toast';
 import { EventType, type GameEvent } from '@/components/features/EventsPanel';
 import { isTestScoutingEnabled, setTestScoutingEnabled } from '@/lib/feature-flags';
+import EventModal from '@/components/ui/EventModal';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
@@ -49,7 +50,7 @@ export default function Home() {
   const [lastEventCount, setLastEventCount] = useState(0);
   
   // 使用事件系统（单例来源）
-  const { events, markAsRead, handleChoice, getUnresolvedChoiceEvents, clearAllEvents } = useEvents();
+  const { events, markAsRead, handleChoice, getUnresolvedChoiceEvents, clearAllEvents, modalEvent, acknowledgeCurrentModal, chooseModalChoice } = useEvents();
   
   // 启动游戏循环
   useGameLoop();
@@ -346,6 +347,12 @@ export default function Home() {
           setCurrentNotificationEvent(null);
           setHasUnreadEvents(false);
         }}
+      />
+      {/* 中央事件弹窗：系统/通知类不弹，其余事件逐个弹窗并暂停 */}
+      <EventModal
+        event={modalEvent}
+        onClose={acknowledgeCurrentModal}
+        onSelectChoice={chooseModalChoice}
       />
     </div>
   );

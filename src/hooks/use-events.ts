@@ -79,6 +79,9 @@ export function useEvents() {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [eventIdCounter, setEventIdCounter] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
+  // 模态事件：队列 + 当前事件ID
+  const [modalQueue, setModalQueue] = useState<GameEvent[]>([]);
+  const [currentModalEventId, setCurrentModalEventId] = useState<string | null>(null);
   const gameState = useGameStore(state => state.gameState);
   // 新增：从设置读取事件轮询间隔（毫秒），默认 1000ms
   const pollInterval = useGameStore(state => state.gameState?.settings?.eventsPollIntervalMs ?? 1000);
@@ -121,19 +124,33 @@ export function useEvents() {
     }
   }, [events, eventIdCounter, isLoaded]);
 
+  // 判定是否需要弹窗暂停：系统/通知/骰子检定不弹，其余弹
+  const shouldPopupPause = (e: Omit<GameEvent, 'id' | 'timestamp'>): boolean => {
+    const cat = String(e.category || '').toLowerCase();
+    if (!cat || cat === 'notification' || cat === 'system' || cat === 'dice_check') return false;
+    return true;
+  };
+
   // 添加新事件（并同步到全局 store 的 gameState.events/recentEvents）
   const addEvent = useCallback((eventData: Omit<GameEvent, 'id' | 'timestamp'>) => {
+    const popupPause = shouldPopupPause(eventData);
     const newEvent: GameEvent = {
       ...eventData,
       id: `event_${eventIdCounter}`,
       timestamp: Date.now(),
       isRead: false,
-      isResolved: eventData.type === EventType.NOTIFICATION // 提示事件自动标记为已处理
+      // 不需要弹窗的通知型直接视为已处理；需要弹窗的由确认/选择后置为已处理
+      isResolved: eventData.type === EventType.NOTIFICATION && !popupPause
     };
 
     setEvents(prev => {
+      // 需要弹窗：仅入模态队列，不写入最新事件，等待玩家点击后再入栏
+      if (popupPause) {
+        setModalQueue(q => [...q, newEvent]);
+        return prev;
+      }
+      // 不需要弹窗：直接入最新事件
       const next = [newEvent, ...prev];
-      // 同步写入全局 store（保持 EventsPanel 的数据源一致）
       useGameStore.setState((state) => {
         const gs = (state as any).gameState as any;
         if (!gs) return state as any;
@@ -479,6 +496,79 @@ export function useEvents() {
     return () => clearInterval(interval);
   }, [cleanupExpiredEvents]);
 
+  // ========= 模态事件：当前事件/暂停/确认/选择 =========
+  const getCurrentModalEvent = useCallback((): GameEvent | null => {
+    if (currentModalEventId) {
+      // 先在已入栏事件中查找，若未入栏（需弹窗事件），再到队列中查找
+      const inEvents = events.find(e => e.id === currentModalEventId);
+      if (inEvents) return inEvents;
+      const inQueue = modalQueue.find(e => e.id === currentModalEventId);
+      if (inQueue) return inQueue;
+      return null;
+    }
+    return modalQueue.length > 0 ? modalQueue[0] : null;
+  }, [currentModalEventId, modalQueue, events]);
+
+  // 队列出现时，锁定当前事件并暂停
+  useEffect(() => {
+    if (modalQueue.length > 0 && !currentModalEventId) {
+      const first = modalQueue[0];
+      setCurrentModalEventId(first.id);
+      const { pauseGame } = useGameStore.getState();
+      try { pauseGame(); } catch {}
+    }
+  }, [modalQueue.length, currentModalEventId]);
+
+  // 关闭当前模态（用于无选项事件“知道了”）
+  const acknowledgeCurrentModal = useCallback(() => {
+    const current = getCurrentModalEvent();
+    if (!current) return;
+    // 若不在事件列表中，则在此时写入“最新事件”并标记为已读/已处理
+    setEvents(prev => {
+      const exists = prev.some(e => e.id === current.id);
+      const entry = { ...current, isRead: true, isResolved: true };
+      return exists ? prev.map(e => e.id === current.id ? entry : e) : [entry, ...prev];
+    });
+    // 出队并解锁
+    setModalQueue(prev => prev.filter(e => e.id !== current.id));
+    setCurrentModalEventId(null);
+    // 若无后续，恢复游戏
+    setTimeout(() => {
+      if (modalQueue.filter(e => e.id !== current.id).length === 0) {
+        const { resumeGame } = useGameStore.getState();
+        try { resumeGame(); } catch {}
+      }
+    }, 0);
+  }, [getCurrentModalEvent, modalQueue]);
+
+  // 通过模态进行选择
+  const chooseModalChoice = useCallback((eventId: string, choiceId: string) => {
+    // 若事件尚未入“最新事件”，先插入并标记，再执行后果
+    setEvents(prev => {
+      const exists = prev.some(e => e.id === eventId);
+      if (exists) {
+        return prev.map(e => e.id === eventId ? { ...e, isRead: true, isResolved: true, selectedChoiceId: choiceId } : e);
+      }
+      const modal = modalQueue.find(e => e.id === eventId);
+      if (!modal) return prev;
+      const entry = { ...modal, isRead: true, isResolved: true, selectedChoiceId: choiceId };
+      return [entry, ...prev];
+    });
+    // 等待一次事件入列后再应用后果，避免 handleChoice 查不到事件
+    setTimeout(() => {
+      try { handleChoice(eventId, choiceId); } catch {}
+    }, 0);
+    // 出队并恢复（若无后续）
+    setModalQueue(prev => prev.filter(e => e.id !== eventId));
+    setCurrentModalEventId(null);
+    setTimeout(() => {
+      if (modalQueue.filter(e => e.id !== eventId).length === 0) {
+        const { resumeGame } = useGameStore.getState();
+        try { resumeGame(); } catch {}
+      }
+    }, 0);
+  }, [handleChoice, modalQueue]);
+
   // 清除所有历史事件
   const clearAllEvents = useCallback(() => {
     setEvents([]);
@@ -499,6 +589,10 @@ export function useEvents() {
     getEventsByPriority,
     clearAllEvents,
     eventSystem: eventSystemRef.current,
-    isLoaded
+    isLoaded,
+    // 模态接口导出
+    modalEvent: getCurrentModalEvent(),
+    acknowledgeCurrentModal,
+    chooseModalChoice,
   };
 }
