@@ -260,7 +260,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 开发者模式 */}
+            {/* X模式（极简开关） */}
             <div className="mb-6">
               <label className="inline-flex items-center gap-3 cursor-pointer select-none">
                 <input
@@ -270,11 +270,9 @@ export default function Home() {
                     const { gameState } = useGameStore.getState();
                     const newState = structuredClone(gameState);
                     if (enable) {
-                      // 1) 解锁全部科技
                       Object.keys(newState.technologies).forEach((k) => {
                         newState.technologies[k].researched = true;
                       });
-                      // 2) 资源/人口拉满（人口=住房+1）
                       const limits = newState.resourceLimits || {};
                       const res = newState.resources || {};
                       Object.keys(limits).forEach((rk) => {
@@ -287,15 +285,13 @@ export default function Home() {
                       newState.resources = res;
                     }
                     useGameStore.setState({ gameState: newState });
-                    // 同步效果计算与产率
                     try { useGameStore.getState().updateEffectsSystem(); } catch {}
                     try { useGameStore.getState().calculateResourceRates(); } catch {}
                   }}
                   className="h-4 w-4"
                 />
-                <span className="text-sm text-gray-300">开发者模式：一键解锁科技并资源/人口拉满（测试）</span>
+                <span className="text-sm text-gray-300">X模式</span>
               </label>
-              <p className="text-gray-400 text-xs mt-1">此项为即时应用，主要用于测试体验。</p>
             </div>
 
             {/* 测试开关 */}

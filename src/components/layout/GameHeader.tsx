@@ -30,8 +30,7 @@ export function GameHeader() {
   const resetGame = useGameStore(state => state.resetGame);
   const startGame = useGameStore(state => state.startGame);
   const setActiveTab = useGameStore(state => state.setActiveTab);
-  const devMode = useGameStore(state => state.gameState.settings?.devMode);
-  const toggleDevMode = useGameStore(state => state.toggleDevMode);
+
 
   // 从gameState中获取statistics，避免未定义错误
   const statistics = gameState?.statistics || { totalPlayTime: 0 };
@@ -90,15 +89,7 @@ export function GameHeader() {
             <span className="hidden sm:inline">重置</span>
           </button>
 
-          {/* 开发者模式一键开关 */}
-          <button
-            onClick={toggleDevMode}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${devMode ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'} text-white`}
-            title="开发者模式：一键解锁科技并资源/人口拉满"
-          >
-            <span>开发者模式</span>
-            <span className="text-xs opacity-80">{devMode ? '开' : '关'}</span>
-          </button>
+
 
           <button
             onClick={() => setActiveTab('settings')}
