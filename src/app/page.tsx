@@ -15,9 +15,13 @@ import { ExplorationTab } from '@/components/features/exploration-tab';
 import { CharacterTab } from '@/components/features/character-tab';
 import { DiplomacyTab } from '@/components/features/diplomacy-tab';
 import { EventNotificationToast } from '@/components/ui/event-notification-toast';
+import { EventModal } from '@/components/ui/event-modal';
+import type { PauseEvent } from '@/types/game';
 import { EventType, type GameEvent } from '@/components/features/EventsPanel';
+import { initEventEngine } from '@/lib/events2/engine';
+import { createDomesticEventsPlugin } from '@/lib/events2/plugins/domestic';
+import { applyEffectsToGameState } from '@/lib/events2/effect-runner';
 import { isTestScoutingEnabled, setTestScoutingEnabled } from '@/lib/feature-flags';
-import EventModal from '@/components/ui/EventModal';
 
 export default function Home() {
   const startGame = useGameStore(state => state.startGame);
@@ -26,6 +30,7 @@ export default function Home() {
   const initializePersistence = useGameStore(state => state.initializePersistence);
   const pauseGame = useGameStore(state => state.pauseGame);
   const resumeGame = useGameStore(state => state.resumeGame);
+  const triggerPauseEvent = useGameStore(state => state.triggerPauseEvent);
   const gameState = useGameStore(state => state);
   // 新增：订阅设置值与对应的 setter，确保受控组件实时更新
   const pollIntervalMs = useGameStore(state => state.gameState.settings.eventsPollIntervalMs);
@@ -45,12 +50,15 @@ export default function Home() {
   const activeTab = useGameStore(state => state.uiState.activeTab);
   const setActiveTab = useGameStore(state => state.setActiveTab);
   const [isInitialized, setIsInitialized] = useState(false);
+  // 事件引擎单例
+  const engineRef = (globalThis as any).__eventEngineRef || { current: null as any };
+  (globalThis as any).__eventEngineRef = engineRef;
   const [currentNotificationEvent, setCurrentNotificationEvent] = useState<GameEvent | null>(null);
   const [hasUnreadEvents, setHasUnreadEvents] = useState(false);
   const [lastEventCount, setLastEventCount] = useState(0);
   
   // 使用事件系统（单例来源）
-  const { events, markAsRead, handleChoice, getUnresolvedChoiceEvents, clearAllEvents, modalEvent, acknowledgeCurrentModal, chooseModalChoice } = useEvents();
+  const { events, markAsRead, handleChoice, getUnresolvedChoiceEvents, clearAllEvents } = useEvents();
   
   // 启动游戏循环
   useGameLoop();
@@ -71,7 +79,7 @@ export default function Home() {
     return () => window.removeEventListener('GAME_RESET' as any, handler as any);
   }, [clearAllEvents]);
   
-  // 监听新事件并显示通知
+  // 监听新事件并显示通知：当产生选择类事件时，直接注入暂停事件队列以触发中央弹窗
   useEffect(() => {
     if (events.length > lastEventCount && isInitialized) {
       const newEvents = events.slice(0, events.length - lastEventCount);
@@ -80,12 +88,27 @@ export default function Home() {
         setCurrentNotificationEvent(latestEvent);
         if (activeTab !== 'overview') setHasUnreadEvents(true);
         if (latestEvent.type === EventType.CHOICE) {
+          // 立刻暂停
           pauseGame();
+          // 直接将旧事件桥接为暂停事件，触发中央弹窗
+          try {
+            triggerPauseEvent({
+              id: latestEvent.id,
+              title: latestEvent.title,
+              description: latestEvent.description,
+              options: (latestEvent.choices || []).map((c, idx) => ({
+                id: c.id || String(idx),
+                text: c.text || `选项 ${idx + 1}`,
+              })),
+            } as any);
+          } catch (e) {
+            console.warn('桥接 triggerPauseEvent 失败（新事件监听）:', e);
+          }
         }
       }
     }
     setLastEventCount(events.length);
-  }, [events.length, lastEventCount, isInitialized, activeTab, pauseGame]);
+  }, [events.length, lastEventCount, isInitialized, activeTab, pauseGame, triggerPauseEvent]);
   
   // 监听选择事件的解决状态，解决后允许用户继续
   useEffect(() => {
@@ -113,6 +136,87 @@ export default function Home() {
     }
   }, [activeTab]);
   
+  // 初始化事件引擎（一次）
+  useEffect(() => {
+    const engine = initEventEngine(
+      () => useGameStore.getState().gameState as any,
+      {
+        onPauseEvent: (e) => {
+          try {
+            triggerPauseEvent({
+              id: e.id,
+              title: e.title,
+              description: e.description,
+              options: e.options || [],
+            } as any);
+          } catch (err) {
+            console.warn('onPauseEvent failed', err);
+          }
+        },
+        onNotifyEvent: (e) => {
+          try {
+            // 统一通过 store 的非暂停事件接口分发
+            const { triggerNonPauseEvent } = useGameStore.getState() as any;
+            if (typeof triggerNonPauseEvent === 'function') {
+              triggerNonPauseEvent({
+                id: e.id,
+                title: e.title,
+                description: e.description,
+                priority: e.priority || 'low',
+                durationMs: e.durationMs ?? 5000,
+                category: e.category || 'notification',
+              } as any);
+            } else {
+              // 退化为使用页面内的 toast 状态
+              setCurrentNotificationEvent({
+                id: e.id,
+                title: e.title,
+                description: e.description,
+                type: EventType.NOTIFICATION,
+                priority: mapPriority(e.priority || 'low'),
+                timestamp: Date.now(),
+                duration: e.durationMs ?? 5000,
+                category: e.category || 'notification',
+                icon: e.icon,
+              } as any);
+            }
+          } catch (err) {
+            console.warn('onNotifyEvent failed', err);
+          }
+        },
+        applyEffects: (effects) => {
+          // 应用到全局 gameState（最小可用），并触发重算
+          const state = useGameStore.getState();
+          const cloned = { ...state.gameState };
+          applyEffectsToGameState(cloned as any, effects);
+          state.gameState = cloned as any;
+          state.updateEffectsSystem?.();
+          state.calculateResourceRates?.();
+          state.saveGame?.();
+        },
+        log: (msg, extra) => {
+          if (eventsDebugEnabled) {
+            console.log(msg, extra ?? '');
+          }
+        },
+      },
+      { pollIntervalMs }
+    );
+    engineRef.current = engine;
+
+    // 注册内置插件
+    engine.registerPlugin(createDomesticEventsPlugin());
+
+    // 启动
+    engine.start();
+
+    return () => {
+      engine.stop();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   // 初始化游戏和持久化功能
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -261,40 +365,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* X模式（极简开关） */}
-            <div className="mb-6">
-              <label className="inline-flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  onChange={(e) => {
-                    const enable = e.target.checked;
-                    const { gameState } = useGameStore.getState();
-                    const newState = structuredClone(gameState);
-                    if (enable) {
-                      Object.keys(newState.technologies).forEach((k) => {
-                        newState.technologies[k].researched = true;
-                      });
-                      const limits = newState.resourceLimits || {};
-                      const res = newState.resources || {};
-                      Object.keys(limits).forEach((rk) => {
-                        const lim = Number(limits[rk] ?? 0);
-                        if (rk === 'population') return;
-                        res[rk] = Math.max(res[rk] ?? 0, lim);
-                      });
-                      const housing = Number(newState.resourceLimits?.population ?? 0);
-                      res.population = Math.max(Number(res.population ?? 0), housing + 1);
-                      newState.resources = res;
-                    }
-                    useGameStore.setState({ gameState: newState });
-                    try { useGameStore.getState().updateEffectsSystem(); } catch {}
-                    try { useGameStore.getState().calculateResourceRates(); } catch {}
-                  }}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm text-gray-300">X模式</span>
-              </label>
-            </div>
-
             {/* 测试开关 */}
             <div className="mb-2">
               <label className="inline-flex items-center gap-3 cursor-pointer select-none">
@@ -338,22 +408,34 @@ export default function Home() {
         </main>
       </div>
       
-      {/* 事件通知浮框 */}
+      {/* 事件通知浮框（兼容旧事件：查看时将选择类事件注入暂停队列） */}
       <EventNotificationToast
         event={currentNotificationEvent}
         onClose={() => setCurrentNotificationEvent(null)}
         onViewEvent={() => {
+          if (currentNotificationEvent && currentNotificationEvent.type === EventType.CHOICE) {
+            try {
+              triggerPauseEvent({
+                id: currentNotificationEvent.id,
+                title: currentNotificationEvent.title,
+                description: currentNotificationEvent.description,
+                options: (currentNotificationEvent.choices || []).map((c, idx) => ({
+                  id: c.id || String(idx),
+                  text: c.text || `选项 ${idx + 1}`,
+                })),
+              } as any);
+            } catch (e) {
+              console.warn('桥接 triggerPauseEvent 失败：', e);
+            }
+          }
           setActiveTab('overview');
           setCurrentNotificationEvent(null);
           setHasUnreadEvents(false);
         }}
       />
-      {/* 中央事件弹窗：系统/通知类不弹，其余事件逐个弹窗并暂停 */}
-      <EventModal
-        event={modalEvent}
-        onClose={acknowledgeCurrentModal}
-        onSelectChoice={chooseModalChoice}
-      />
+
+      {/* 中央暂停事件弹窗 */}
+      <EventModal />
     </div>
   );
 }

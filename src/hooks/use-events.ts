@@ -79,9 +79,6 @@ export function useEvents() {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [eventIdCounter, setEventIdCounter] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
-  // 模态事件：队列 + 当前事件ID
-  const [modalQueue, setModalQueue] = useState<GameEvent[]>([]);
-  const [currentModalEventId, setCurrentModalEventId] = useState<string | null>(null);
   const gameState = useGameStore(state => state.gameState);
   // 新增：从设置读取事件轮询间隔（毫秒），默认 1000ms
   const pollInterval = useGameStore(state => state.gameState?.settings?.eventsPollIntervalMs ?? 1000);
@@ -104,67 +101,24 @@ export function useEvents() {
     }
   }, [isLoaded]);
 
-  // 当事件或计数器变化时保存到本地存储，并同步全局 store
+  // 当事件或计数器变化时保存到本地存储
   useEffect(() => {
     if (isLoaded) {
       saveEventsToStorage(events, eventIdCounter);
-      // 同步全局 store 的 events/recentEvents（双保险：即便不是通过 addEvent 改变）
-      useGameStore.setState((state) => {
-        const gs = (state as any).gameState as any;
-        if (!gs) return state as any;
-        const recent = events.slice(0, 10);
-        return {
-          gameState: {
-            ...gs,
-            events,
-            recentEvents: recent
-          }
-        } as any;
-      });
     }
   }, [events, eventIdCounter, isLoaded]);
 
-  // 判定是否需要弹窗暂停：系统/通知/骰子检定不弹，其余弹
-  const shouldPopupPause = (e: Omit<GameEvent, 'id' | 'timestamp'>): boolean => {
-    const cat = String(e.category || '').toLowerCase();
-    if (!cat || cat === 'notification' || cat === 'system' || cat === 'dice_check') return false;
-    return true;
-  };
-
-  // 添加新事件（并同步到全局 store 的 gameState.events/recentEvents）
+  // 添加新事件
   const addEvent = useCallback((eventData: Omit<GameEvent, 'id' | 'timestamp'>) => {
-    const popupPause = shouldPopupPause(eventData);
     const newEvent: GameEvent = {
       ...eventData,
       id: `event_${eventIdCounter}`,
       timestamp: Date.now(),
       isRead: false,
-      // 不需要弹窗的通知型直接视为已处理；需要弹窗的由确认/选择后置为已处理
-      isResolved: eventData.type === EventType.NOTIFICATION && !popupPause
+      isResolved: eventData.type === EventType.NOTIFICATION // 提示事件自动标记为已处理
     };
 
-    setEvents(prev => {
-      // 需要弹窗：仅入模态队列，不写入最新事件，等待玩家点击后再入栏
-      if (popupPause) {
-        setModalQueue(q => [...q, newEvent]);
-        return prev;
-      }
-      // 不需要弹窗：直接入最新事件
-      const next = [newEvent, ...prev];
-      useGameStore.setState((state) => {
-        const gs = (state as any).gameState as any;
-        if (!gs) return state as any;
-        const recent = next.slice(0, 10);
-        return {
-          gameState: {
-            ...gs,
-            events: next,
-            recentEvents: recent
-          }
-        } as any;
-      });
-      return next;
-    });
+    setEvents(prev => [newEvent, ...prev]);
     setEventIdCounter(prev => prev + 1);
     
     return newEvent.id;
@@ -422,22 +376,11 @@ export function useEvents() {
     }
   }, [gameState]);
 
-  // 订阅来自全局的通知事件，将其转换为非选择事件并纳入事件流（加节流去重）
+  // 订阅来自全局的通知事件，将其转换为非选择事件并纳入事件流
   useEffect(() => {
-    const lastNotifRef = { key: '', ts: 0 }; // 简单节流：20 秒内相同 key 不重复
     const handler = (e: Event) => {
       const custom = e as CustomEvent<any>;
       const data = custom.detail || {};
-      const title = data.title || '通知';
-      const message = data.message || '';
-      const key = `${title}::${message}`;
-      const now = Date.now();
-      if (lastNotifRef.key === key && now - lastNotifRef.ts < 20000) {
-        return; // 丢弃短时间内重复的相同通知
-      }
-      lastNotifRef.key = key;
-      lastNotifRef.ts = now;
-
       // 映射 Notification -> GameEvent
       const priorityMap: Record<string, EventPriority> = {
         info: EventPriority.LOW,
@@ -447,8 +390,8 @@ export function useEvents() {
       };
       const type: EventType = EventType.NOTIFICATION;
       const eventData = {
-        title,
-        description: message,
+        title: data.title || '通知',
+        description: data.message || '',
         type,
         priority: priorityMap[data.type] ?? EventPriority.LOW,
         duration: data.duration ?? 5000,
@@ -496,79 +439,6 @@ export function useEvents() {
     return () => clearInterval(interval);
   }, [cleanupExpiredEvents]);
 
-  // ========= 模态事件：当前事件/暂停/确认/选择 =========
-  const getCurrentModalEvent = useCallback((): GameEvent | null => {
-    if (currentModalEventId) {
-      // 先在已入栏事件中查找，若未入栏（需弹窗事件），再到队列中查找
-      const inEvents = events.find(e => e.id === currentModalEventId);
-      if (inEvents) return inEvents;
-      const inQueue = modalQueue.find(e => e.id === currentModalEventId);
-      if (inQueue) return inQueue;
-      return null;
-    }
-    return modalQueue.length > 0 ? modalQueue[0] : null;
-  }, [currentModalEventId, modalQueue, events]);
-
-  // 队列出现时，锁定当前事件并暂停
-  useEffect(() => {
-    if (modalQueue.length > 0 && !currentModalEventId) {
-      const first = modalQueue[0];
-      setCurrentModalEventId(first.id);
-      const { pauseGame } = useGameStore.getState();
-      try { pauseGame(); } catch {}
-    }
-  }, [modalQueue.length, currentModalEventId]);
-
-  // 关闭当前模态（用于无选项事件“知道了”）
-  const acknowledgeCurrentModal = useCallback(() => {
-    const current = getCurrentModalEvent();
-    if (!current) return;
-    // 若不在事件列表中，则在此时写入“最新事件”并标记为已读/已处理
-    setEvents(prev => {
-      const exists = prev.some(e => e.id === current.id);
-      const entry = { ...current, isRead: true, isResolved: true };
-      return exists ? prev.map(e => e.id === current.id ? entry : e) : [entry, ...prev];
-    });
-    // 出队并解锁
-    setModalQueue(prev => prev.filter(e => e.id !== current.id));
-    setCurrentModalEventId(null);
-    // 若无后续，恢复游戏
-    setTimeout(() => {
-      if (modalQueue.filter(e => e.id !== current.id).length === 0) {
-        const { resumeGame } = useGameStore.getState();
-        try { resumeGame(); } catch {}
-      }
-    }, 0);
-  }, [getCurrentModalEvent, modalQueue]);
-
-  // 通过模态进行选择
-  const chooseModalChoice = useCallback((eventId: string, choiceId: string) => {
-    // 若事件尚未入“最新事件”，先插入并标记，再执行后果
-    setEvents(prev => {
-      const exists = prev.some(e => e.id === eventId);
-      if (exists) {
-        return prev.map(e => e.id === eventId ? { ...e, isRead: true, isResolved: true, selectedChoiceId: choiceId } : e);
-      }
-      const modal = modalQueue.find(e => e.id === eventId);
-      if (!modal) return prev;
-      const entry = { ...modal, isRead: true, isResolved: true, selectedChoiceId: choiceId };
-      return [entry, ...prev];
-    });
-    // 等待一次事件入列后再应用后果，避免 handleChoice 查不到事件
-    setTimeout(() => {
-      try { handleChoice(eventId, choiceId); } catch {}
-    }, 0);
-    // 出队并恢复（若无后续）
-    setModalQueue(prev => prev.filter(e => e.id !== eventId));
-    setCurrentModalEventId(null);
-    setTimeout(() => {
-      if (modalQueue.filter(e => e.id !== eventId).length === 0) {
-        const { resumeGame } = useGameStore.getState();
-        try { resumeGame(); } catch {}
-      }
-    }, 0);
-  }, [handleChoice, modalQueue]);
-
   // 清除所有历史事件
   const clearAllEvents = useCallback(() => {
     setEvents([]);
@@ -589,10 +459,6 @@ export function useEvents() {
     getEventsByPriority,
     clearAllEvents,
     eventSystem: eventSystemRef.current,
-    isLoaded,
-    // 模态接口导出
-    modalEvent: getCurrentModalEvent(),
-    acknowledgeCurrentModal,
-    chooseModalChoice,
+    isLoaded
   };
 }

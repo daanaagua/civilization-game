@@ -14,6 +14,7 @@ interface SidebarProps {}
 
 export function Sidebar({}: SidebarProps) {
   const { gameState, clickResource } = useGameStore();
+  const isRunning = useGameStore(state => state.isRunning);
   const { resources, stability } = gameState;
   // 统一人口选择器（零侵入适配现有 store）
   const provider = useMemo(() => makeGameStorePopulationProvider(), []);
@@ -78,8 +79,14 @@ export function Sidebar({}: SidebarProps) {
 
     // 可见性：人口/住房始终显示；devMode 全显；否则 解锁/数值非0/速率非0
     const visible = ordered.filter((key) => {
+      // 始终显示：人口 + 基础资源（木材/石料/食物）
       if (key === 'population') return true;
+      if (['wood', 'stone', 'food'].includes(key)) return true;
+
+      // 开发者模式：全显
       if (settings?.devMode) return true;
+
+      // 常规：解锁 或 数值非0 或 速率非0
       const isUnlocked = Array.isArray(unlockedResources) && unlockedResources.includes(key);
       const amount = (resources as any)?.[key] ?? 0;
       const rate = key === 'housing' ? 0 : ((((resourceRates || {}) as any)[key] ?? 0) as number);
@@ -90,8 +97,8 @@ export function Sidebar({}: SidebarProps) {
       const cfg = (resourceConfig as any)[key];
       const label = cfg?.name || key;
 
-      const clickable = (key === 'food' || key === 'wood' || key === 'stone');
-      const onClick = () => { if (clickable) clickResource(key as any); };
+      const canClick = (key === 'food' || key === 'wood' || key === 'stone') && isRunning && !gameState.isPaused;
+      const onClick = () => { if (canClick) clickResource(key as any); };
 
       const amount = (resources as any)?.[key] ?? 0;
       const limit = key === 'population'
@@ -105,7 +112,7 @@ export function Sidebar({}: SidebarProps) {
       return (
         <Tooltip key={key} content={<ResourceDetailsTooltip resource={key as any} />}>
           <div
-            className={`inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white ${clickable ? 'cursor-pointer hover:scale-105 hover:shadow-lg' : ''} bg-gray-800 border-gray-600 select-none transition-all duration-200`}
+            className={`inline-flex items-center justify-between w-full px-3 py-2 rounded-md border text-sm font-medium text-white ${canClick ? 'cursor-pointer hover:scale-105 hover:shadow-lg' : ''} bg-gray-800 border-gray-600 select-none transition-all duration-200`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={onClick}
           >

@@ -1833,11 +1833,12 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     showEvent: (event) => {
+      // 非玩法提示：不打开中央弹窗，仅保留通知/历史的职责
       set((state) => ({
         uiState: {
           ...state.uiState,
-          showEventModal: true,
-          currentEvent: event,
+          showEventModal: state.uiState.showEventModal,
+          currentEvent: state.uiState.currentEvent,
         },
       }));
     },
@@ -2142,9 +2143,9 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     clickResource: (resourceType: 'food' | 'wood' | 'stone') => {
-      const { isRunning } = get();
-      
-      // 只有在游戏运行时才能点击资源
+      const { isRunning, gameState } = get();
+
+      // 仅在“已开始且未暂停”时可点击收集
       if (!isRunning) {
         get().addNotification({
           type: 'warning',
@@ -2154,11 +2155,20 @@ export const useGameStore = create<GameStore>()(persist(
         });
         return;
       }
+      if (gameState.isPaused) {
+        get().addNotification({
+          type: 'warning',
+          title: '游戏已暂停',
+          message: '请先恢复游戏再收集资源',
+          duration: 3000,
+        });
+        return;
+      }
       
-      const { gameState } = get();
+      const state = get();
       const newResources = {
-        ...gameState.resources,
-        [resourceType]: gameState.resources[resourceType] + 1,
+        ...state.gameState.resources,
+        [resourceType]: state.gameState.resources[resourceType] + 1,
       };
       
       set((state) => ({
@@ -2522,73 +2532,43 @@ export const useGameStore = create<GameStore>()(persist(
 
     // 随机事件系统
     checkRandomEvents: () => {
-      const state = get().gameState;
-      
-      // 遍历所有随机事件
-      Object.values(RANDOM_EVENTS).forEach(event => {
-        // 检查事件触发条件
-        let canTrigger = true;
-        
-        // 检查资源需求（兼容 number 与 {min:number}）
-        if (event.requirements && 'resources' in event.requirements && event.requirements.resources) {
-          for (const [resource, amount] of Object.entries(event.requirements.resources as any)) {
-            const need = typeof amount === 'number'
-              ? amount
-              : (amount && typeof amount === 'object' && 'min' in amount ? (amount as any).min : Number(amount));
-            if (state.resources[resource as keyof Resources] < Number(need)) {
-              canTrigger = false;
-              break;
-            }
+      // 开局5年保护；之后每隔1~3年，仅在新年(1月1日)触发一次“境内随机事件”（排除角色专属）
+      const s = get().gameState;
+      const { year, month, day } = s.timeSystem.currentDate || { year: 1, month: 1, day: 1 };
+
+      // 读取/初始化事件调度器
+      const sched: any = (s as any).eventSchedule || {};
+      let nextYear = typeof sched.nextDomesticEventYear === 'number' ? sched.nextDomesticEventYear : undefined;
+
+      // 初次设定（过了保护期后）
+      if (!nextYear && year >= 6) {
+        nextYear = year + (Math.floor(Math.random() * 3) + 1); // 1~3年后
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            eventSchedule: { ...(state.gameState as any).eventSchedule, nextDomesticEventYear: nextYear }
+          }
+        }) as any);
+      }
+
+      // 到点触发：仅在新年第一天
+      if (nextYear && year >= nextYear && month === 1 && day === 1) {
+        const pool = Object.values(RANDOM_EVENTS).filter((e: any) => !e?.requirements?.characters);
+        if (pool.length > 0) {
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          if (pick) {
+            get().triggerRandomEvent(pick.id);
           }
         }
-        
-        // 检查建筑需求（支持 has 列表或计数字典）
-        if (canTrigger && event.requirements && 'buildings' in event.requirements && (event.requirements as any).buildings) {
-          const reqB = (event.requirements as any).buildings;
-          if (reqB.has && Array.isArray(reqB.has)) {
-            for (const bId of reqB.has as string[]) {
-              if (get().getBuildingCount(bId) < 1) {
-                canTrigger = false;
-                break;
-              }
-            }
-          } else {
-            for (const [buildingId, count] of Object.entries(reqB as Record<string, number>)) {
-              const need = Number(count as any);
-              if (get().getBuildingCount(buildingId) < need) {
-                canTrigger = false;
-                break;
-              }
-            }
+        // 设定下一次
+        const nxt = year + (Math.floor(Math.random() * 3) + 1);
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            eventSchedule: { ...(state.gameState as any).eventSchedule, nextDomesticEventYear: nxt }
           }
-        }
-        
-        // 检查科技需求
-        if (canTrigger && event.requirements && 'technologies' in event.requirements && (event.requirements as any).technologies) {
-          for (const techId of ((event.requirements as any).technologies as string[])) {
-            if (!state.technologies[techId]?.researched) {
-              canTrigger = false;
-              break;
-            }
-          }
-        }
-        
-        // 检查人口需求（兼容 number 与 {min:number}）
-        if (event.requirements?.population && canTrigger) {
-          const pReq = event.requirements.population as any;
-          const minNeed = typeof pReq === 'number'
-            ? pReq
-            : (pReq && typeof pReq === 'object' && 'min' in pReq ? Number(pReq.min) : Number(pReq));
-          if (state.resources.population < Number(minNeed)) {
-            canTrigger = false;
-          }
-        }
-        
-        // 如果满足条件，按概率触发事件
-        if (canTrigger && Math.random() < event.probability) {
-          get().triggerRandomEvent(event.id);
-        }
-      });
+        }) as any);
+      }
     },
 
     triggerRandomEvent: (eventId: string) => {
@@ -3054,10 +3034,16 @@ export const useGameStore = create<GameStore>()(persist(
     // 事件处理函数
     triggerPauseEvent: (event: PauseEvent) => {
       const pauseEvent = event as PauseEvent;
+      const ts = Date.now();
       set((state) => ({
         gameState: {
           ...state.gameState,
-          activeEvents: [...state.gameState.activeEvents, { event: pauseEvent, triggeredAt: Date.now() }],
+          activeEvents: [...state.gameState.activeEvents, { event: pauseEvent, triggeredAt: ts }],
+        },
+        uiState: {
+          ...state.uiState,
+          showEventModal: true,
+          currentEvent: pauseEvent as any,
         },
       }));
       // 暂停游戏
@@ -3095,30 +3081,64 @@ export const useGameStore = create<GameStore>()(persist(
     handlePauseEventChoice: (eventId: string, choiceIndex: number) => {
       const state = get();
       const active = state.gameState.activeEvents.find(e => e.event.id === eventId);
-      if (!active || !active.event?.options) return;
+      if (!active || !active.event) return;
 
-      const choice = active.event.options[choiceIndex];
+      const ev: any = active.event;
+      const choice = Array.isArray(ev.options) ? ev.options[choiceIndex] : undefined;
+
+      // 1) 应用效果
       if (choice && (choice as any).effects) {
-        // 兼容旧/新效果结构
         get().applyEventEffects((choice as any).effects);
       }
 
-      // 移除事件
+      // 2) 写入历史与“最新事件”
+      const timestamp = Date.now();
+      set((s) => {
+        const historyItem: any = {
+          id: `${ev.id}_${timestamp}`,
+          title: ev.title || ev.name || '事件',
+          description: choice?.text ? `已选择：${choice.text}` : (ev.description || ''),
+          type: 'choice',
+          priority: ev.priority || 'medium',
+          timestamp,
+          isRead: false,
+          isResolved: true
+        };
+        const newRecent = [...s.gameState.recentEvents, historyItem];
+        while (newRecent.length > 3) newRecent.shift();
+        return {
+          gameState: {
+            ...s.gameState,
+            events: [...s.gameState.events, historyItem],
+            recentEvents: newRecent
+          }
+        };
+      });
+
+      // 3) 关闭当前事件（从活跃移除），并根据队列决定是否继续显示或恢复游戏
       get().dismissPauseEvent(eventId);
     },
 
     dismissPauseEvent: (eventId: string) => {
-      set((state) => ({
-        gameState: {
-          ...state.gameState,
-          activeEvents: state.gameState.activeEvents.filter(e => e.event.id !== eventId),
-        },
-      }));
+      set((state) => {
+        const remaining = state.gameState.activeEvents.filter(e => e.event.id !== eventId);
+        const nextEvent = remaining.length > 0 ? remaining[0].event : undefined;
+        return {
+          gameState: {
+            ...state.gameState,
+            activeEvents: remaining,
+          },
+          uiState: {
+            ...state.uiState,
+            showEventModal: !!nextEvent,
+            currentEvent: nextEvent as any
+          }
+        };
+      });
       
-      // 如果没有更多暂停事件，可以恢复游戏
-      const newState = get();
-      if (newState.gameState.activeEvents.length === 0) {
-        get().startGame();
+      // 队列清空后恢复游戏
+      if (get().gameState.activeEvents.length === 0) {
+        get().resumeGame();
       }
     },
 
