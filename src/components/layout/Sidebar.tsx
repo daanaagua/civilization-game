@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 import { createPopulationSelectors } from '@/lib/slices';
 import { makeGameStorePopulationProvider } from '@/lib/adapters/population-adapter';
 import { resourceConfig } from '@/lib/resource-config';
+import { EffectType } from '@/lib/effects-system';
 
 interface SidebarProps {}
 
@@ -21,7 +22,11 @@ export function Sidebar({}: SidebarProps) {
   const selectors = useMemo(() => createPopulationSelectors(provider), [provider]);
   const overview = useGameStore(state => selectors.getOverview(state));
   
-  // 使用游戏状态中的实际腐败度
+  // 使用效果系统加总后的稳定度/腐败度
+  const stabilityTotal = useGameStore(state => state.gameState.stability);
+  const corruptionTotal = useGameStore(state => state.calculateEffectTotal(EffectType.CORRUPTION));
+  
+  // 使用游戏状态中的实际腐败度（保留原始值供需要时参考）
   const corruption = gameState.corruption;
   
   // 稳定度效果计算
@@ -152,7 +157,7 @@ export function Sidebar({}: SidebarProps) {
                  <div className="flex items-center">
                    <span>稳定度</span>
                  </div>
-                 <span className="font-bold">{stability.toFixed(2)}</span>
+                 <span className="font-bold">{stabilityTotal.toFixed(2)}</span>
                </div>
             </StatusDetailsTooltip>
             
@@ -165,7 +170,7 @@ export function Sidebar({}: SidebarProps) {
                  <div className="flex items-center">
                    <span>腐败度</span>
                  </div>
-                 <span className="font-bold">{corruption}</span>
+                 <span className="font-bold">{corruptionTotal.toFixed(2)}</span>
                </div>
             </StatusDetailsTooltip>
           </div>

@@ -271,9 +271,7 @@ export function useEvents() {
               }
               break;
             case 'stability':
-              if (typeof newGameState.stability === 'number') {
-                newGameState.stability = Math.max(0, Math.min(100, Number(newGameState.stability ?? 0) + delta));
-              }
+              // 稳定度不做即时修改，也不在此处创建临时效果；交由 game-store 统一处理，避免重复标签
               break;
             default:
               // 其他类型暂不处理

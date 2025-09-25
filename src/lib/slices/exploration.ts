@@ -5,6 +5,23 @@ export interface DiscoveredLocation {
   data?: any;
 }
 
+export interface AdventureNodeLite {
+  id: string;
+  order: number;
+  kind: 'minor' | 'final';
+  etaDay: number;
+  resolved?: boolean;
+}
+
+export interface AdventureRunLite {
+  id: string;
+  totalSP: number;
+  currentSP: number;
+  startedAtDay: number;
+  nodes: AdventureNodeLite[];
+  finished?: boolean;
+}
+
 export interface ExplorationState {
   discoveredLocations: {
     dungeons: DiscoveredLocation[];
@@ -13,6 +30,7 @@ export interface ExplorationState {
   };
   explorationHistory: any[];
   explorationPoints?: number; // 历史可能不存在
+  activeAdventureRun?: AdventureRunLite | null; // 新增：当前一次冒险运行态
 }
 
 export interface ExplorationSelectors {
@@ -21,6 +39,8 @@ export interface ExplorationSelectors {
   getDungeons: () => DiscoveredLocation[];
   getCountries: () => DiscoveredLocation[];
   getEventPlaces: () => DiscoveredLocation[];
+  getActiveAdventure: () => AdventureRunLite | null;
+  getAdventureProgress: () => { totalNodes: number; resolved: number; finalEta?: number } | null;
 }
 
 export function createExplorationSelectors(stateProvider: () => { exploration?: ExplorationState }): ExplorationSelectors {
@@ -35,6 +55,15 @@ export function createExplorationSelectors(stateProvider: () => { exploration?: 
     getPoints: () => Number(safe().explorationPoints ?? 0),
     getDungeons: () => safe().discoveredLocations?.dungeons ?? [],
     getCountries: () => safe().discoveredLocations?.countries ?? [],
-    getEventPlaces: () => safe().discoveredLocations?.events ?? []
+    getEventPlaces: () => safe().discoveredLocations?.events ?? [],
+    getActiveAdventure: () => safe().activeAdventureRun ?? null,
+    getAdventureProgress: () => {
+      const run = safe().activeAdventureRun;
+      if (!run) return null;
+      const totalNodes = run.nodes?.length ?? 0;
+      const resolved = run.nodes?.filter(n => n.resolved)?.length ?? 0;
+      const finalEta = run.nodes?.find(n => n.kind === 'final')?.etaDay;
+      return { totalNodes, resolved, finalEta };
+    }
   };
 }

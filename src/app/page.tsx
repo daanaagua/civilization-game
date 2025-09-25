@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useGameStore } from '@/lib/game-store';
 import { useGameLoop } from '@/hooks/use-game-loop';
-import { useEvents } from '@/hooks/use-events';
+
 import { GameHeader } from '@/components/layout/GameHeader';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TabNavigation } from '@/components/layout/TabNavigation';
@@ -14,210 +14,77 @@ import { MilitaryTab } from '@/components/features/military-tab';
 import { ExplorationTab } from '@/components/features/exploration-tab';
 import { CharacterTab } from '@/components/features/character-tab';
 import { DiplomacyTab } from '@/components/features/diplomacy-tab';
-import { EventNotificationToast } from '@/components/ui/event-notification-toast';
+
 import { EventModal } from '@/components/ui/event-modal';
-import type { PauseEvent } from '@/types/game';
-import { EventType, type GameEvent } from '@/components/features/EventsPanel';
-import { initEventEngine } from '@/lib/events2/engine';
-import { createDomesticEventsPlugin } from '@/lib/events2/plugins/domestic';
-import { applyEffectsToGameState } from '@/lib/events2/effect-runner';
 import { isTestScoutingEnabled, setTestScoutingEnabled } from '@/lib/feature-flags';
 
+// 新事件系统（已迁移至 '@/lib/events'）
+import { enableEventsV2, pushEventV2, registerEventSourceV2 } from '@/lib/events/bootstrap';
+import { getEventEngineV2 } from '@/lib/events/core';
+import { createAdventureV2Source } from '@/lib/events/sources/adventure';
+import { createDomesticV2Source } from '@/lib/events/sources/domestic';
+
 export default function Home() {
-  const startGame = useGameStore(state => state.startGame);
-  // 移除不存在的 gameStartTime 选择器
   const loadGame = useGameStore(state => state.loadGame);
   const initializePersistence = useGameStore(state => state.initializePersistence);
-  const pauseGame = useGameStore(state => state.pauseGame);
-  const resumeGame = useGameStore(state => state.resumeGame);
-  const triggerPauseEvent = useGameStore(state => state.triggerPauseEvent);
-  const gameState = useGameStore(state => state);
-  // 新增：订阅设置值与对应的 setter，确保受控组件实时更新
+
+  const gameStateStore = useGameStore(state => state);
+  const activeTab = useGameStore(state => state.uiState.activeTab);
+  const setActiveTab = useGameStore(state => state.setActiveTab);
+
+  // 设置项
   const pollIntervalMs = useGameStore(state => state.gameState.settings.eventsPollIntervalMs);
   const setPollIntervalMs = useGameStore(state => state.setEventsPollIntervalMs);
   const eventsDebugEnabled = useGameStore(state => state.gameState.settings.eventsDebugEnabled);
   const setEventsDebugEnabled = useGameStore(state => state.setEventsDebugEnabled);
-  // 游戏速度
   const gameSpeed = useGameStore(state => state.gameState.settings.gameSpeed);
   const setGameSpeed = useGameStore(state => state.setGameSpeed);
+
   // 测试开关（localStorage 持久化）
   const [testScouting, setTestScouting] = useState<boolean>(isTestScoutingEnabled());
   const handleToggleTestScouting = (v: boolean) => {
     setTestScouting(v);
     setTestScoutingEnabled(v);
   };
-  // 使用全局的 activeTab 与 setActiveTab，避免与其它组件（如 GameHeader）脱节
-  const activeTab = useGameStore(state => state.uiState.activeTab);
-  const setActiveTab = useGameStore(state => state.setActiveTab);
+
   const [isInitialized, setIsInitialized] = useState(false);
-  // 事件引擎单例
-  const engineRef = (globalThis as any).__eventEngineRef || { current: null as any };
-  (globalThis as any).__eventEngineRef = engineRef;
-  const [currentNotificationEvent, setCurrentNotificationEvent] = useState<GameEvent | null>(null);
-  const [hasUnreadEvents, setHasUnreadEvents] = useState(false);
-  const [lastEventCount, setLastEventCount] = useState(0);
-  
-  // 使用事件系统（单例来源）
-  const { events, markAsRead, handleChoice, getUnresolvedChoiceEvents, clearAllEvents } = useEvents();
-  
+
   // 启动游戏循环
   useGameLoop();
 
-  // 监听 GAME_RESET 清空历史事件与UI提示
+  // 初始化事件系统 V2（一次）
   useEffect(() => {
-    const handler = () => {
-      try {
-        clearAllEvents();
-      } catch (e) {
-        console.warn('清空事件时出错:', e);
-      }
-      setCurrentNotificationEvent(null);
-      setHasUnreadEvents(false);
-      setLastEventCount(0);
-    };
-    window.addEventListener('GAME_RESET' as any, handler as any);
-    return () => window.removeEventListener('GAME_RESET' as any, handler as any);
-  }, [clearAllEvents]);
-  
-  // 监听新事件并显示通知：当产生选择类事件时，直接注入暂停事件队列以触发中央弹窗
-  useEffect(() => {
-    if (events.length > lastEventCount && isInitialized) {
-      const newEvents = events.slice(0, events.length - lastEventCount);
-      const latestEvent = newEvents[0];
-      if (latestEvent) {
-        setCurrentNotificationEvent(latestEvent);
-        if (activeTab !== 'overview') setHasUnreadEvents(true);
-        if (latestEvent.type === EventType.CHOICE) {
-          // 立刻暂停
-          pauseGame();
-          // 直接将旧事件桥接为暂停事件，触发中央弹窗
-          try {
-            triggerPauseEvent({
-              id: latestEvent.id,
-              title: latestEvent.title,
-              description: latestEvent.description,
-              options: (latestEvent.choices || []).map((c, idx) => ({
-                id: c.id || String(idx),
-                text: c.text || `选项 ${idx + 1}`,
-              })),
-            } as any);
-          } catch (e) {
-            console.warn('桥接 triggerPauseEvent 失败（新事件监听）:', e);
-          }
-        }
-      }
-    }
-    setLastEventCount(events.length);
-  }, [events.length, lastEventCount, isInitialized, activeTab, pauseGame, triggerPauseEvent]);
-  
-  // 监听选择事件的解决状态，解决后允许用户继续
-  useEffect(() => {
-    const unresolvedChoiceEvents = getUnresolvedChoiceEvents();
-    if (unresolvedChoiceEvents.length > 0 && !gameState.gameState.isPaused && isInitialized) {
-      pauseGame();
-    }
-    // 如果没有未解决的选择事件且当前是暂停状态，则不强制保持暂停
-    // 让用户点击继续按钮可以恢复
-  }, [events, getUnresolvedChoiceEvents, gameState.gameState.isPaused, isInitialized, pauseGame]);
-
-  // 新增：当当前通知事件被解决或从列表中移除时，自动关闭通知浮窗
-  useEffect(() => {
-    if (!currentNotificationEvent) return;
-    const latest = events.find(e => e.id === currentNotificationEvent.id);
-    // 事件被移除或已解决 -> 关闭通知
-    if (!latest || (latest.type === EventType.CHOICE && latest.isResolved)) {
-      setCurrentNotificationEvent(null);
-    }
-  }, [events, currentNotificationEvent]);
-  // 切换到概览选项卡时清除红点
-  useEffect(() => {
-    if (activeTab === 'overview') {
-      setHasUnreadEvents(false);
-    }
-  }, [activeTab]);
-  
-  // 初始化事件引擎（一次）
-  useEffect(() => {
-    const engine = initEventEngine(
-      () => useGameStore.getState().gameState as any,
-      {
-        onPauseEvent: (e) => {
-          try {
-            triggerPauseEvent({
-              id: e.id,
-              title: e.title,
-              description: e.description,
-              options: e.options || [],
-            } as any);
-          } catch (err) {
-            console.warn('onPauseEvent failed', err);
-          }
-        },
-        onNotifyEvent: (e) => {
-          try {
-            // 统一通过 store 的非暂停事件接口分发
-            const { triggerNonPauseEvent } = useGameStore.getState() as any;
-            if (typeof triggerNonPauseEvent === 'function') {
-              triggerNonPauseEvent({
-                id: e.id,
-                title: e.title,
-                description: e.description,
-                priority: e.priority || 'low',
-                durationMs: e.durationMs ?? 5000,
-                category: e.category || 'notification',
-              } as any);
-            } else {
-              // 退化为使用页面内的 toast 状态
-              setCurrentNotificationEvent({
-                id: e.id,
-                title: e.title,
-                description: e.description,
-                type: EventType.NOTIFICATION,
-                priority: mapPriority(e.priority || 'low'),
-                timestamp: Date.now(),
-                duration: e.durationMs ?? 5000,
-                category: e.category || 'notification',
-                icon: e.icon,
-              } as any);
-            }
-          } catch (err) {
-            console.warn('onNotifyEvent failed', err);
-          }
-        },
-        applyEffects: (effects) => {
-          // 应用到全局 gameState（最小可用），并触发重算
-          const state = useGameStore.getState();
-          const cloned = { ...state.gameState };
-          applyEffectsToGameState(cloned as any, effects);
-          state.gameState = cloned as any;
-          state.updateEffectsSystem?.();
-          state.calculateResourceRates?.();
-          state.saveGame?.();
-        },
-        log: (msg, extra) => {
-          if (eventsDebugEnabled) {
-            console.log(msg, extra ?? '');
-          }
-        },
-      },
-      { pollIntervalMs }
+    // 注入 zustand 的 getState/setState，保证在任何选项卡都能弹窗
+    enableEventsV2(
+      { getState: useGameStore.getState, setState: useGameStore.setState },
+      pollIntervalMs
     );
-    engineRef.current = engine;
+    // 注册冒险事件源
+    registerEventSourceV2(createAdventureV2Source({
+      getState: useGameStore.getState,
+      setState: useGameStore.setState
+    }));
+    // 注册境内事件源
+    registerEventSourceV2(createDomesticV2Source({
+      getState: useGameStore.getState,
+      setState: useGameStore.setState
+    }));
 
-    // 注册内置插件
-    engine.registerPlugin(createDomesticEventsPlugin());
-
-    // 启动
-    engine.start();
-
-    return () => {
-      engine.stop();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 暴露调试入口：window.eventsV2.push({kind:'choice'|'notification', ...})
+    const w = (globalThis as any);
+    if (w.eventsV2) {
+      w.eventsV2.push = pushEventV2;
+    } else {
+      w.eventsV2 = {
+        engine: getEventEngineV2(),
+        push: pushEventV2
+      };
+    }
+    // 这里不重启 scheduler，以保持最小侵入
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
-  // 初始化游戏和持久化功能
+  // 初始化游戏与持久化（一次）
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const timer = setTimeout(() => {
@@ -229,12 +96,12 @@ export default function Home() {
         }
         initializePersistence();
         setIsInitialized(true);
-        console.log('游戏初始化完成 - 每10秒自动保存');
+        console.log('游戏初始化完成 —— 每 10 秒自动保存');
       }, 100);
       return () => clearTimeout(timer);
     }
   }, [loadGame, initializePersistence]);
-  
+
   // 在状态恢复前显示加载状态
   if (!isInitialized) {
     return (
@@ -248,6 +115,11 @@ export default function Home() {
     );
   }
 
+  const events: any[] = [];
+  const hasUnreadEvents = false;
+  const markAsRead = () => {};
+  const handleChoice = () => {};
+
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
@@ -260,11 +132,11 @@ export default function Home() {
         return (
           <MilitaryTab
             gameState={{
-              resources: (gameState.gameState.resources as unknown) as Record<string, number>,
-              population: gameState.gameState.resources.population,
-              maxPopulation: gameState.gameState.resourceLimits.population,
-              military: gameState.gameState.military,
-              technologies: gameState.gameState.technologies,
+              resources: (gameStateStore.gameState.resources as unknown) as Record<string, number>,
+              population: gameStateStore.gameState.resources.population,
+              maxPopulation: gameStateStore.gameState.resourceLimits.population,
+              military: gameStateStore.gameState.military,
+              technologies: gameStateStore.gameState.technologies,
             }}
             onUpdateGameState={() => {}}
           />
@@ -273,11 +145,11 @@ export default function Home() {
         return (
           <ExplorationTab
             gameState={{
-              resources: (gameState.gameState.resources as unknown) as Record<string, number>,
-              population: gameState.gameState.resources.population,
-              maxPopulation: gameState.gameState.resourceLimits.population,
-              military: gameState.gameState.military,
-              exploration: gameState.gameState.exploration,
+              resources: (gameStateStore.gameState.resources as unknown) as Record<string, number>,
+              population: gameStateStore.gameState.resources.population,
+              maxPopulation: gameStateStore.gameState.resourceLimits.population,
+              military: gameStateStore.gameState.military,
+              exploration: gameStateStore.gameState.exploration,
             }}
             onUpdateGameState={() => {}}
           />
@@ -285,7 +157,7 @@ export default function Home() {
       case 'characters':
         return <CharacterTab />;
       case 'diplomacy':
-        return <DiplomacyTab gameState={gameState.gameState} onUpdateGameState={() => {}} />;
+        return <DiplomacyTab gameState={gameStateStore.gameState} onUpdateGameState={() => {}} />;
       case 'settings':
         return (
           <div className="bg-gray-800 rounded-lg p-6">
@@ -330,7 +202,7 @@ export default function Home() {
                 />
                 <span className="text-gray-400 text-sm">200 - 10000</span>
               </div>
-              <p className="text-gray-400 text-xs mt-2">数值越小，检查频率越高（更实时，略增开销）；数值越大，检查频率越低（更省电）。</p>
+              <p className="text-gray-400 text-xs mt-2">数值越小检查频率越高（更实时，略增开销）；数值越大检查频率越低（更省电）。</p>
             </div>
 
             {/* 事件调试日志开关 */}
@@ -345,18 +217,18 @@ export default function Home() {
                 />
                 <span className="text-sm text-gray-300">启用事件系统调试日志</span>
               </label>
-              <p className="text-gray-400 text-xs mt-1">开启后将输出境内事件触发计算（概率、时间间隔）与实际触发记录，便于排查问题。</p>
+              <p className="text-gray-400 text-xs mt-1">开启后将输出境内事件触发计算与实际触发记录，便于排查问题。</p>
             </div>
 
             {/* 游戏速度 */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-300 mb-2">游戏速度</label>
               <div className="flex items-center gap-2">
-                {[1,5,10,50].map(sp => (
+                {[1, 5, 10, 50].map(sp => (
                   <button
                     key={sp}
                     onClick={() => setGameSpeed(sp)}
-                    className={`px-3 py-1 rounded text-sm ${gameSpeed===sp ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                    className={`px-3 py-1 rounded text-sm ${gameSpeed === sp ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
                   >
                     {sp}x
                   </button>
@@ -374,7 +246,7 @@ export default function Home() {
                   onChange={(e) => handleToggleTestScouting(e.target.checked)}
                   className="h-4 w-4"
                 />
-                <span className="text-sm text-gray-300">开局自动研究“侦察学”并赠送3名斥候（测试）</span>
+                <span className="text-sm text-gray-300">开局自动研究“侦察学”并赠送一名斥候（测试）</span>
               </label>
               <p className="text-gray-400 text-xs mt-1">此项需新开一局或重置后生效。</p>
             </div>
@@ -389,50 +261,24 @@ export default function Home() {
     <div className="min-h-screen bg-gray-900 text-white">
       {/* 游戏头部 */}
       <GameHeader />
-      
+
       {/* 选项卡导航 */}
-      <TabNavigation 
-        activeTab={activeTab} 
+      <TabNavigation
+        activeTab={activeTab}
         onTabChange={setActiveTab}
         hasUnreadEvents={hasUnreadEvents}
       />
-      
+
       {/* 主要游戏区域 */}
       <div className="flex">
         {/* 侧边栏 */}
         <Sidebar />
-        
+
         {/* 主内容区域 */}
         <main className="flex-1 p-6">
           {renderContent()}
         </main>
       </div>
-      
-      {/* 事件通知浮框（兼容旧事件：查看时将选择类事件注入暂停队列） */}
-      <EventNotificationToast
-        event={currentNotificationEvent}
-        onClose={() => setCurrentNotificationEvent(null)}
-        onViewEvent={() => {
-          if (currentNotificationEvent && currentNotificationEvent.type === EventType.CHOICE) {
-            try {
-              triggerPauseEvent({
-                id: currentNotificationEvent.id,
-                title: currentNotificationEvent.title,
-                description: currentNotificationEvent.description,
-                options: (currentNotificationEvent.choices || []).map((c, idx) => ({
-                  id: c.id || String(idx),
-                  text: c.text || `选项 ${idx + 1}`,
-                })),
-              } as any);
-            } catch (e) {
-              console.warn('桥接 triggerPauseEvent 失败：', e);
-            }
-          }
-          setActiveTab('overview');
-          setCurrentNotificationEvent(null);
-          setHasUnreadEvents(false);
-        }}
-      />
 
       {/* 中央暂停事件弹窗 */}
       <EventModal />

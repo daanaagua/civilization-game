@@ -32,14 +32,34 @@ export function addTemporaryEffect(gameState: GameState, effect: Omit<TemporaryE
     id: `effect_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     startTime: gameState.gameTime // 使用游戏时间
   };
-  
-  // 将效果添加到游戏状态中
+
   if (!gameState.temporaryEffects) {
     gameState.temporaryEffects = [];
   }
-  
+
+  // 去重：同源同名且效果修饰符完全一致、且仍在有效期内则不重复添加
+  const now = gameState.gameTime;
+  const isSameModifierSet = (a: EffectModifier[], b: EffectModifier[]) => {
+    if (a.length !== b.length) return false;
+    const key = (m: EffectModifier) => `${m.target}|${m.type}|${m.value}`;
+    const setA = a.map(key).sort().join(',');
+    const setB = b.map(key).sort().join(',');
+    return setA === setB;
+  };
+  const exists = gameState.temporaryEffects.some(e => 
+    now < e.startTime + e.duration &&
+    e.source === newEffect.source &&
+    e.name === newEffect.name &&
+    isSameModifierSet(e.effects, newEffect.effects)
+  );
+  if (exists) {
+    return {
+      ...newEffect,
+      id: `${newEffect.id}_dedup`
+    };
+  }
+
   gameState.temporaryEffects.push(newEffect);
-  
   return newEffect;
 }
 

@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { useGameStore } from '@/lib/game-store';
-import { globalEffectsSystem, EffectSourceType } from '@/lib/effects-system';
+import { globalEffectsSystem, EffectSourceType, EffectType } from '@/lib/effects-system';
+import { formatNumber } from '@/lib/utils';
 
 interface StatusDetailsTooltipProps {
   statusType: 'stability' | 'corruption';
@@ -112,6 +113,47 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
       });
     }
 
+    // 事件/临时效果影响（例如：井水干涸 -5）
+    try {
+      const mod = require('@/lib/temporary-effects');
+      const getActiveTemporaryEffects = mod?.getActiveTemporaryEffects;
+      const active = typeof getActiveTemporaryEffects === 'function' ? getActiveTemporaryEffects((useGameStore.getState() as any).gameState) : [];
+      active.forEach((te: any) => {
+        // 支持两种格式：effects 数组与 consequences 字符串
+        // 1) effects 数组：{ target:'stability', type:'absolute', value:number }
+        const mods: any[] = Array.isArray(te.effects) ? te.effects : [];
+        mods.forEach((m: any) => {
+          if (String(m.target) === 'stability') {
+            const isAbs = String(m.type) === 'absolute';
+            const val = isAbs ? Number(m.value || 0) : 0; // 百分比不用于稳定度点数
+            if (val) {
+              factors.push({
+                source: te.name || '事件影响',
+                effect: val,
+                color: val >= 0 ? 'text-green-400' : 'text-red-400'
+              });
+            }
+          }
+        });
+        // 2) consequences：如 "stability:-5"
+        if (Array.isArray(te.consequences)) {
+          te.consequences.forEach((c: any) => {
+            const m = String(c).match(/^stability\s*:\s*(-?\d+(?:\.\d+)?)/i);
+            if (m) {
+              const val = Number(m[1]);
+              if (val) {
+                factors.push({
+                  source: te.name || '事件影响',
+                  effect: val,
+                  color: val >= 0 ? 'text-green-400' : 'text-red-400'
+                });
+              }
+            }
+          });
+        }
+      });
+    } catch {}
+
     // 人物来源的稳定度贡献（点数，一律按实际数值显示）
     try {
       const charStability = globalEffectsSystem
@@ -191,7 +233,9 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
   // Separate arrays to retain precise types instead of a union array
   const stabilityFactors = calculateStabilityFactors();
   const corruptionFactors = calculateCorruptionFactors();
-  const currentValue = statusType === 'stability' ? stability : corruption;
+  const currentValue = useGameStore(state => {
+    return statusType === 'stability' ? state.gameState.stability : state.gameState.corruption;
+  });
 
   return (
     <div className="group relative">
@@ -215,7 +259,7 @@ export function StatusDetailsTooltip({ statusType, children }: StatusDetailsTool
                 <div key={index} className="flex justify-between items-center">
                   <span className="text-gray-300">{factor.source}:</span>
                   <span className={factor.color}>
-                    {factor.effect > 0 ? `+${factor.effect}` : factor.effect.toString()}
+                    {factor.effect > 0 ? `+${formatNumber(factor.effect, 1)}` : formatNumber(factor.effect, 1)}
                   </span>
                 </div>
               ))}

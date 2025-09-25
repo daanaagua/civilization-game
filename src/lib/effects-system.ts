@@ -51,6 +51,12 @@ export interface EffectSource {
 export class EffectsSystem {
   private effects: Effect[] = [];
 
+  private normalize(val: number): number {
+    // 统一浮点精度，减少 0.60000000001 等误差
+    const n = Number(val) || 0;
+    return Number(n.toFixed(6));
+  }
+
   // 添加效果
   addEffect(effect: Effect | Omit<Effect, 'id'>): void {
     // 如果没有id，生成一个
@@ -58,7 +64,10 @@ export class EffectsSystem {
       ...effect,
       id: `effect_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     };
-    
+
+    // 规范化数值精度
+    (effectWithId as any).value = this.normalize((effectWithId as any).value);
+
     // 检查是否已存在相同ID的效果
     const existingIndex = this.effects.findIndex(e => e.id === effectWithId.id);
     if (existingIndex >= 0) {
@@ -68,6 +77,12 @@ export class EffectsSystem {
       // 添加新效果
       this.effects.push(effectWithId);
     }
+
+    // 生命周期事件：通知效果已添加
+    try {
+      const { GlobalEventBus } = require('@/lib/event-bus/event-bus');
+      GlobalEventBus.emit('effect-added', effectWithId);
+    } catch {}
   }
 
   // 移除效果
@@ -77,11 +92,21 @@ export class EffectsSystem {
 
   // 按来源移除效果
   removeEffectsBySource(sourceType: EffectSourceType, sourceId?: string): void {
+    const removed: Effect[] = [];
     this.effects = this.effects.filter(e => {
-      if (e.source.type !== sourceType) return true;
-      if (sourceId && e.source.id !== sourceId) return true;
-      return false;
+      const keep =
+        e.source.type !== sourceType ||
+        (sourceId ? e.source.id !== sourceId : false);
+      if (!keep) removed.push(e);
+      return keep;
     });
+    // 生命周期事件：通知效果已移除
+    if (removed.length) {
+      try {
+        const { GlobalEventBus } = require('@/lib/event-bus/event-bus');
+        removed.forEach(e => GlobalEventBus.emit('effect-removed', e));
+      } catch {}
+    }
   }
 
   // 获取所有效果
@@ -115,8 +140,10 @@ export class EffectsSystem {
 
   // 计算特定类型效果的总值
   calculateTotalEffect(type: EffectType): number {
+    // 默认：直接求和（稳定度/腐败度为点数）
     const effects = this.getEffectsByType(type);
-    return effects.reduce((total, effect) => total + effect.value, 0);
+    const sum = effects.reduce((total, effect) => total + effect.value, 0);
+    return this.normalize(sum);
   }
 
   // 计算特定类型效果的详细总值（绝对值和百分比分开）
@@ -165,8 +192,11 @@ export class EffectsSystem {
     
     // 更新建筑效果
     this.updateBuildingEffects(gameState);
+
+    // 映射临时事件效果为展示标签
+    this.updateTemporaryEventEffects(gameState);
     
-    // 更新持续时间
+    // 更新持续时间（仅针对本系统内部duration效果；临时效果由temporary-effects管理）
     this.updateDurations();
   }
 
@@ -175,7 +205,7 @@ export class EffectsSystem {
     // 清空现有效果
     this.clear();
 
-    // 添加稳定度效果
+    // 添加稳定度（与侧边栏显示的当前稳定度一致，用于告知国家效果）
     this.addEffect({
       id: 'base_stability',
       name: '稳定度',
@@ -383,6 +413,65 @@ export class EffectsSystem {
         }
       }
     });
+  }
+
+  // 从游戏状态映射临时效果（事件来源）
+  updateTemporaryEventEffects(gameState: GameState): void {
+    // 先移除旧的事件来源效果
+    this.effects = this.effects.filter(e => e.source.type !== EffectSourceType.EVENT);
+
+    let tempMod: any;
+    try {
+      tempMod = require('./temporary-effects');
+    } catch {
+      tempMod = null;
+    }
+    const getActive = tempMod?.getActiveTemporaryEffects;
+    const active: any[] = typeof getActive === 'function' ? getActive(gameState) : (gameState.temporaryEffects || []);
+
+    const labelOfTarget = (t: string) => {
+      const map: Record<string, string> = {
+        food_production: '食物生产',
+        wood_production: '木材生产',
+        stone_production: '石材生产',
+        tools_production: '工具生产',
+        iron_production: '铁生产',
+        money_income: '货币收入',
+        stability: '稳定度',
+        research_speed: '科技研发速度'
+      };
+      return map[t] || t.replace(/_/g, ' ');
+    };
+
+    const typeOfTarget = (t: string): EffectType => {
+      if (t.endsWith('_production')) return EffectType.RESOURCE_PRODUCTION;
+      if (t.endsWith('_income')) return EffectType.TRADE_INCOME;
+      if (t === 'stability') return EffectType.STABILITY;
+      if (t === 'research_speed') return EffectType.RESEARCH_SPEED;
+      return EffectType.RESOURCE_PRODUCTION;
+    };
+
+    for (const te of active) {
+      const mods: any[] = Array.isArray(te.effects) ? te.effects : [];
+      for (const m of mods) {
+        const isPct = m.type === 'percentage';
+        const val = isPct ? m.value : m.value; // 百分比值直接用数值，EffectsPanel 会按 isPercentage 格式化
+        const etype = typeOfTarget(String(m.target));
+        this.addEffect({
+          id: te.id,
+          name: te.name,
+          description: te.description,
+          type: etype,
+          value: val,
+          isPercentage: isPct,
+          source: {
+            type: EffectSourceType.EVENT,
+            id: te.source,
+            name: te.name
+          }
+        });
+      }
+    }
   }
 
   // 获取效果的显示信息

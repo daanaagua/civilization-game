@@ -36,6 +36,7 @@ interface ExplorationTabProps {
 export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabProps) {
   const { discoverCountry } = useGameStore();
   const addNotification = useGameStore(state => state.addNotification);
+  const startAdventureWithUnits = useGameStore(state => state.startAdventureWithUnits);
 
   // 统一选择器：获取已研究科技集合
   // 避免在各组件重复实现
@@ -134,94 +135,30 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     const missionId = `m_${Date.now()}`;
     setOngoingMissions(prev => [...prev, { id: missionId, cost: 1 }]);
     setIsExploring(true);
-    GlobalEventBus.emit('ExploreStarted', { partyId: missionId, at: Date.now() });
+    // 不再广播 ExploreStarted，避免事件栏显示“开始/结束”等无关卡片
     
     try {
-      // 模拟探索时间
+      // 模拟出发前准备时间
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const result = explorationSystem.explore(explorationUnits);
-      
-      // 应用探索结果
-      explorationSystem.applyExplorationResult(result, gameState.military?.units || []);
-      
-      // 如果发现了国家，添加到外交系统
-      if (result.discovery && result.discovery.type === 'country') {
-        const countryData = result.discovery.data;
-        if (countryData) {
-          discoverCountry(countryData);
-        }
-      }
-      
-      // 更新游戏状态
-      const exported = explorationSystem.exportExplorationData();
-      const categorized = {
-        dungeons: exported.discoveredLocations.filter(l => l.type === 'dungeon'),
-        countries: exported.discoveredLocations.filter(l => l.type === 'country'),
-        events: exported.discoveredLocations.filter(l => l.type === 'event'),
-      } as {
-        dungeons: DiscoveredLocation[];
-        countries: DiscoveredLocation[];
-        events: DiscoveredLocation[];
-      };
 
-      const updates: any = {
-        military: {
-          ...gameState.military,
-          units: [...(gameState.military?.units || [])]
-        },
-        exploration: {
-          discoveredLocations: categorized,
-          explorationHistory: exported.explorationHistory
-        },
-      };
-      
-      // 用 effect-runner 统一应用探索事件效果（资源/稳定度/腐败等）
-      if (result.event?.effects) {
-        const effectsArr: Array<{ kind: string; payload?: any }> = [];
-        if (result.event.effects.resources) {
-          effectsArr.push({ kind: 'resources.add', payload: result.event.effects.resources });
-        }
-        if (typeof (result.event.effects as any).stability === 'number') {
-          effectsArr.push({ kind: 'stability.add', payload: (result.event.effects as any).stability });
-        }
-        if (typeof (result.event.effects as any).corruption === 'number') {
-          effectsArr.push({ kind: 'corruption.add', payload: (result.event.effects as any).corruption });
-        }
-        if (effectsArr.length > 0) {
-          const draft: any = {
-            resources: { ...(gameState.resources || {}) },
-            stability: (useGameStore.getState().gameState.stability ?? 0),
-            corruption: (useGameStore.getState().gameState.corruption ?? 0)
-          };
-          runEffects(
-            { mutate: (fn) => fn(draft) },
-            effectsArr as any
-          );
-          updates.resources = draft.resources;
-          // 可选：同时把稳定度/腐败更新回去（父级 onUpdateGameState 合并时应能覆盖）
-          updates.stability = draft.stability;
-          updates.corruption = draft.corruption;
-        }
-      }
-      
-      if (result.event) {
-        GlobalEventBus.emit('TriggeredEvent', {
-          eventId: (result.event as any).id ?? 'exploration_event',
-          at: Date.now(),
-          context: result
+      // 启动新的冒险线（只增加侦察点，不做即时结算）
+      const { started } = startAdventureWithUnits(explorationUnits);
+
+      // 仅右下角 Toast 简短提示；不包含侦察点与时间，不写入事件栏
+      if (started) {
+        addNotification({
+          type: 'info',
+          title: '冒险队已出发',
+          message: ''
+        });
+      } else {
+        addNotification({
+          type: 'warning',
+          title: '未能出发',
+          message: '请确认选择了侦察兵/冒险家等探索单位'
         });
       }
-      onUpdateGameState(updates);
-      GlobalEventBus.emit('ExploreEnded', { partyId: missionId, at: Date.now(), result });
-      
-      // 显示探索结果
-      addNotification({
-        type: 'info',
-        title: '探索结果',
-        message: result.description
-      });
-      
+
       setSelectedUnits([]);
     } catch (error) {
       {
@@ -231,7 +168,7 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
           title: '探索失败',
           message: msg
         });
-        GlobalEventBus.emit('ExploreEnded', { partyId: missionId, at: Date.now(), result: { error: msg } });
+        // 不再广播 ExploreEnded，避免出现“冒险结束了 冒险队已出发”的错误文案
       }
     } finally {
       // 释放本地占用的探险点
@@ -527,6 +464,61 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     hasCapability(storeGameState ?? gameState, 'cap.scouting') ||
     researchedSet.has('scouting_tech');
 
+  // 订阅运行态以触发渲染
+  const activeAdventureRun = useGameStore(state => state.gameState?.exploration?.activeAdventureRun);
+  const currentDay = useGameStore(state => state.gameState?.timeSystem?.currentDay ?? 0);
+
+  // 进度条渲染
+  const renderAdventureProgress = () => {
+    if (!activeAdventureRun) return null;
+    const nodes = activeAdventureRun.nodes || [];
+    const total = nodes.length;
+    const resolved = nodes.filter(n => n.resolved).length;
+    const finalNode = nodes.find(n => n.kind === 'final');
+    const progress = total > 0 ? (resolved / total) * 100 : 0;
+
+    return (
+      <div className="bg-gray-800 p-4 rounded-lg">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-lg font-semibold text-white">冒险进度</h3>
+          <div className="text-sm text-gray-300">
+            {resolved}/{total} 节点
+            {finalNode ? <span className="ml-3 text-gray-400">最终判定日：第 {finalNode.etaDay} 天</span> : null}
+          </div>
+        </div>
+        <div className="relative h-3 bg-gray-700 rounded">
+          <div
+            className="absolute left-0 top-0 h-3 bg-green-600 rounded"
+            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </div>
+        {/* 节点刻度 */}
+        <div className="relative mt-3">
+          <div className="h-0.5 bg-gray-600" />
+          <div className="absolute inset-0 flex justify-between">
+            {nodes.map((n, idx) => {
+              const reached = !!n.resolved || currentDay >= n.etaDay;
+              const isFinal = n.kind === 'final';
+              return (
+                <div key={n.id} className="relative" style={{ width: `${100 / (total - 1 || 1)}%` }}>
+                  <div
+                    className={[
+                      'mx-auto rounded-full',
+                      isFinal ? 'w-5 h-5 border-2' : 'w-3 h-3',
+                      reached ? 'bg-green-400 border-green-300' : 'bg-gray-500 border-gray-400'
+                    ].join(' ')}
+                    title={`${isFinal ? '最终' : '节点'} · 预计第${n.etaDay}天`}
+                  />
+                  <div className="text-xs text-center mt-1 text-gray-300">{isFinal ? '终' : idx + 1}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* 探索控制区域 */}
@@ -538,6 +530,9 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
         renderExplorationControls()
       )}
       
+      {/* 冒险进度条 */}
+      {renderAdventureProgress()}
+
       {/* 已发现位置 */}
       {renderDiscoveredLocations()}
       

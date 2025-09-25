@@ -418,6 +418,8 @@ interface GameStore {
   unlockUnitType: (unitType: string) => void;
 
   // 探索系统
+  // 新：将所选部队转为侦察点并启动冒险线（不做即时结算）
+  startAdventureWithUnits: (units: any[]) => { started: boolean; sp: number };
   exploreWithUnits: (units: any[]) => any;
   attackDungeon: (dungeonId: string, units: any[]) => any;
   getDiscoveredLocations: () => any;
@@ -538,15 +540,25 @@ export const useGameStore = create<GameStore>()(persist(
 
 
     startGame: () => {
-      set((state) => ({
-        gameState: {
-          ...state.gameState,
-          isPaused: false,
-          gameStartTime: state.gameState.gameStartTime === 0 ? Date.now() : state.gameState.gameStartTime
-        },
-        isRunning: true,
-        lastUpdateTime: Date.now()
-      }));
+      set((state) => {
+        const hasActivePause = Array.isArray(state.gameState.activeEvents) && state.gameState.activeEvents.length > 0;
+        return {
+          gameState: {
+            ...state.gameState,
+            // 启动时：若没有暂停事件，则确保取消暂停
+            isPaused: hasActivePause ? state.gameState.isPaused : false,
+            gameStartTime: state.gameState.gameStartTime === 0 ? Date.now() : state.gameState.gameStartTime
+          },
+          // 没有暂停事件则关闭弹窗，避免脏状态阻塞启动
+          uiState: hasActivePause ? state.uiState : {
+            ...state.uiState,
+            showEventModal: false,
+            currentEvent: undefined
+          },
+          isRunning: true,
+          lastUpdateTime: Date.now()
+        };
+      });
       
       // 初始化资源管理器
       get().initializeResourceManager();
@@ -978,9 +990,59 @@ export const useGameStore = create<GameStore>()(persist(
             resourceBonus = -30;
           }
           
-          // 计算目标稳定度
+          // 叠加“临时效果”的稳定度修正（效果栏中显示的持续效果）
+          const getTempStabilityDelta = (): number => {
+            try {
+              const { getActiveTemporaryEffects } = require('./temporary-effects');
+              const active = getActiveTemporaryEffects(state.gameState) || [];
+              let total = 0;
+              active.forEach((te: any) => {
+                // 1) consequences 字符串数组，如 "stability:-5"
+                if (Array.isArray(te.consequences)) {
+                  te.consequences.forEach((c: any) => {
+                    const m = String(c).match(/^stability\s*:\s*(-?\d+(?:\.\d+)?)/i);
+                    if (m) total += Number(m[1]);
+                  });
+                }
+                // 2) 结构化单一 effect 字段
+                const eff: any = te.effect;
+                if (eff && (String(eff.type).toLowerCase() === 'stability' || String(eff.type).toLowerCase() === 'stability_change')) {
+                  const v = eff.value != null ? Number(eff.value) : (eff.modifier != null ? Number(eff.modifier) : 0);
+                  total += v;
+                }
+                // 3) temporary-effects 的 effects 数组：{ target:'stability', type:'absolute', value:number }
+                const mods: any[] = Array.isArray(te.effects) ? te.effects : [];
+                mods.forEach((m: any) => {
+                  if (String(m.target) === 'stability' && String(m.type) === 'absolute') {
+                    total += Number(m.value || 0);
+                  }
+                });
+              });
+              return total;
+            } catch {
+              return 0;
+            }
+          };
+
+          const tempStabilityDelta = getTempStabilityDelta();
+
+          // 人物稳定度加成：来自效果系统的角色来源稳定度点数
+          const getCharacterStabilityDelta = (): number => {
+            try {
+              const { globalEffectsSystem, EffectSourceType, EffectType } = require('./effects-system');
+              const charEffects = globalEffectsSystem
+                .getEffectsBySourceType(EffectSourceType.CHARACTER)
+                .filter((e: any) => String(e?.type) === String(EffectType.STABILITY));
+              return charEffects.reduce((sum: number, e: any) => sum + (Number(e?.value) || 0), 0);
+            } catch {
+              return 0;
+            }
+          };
+          const characterStabilityDelta = getCharacterStabilityDelta();
+
+          // 计算目标稳定度（叠加临时效果）
           const targetStability = Math.max(0, Math.min(100, 
-            baseStability + politicalBonus + populationPenalty + resourceBonus - newCorruption // 使用更新后的腐败度
+            baseStability + politicalBonus + populationPenalty + resourceBonus + tempStabilityDelta + characterStabilityDelta - newCorruption
           ));
           
           return targetStability;
@@ -1749,8 +1811,9 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     addNotification: (notification) => {
-      const id = Date.now().toString();
-      const timestamp = Date.now();
+      const nowTs = Date.now();
+      const id = `n_${nowTs}_${Math.random().toString(36).slice(2,8)}`;
+      const timestamp = nowTs;
 
       // 将通知同步记录为“非暂停事件”，并做最近2秒内的标题+描述去重以避免重复
       set((state) => {
@@ -2317,7 +2380,7 @@ export const useGameStore = create<GameStore>()(persist(
       // 检查住房限制（人口上限 = housing + 1）
       const populationCap = resources.housing + 1;
       if (resources.population > populationCap) {
-        get().updateStability(-5);
+        // 稳定度惩罚进入目标值计算，不做即时扣减；仅通知
         get().addNotification({
           type: 'warning',
           title: '住房不足',
@@ -2328,7 +2391,7 @@ export const useGameStore = create<GameStore>()(persist(
       // 检查食物供应
       const foodPerPerson = resources.population > 0 ? (resources.food / resources.population) : 0;
       if (resources.population > 0 && foodPerPerson < 1) {
-        get().updateStability(-3);
+        // 稳定度惩罚进入目标值计算，不做即时扣减；仅通知
         get().addNotification({
           type: 'error',
           title: '食物短缺',
@@ -2340,6 +2403,93 @@ export const useGameStore = create<GameStore>()(persist(
     
     
     applyEventEffects: (effects) => {
+      // 统一规范化多种事件效果格式，再应用到状态
+      const normalizeEffects = (effs: any[]): any[] => {
+        const out: any[] = [];
+        (effs || []).forEach((e) => {
+          if (!e) return;
+          const type = String(e.type || '').toLowerCase();
+
+          // 资源变更：target/value 或 payload.resources 或 resource_bulk.changes
+          if ((type === 'resource' || type === 'resource_change') && e.target != null) {
+            out.push({ type: 'resource_change', target: String(e.target), value: Number(e.value || 0) });
+            return;
+          }
+          if ((type === 'resource' || type === 'resource_change') && e.payload?.resources) {
+            Object.entries(e.payload.resources as Record<string, number>).forEach(([k, v]) => {
+              out.push({ type: 'resource_change', target: String(k), value: Number(v) || 0 });
+            });
+            return;
+          }
+          if (type === 'resource_bulk' && e.changes) {
+            Object.entries(e.changes as Record<string, number>).forEach(([k, v]) => {
+              out.push({ type: 'resource_change', target: String(k), value: Number(v) || 0 });
+            });
+            return;
+          }
+
+          // 稳定度事件不做即时改动：统一改为临时影响标签（在规范化后单独创建）
+          if (type === 'stability' || type === 'stability_change') {
+            // 跳过即时应用，后续创建 TemporaryEffect
+            return;
+          }
+          if (type === 'corruption' || type === 'corruption_change') {
+            const val = e.value != null ? Number(e.value) : (e.payload?.delta != null ? Number(e.payload.delta) : 0);
+            out.push({ type: 'corruption_change', value: val });
+            return;
+          }
+
+          // 旧格式 mixed/buff + consequences: ["stability:-5", "wood:-100"]
+          // 即时只应用资源与腐败；稳定度改由后续“临时效果创建”处理，避免瞬间扣值与重复标签
+          if ((type === 'mixed' || type === 'buff') && Array.isArray(e.payload?.consequences)) {
+            (e.payload.consequences as any[]).forEach((c) => {
+              const m = String(c).match(/^(\w+)\s*:\s*(-?\d+(?:\.\d+)?)/i);
+              if (m) {
+                const key = m[1].toLowerCase();
+                const val = Number(m[2]);
+                if (key === 'corruption') out.push({ type: 'corruption_change', value: val });
+                else if (key !== 'stability') out.push({ type: 'resource_change', target: key, value: val });
+                // stability 在此不入队
+              }
+            });
+            return;
+          }
+
+          // 兜底：直接透传已兼容格式
+          out.push(e);
+        });
+        return out;
+      };
+
+      const normalized = normalizeEffects(effects);
+
+      // 将稳定度事件统一登记为“临时影响标签”，用于目标稳定度计算与缓慢变化
+      try {
+        const { addTemporaryEffect, createTemporaryEffectFromChoice } = require('./temporary-effects');
+        const gs = (typeof get === 'function') ? get().gameState : undefined;
+        if (gs) {
+          (effects || []).forEach((e: any) => {
+            if (!e) return;
+            const t = String(e.type || '').toLowerCase();
+            if (t === 'stability' || t === 'stability_change') {
+              const val = e.value != null ? Number(e.value) : (e.payload?.delta != null ? Number(e.payload.delta) : 0);
+              if (!val || isNaN(val)) return;
+              const days = Number(e.payload?.durationDays || 360); // 默认一年
+              const te = createTemporaryEffectFromChoice(
+                'default',
+                String((get().uiState?.currentEvent?.id) || `ev_${Date.now()}`),
+                String((((get().uiState?.currentEvent as any)?.title) || ((get().uiState?.currentEvent as any)?.name) || '事件影响')),
+                'buff',
+                days,
+                [`stability:${val}`],
+                gs
+              );
+              if (te) addTemporaryEffect(gs, te);
+            }
+          });
+        }
+      } catch {}
+
       set(state => {
         const base = {
           resources: state.gameState.resources,
@@ -2347,7 +2497,11 @@ export const useGameStore = create<GameStore>()(persist(
           corruption: state.gameState.corruption,
           resourceLimits: state.gameState.resourceLimits
         } as any;
-        const next = applyEffectsToState(base, effects as any);
+        const next = applyEffectsToState(base, normalized as any);
+        // 同步资源管理器（确保 UI 速率计算使用最新资源）
+        if (resourceManager) {
+          try { resourceManager.setResources(next.resources, 'event'); } catch {}
+        }
         return {
           gameState: {
             ...state.gameState,
@@ -2378,12 +2532,41 @@ export const useGameStore = create<GameStore>()(persist(
     },
     
     dismissEvent: (eventId) => {
-      set(state => ({
-        gameState: {
-          ...state.gameState,
-          activeEvents: state.gameState.activeEvents.filter(event => event.event.id !== eventId)
+      set((state) => {
+        const remaining = state.gameState.activeEvents.filter(e => e.event.id !== eventId);
+        const nextEvent = remaining.length > 0 ? remaining[0].event : undefined;
+        return {
+          gameState: {
+            ...state.gameState,
+            activeEvents: remaining,
+            // 队列清空则恢复
+            isPaused: remaining.length > 0 ? state.gameState.isPaused : false
+          },
+          uiState: {
+            ...state.uiState,
+            showEventModal: !!nextEvent,
+            currentEvent: nextEvent as any
+          }
+        };
+      });
+      // 队列清空则强制恢复与关闭弹窗（双保险）
+      if (get().gameState.activeEvents.length === 0) {
+        get().resumeGame();
+        set((s) => ({
+          uiState: { ...s.uiState, showEventModal: false, currentEvent: undefined }
+        }));
+      }
+      // 微任务级一致性守护，防竞态
+      setTimeout(() => {
+        const s = get();
+        const hasActive = Array.isArray(s.gameState.activeEvents) && s.gameState.activeEvents.length > 0;
+        if (!hasActive) {
+          if (s.gameState.isPaused) s.resumeGame();
+          (useGameStore as any).setState((st: any) => ({
+            uiState: { ...st.uiState, showEventModal: false, currentEvent: undefined }
+          }));
         }
-      }));
+      }, 0);
     },
     
     checkAchievements: () => {
@@ -2584,6 +2767,7 @@ export const useGameStore = create<GameStore>()(persist(
           resourceLimits: state.gameState.resourceLimits
         } as any;
 
+        // 仅即时应用资源与腐败；稳定度改为临时影响标签（见后续创建）
         let effectsArr: any[] = [];
         if (event.effects && typeof event.effects === 'object' && !Array.isArray(event.effects)) {
           const e = event.effects;
@@ -2592,14 +2776,18 @@ export const useGameStore = create<GameStore>()(persist(
               effectsArr.push({ type: 'resource_change', target: resource, value: Number(change) || 0 });
             }
           }
-          if (typeof e.stability === 'number') {
-            effectsArr.push({ type: 'stability_change', value: Number(e.stability) || 0 });
-          }
+          // 稳定度不进入即时应用
           if (typeof e.corruption === 'number') {
             effectsArr.push({ type: 'corruption_change', value: Number(e.corruption) || 0 });
           }
         } else if (Array.isArray(event.effects)) {
-          effectsArr = event.effects;
+          // 规范化数组：只保留资源/腐败的即时应用，其余（稳定度）由后续临时效果创建
+          effectsArr = (event.effects as any[]).filter((eff: any) => {
+            const t = String(eff?.type || '').toLowerCase();
+            if (t === 'resource' || t === 'resource_change') return true;
+            if (t === 'corruption' || t === 'corruption_change') return true;
+            return false;
+          });
         }
 
         const next = applyEffectsToState(base, effectsArr);
@@ -2612,6 +2800,44 @@ export const useGameStore = create<GameStore>()(persist(
           }
         };
       });
+
+      // 为事件中的稳定度增减创建“临时影响标签”，用于目标稳定度计算与缓慢趋近
+      try {
+        const { addTemporaryEffect, createTemporaryEffectFromChoice } = require('./temporary-effects');
+        const gs = get().gameState;
+        const evId = String((get().uiState?.currentEvent as any)?.id || event.id || `ev_${Date.now()}`);
+        const evName = String(((get().uiState?.currentEvent as any)?.title) || ((get().uiState?.currentEvent as any)?.name) || event.name || '事件影响');
+
+        const pushTempStability = (val: number, days?: number) => {
+          if (!val || isNaN(val)) return;
+          const d = Number(days || (event as any)?.durationDays || 360);
+          const te = createTemporaryEffectFromChoice('default', evId, evName, 'buff', d, [`stability:${val}`], gs);
+          if (te) addTemporaryEffect(gs, te);
+        };
+
+        if (event.effects && typeof event.effects === 'object' && !Array.isArray(event.effects)) {
+          const e: any = event.effects;
+          if (typeof e.stability === 'number') {
+            pushTempStability(Number(e.stability));
+          }
+        } else if (Array.isArray(event.effects)) {
+          (event.effects as any[]).forEach((eff: any) => {
+            const t = String(eff?.type || '').toLowerCase();
+            if (t === 'stability' || t === 'stability_change') {
+              const val = eff.value != null ? Number(eff.value) : (eff.payload?.delta != null ? Number(eff.payload.delta) : 0);
+              const dur = eff.payload?.durationDays;
+              pushTempStability(val, dur);
+            }
+            // 旧格式 consequences: ["stability:-5"]
+            if ((t === 'mixed' || t === 'buff') && Array.isArray(eff.payload?.consequences)) {
+              (eff.payload.consequences as any[]).forEach((c: any) => {
+                const m = String(c).match(/^stability\s*:\s*(-?\d+(?:\.\d+)?)/i);
+                if (m) pushTempStability(Number(m[1]));
+              });
+            }
+          });
+        }
+      } catch {}
 
       // 标准化历史项
       const historyItem: any = {
@@ -2979,18 +3205,23 @@ export const useGameStore = create<GameStore>()(persist(
     removeEvent: (eventId) => {
       set((state) => {
         const newActiveEvents = state.gameState.activeEvents.filter(e => e.event.id !== eventId);
-        const wasPausingEvent = false;
-        
+        const hasNext = newActiveEvents.length > 0;
         return {
           gameState: {
             ...state.gameState,
             activeEvents: newActiveEvents,
-            // currentPausingEvent 字段已废弃
           },
-          // 如果移除的是暂停事件，恢复游戏运行
-          isRunning: wasPausingEvent ? true : state.isRunning
+          uiState: {
+            ...state.uiState,
+            showEventModal: hasNext,
+            currentEvent: hasNext ? (newActiveEvents[0].event as any) : undefined
+          }
         };
       });
+      // 队列清空则自动恢复
+      if (get().gameState.activeEvents.length === 0) {
+        get().resumeGame();
+      }
     },
     
     checkGameEvents: () => {
@@ -3079,8 +3310,34 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     handlePauseEventChoice: (eventId: string, choiceIndex: number) => {
+      // V2桥接：若全局引擎存在且当前有队首事件/当前modal来自V2，则直接转发选择并返回
+      const w: any = (typeof window !== 'undefined') ? (window as any) : undefined;
+      const headId = w?.eventsV2?.getHeadId?.();
+      const currentId = (() => { try { return get().uiState?.currentEvent?.id; } catch { return undefined; } })();
+      if (w?.eventsV2 && (headId || currentId)) {
+        try { w.eventsV2.choose?.(undefined); } catch {}
+        // 强保险：清空旧队列、关闭弹窗、恢复运行
+        set((st) => ({
+          gameState: { 
+            ...st.gameState, 
+            activeEvents: [], 
+            isPaused: false 
+          },
+          uiState: { 
+            ...st.uiState, 
+            showEventModal: false, 
+            currentEvent: undefined 
+          }
+        }));
+        try { get().resumeGame?.(); } catch {}
+        return;
+      }
       const state = get();
-      const active = state.gameState.activeEvents.find(e => e.event.id === eventId);
+      let active = state.gameState.activeEvents.find(e => e.event.id === eventId);
+      // 保险：若找不到对应ID，则退化为取队首事件
+      if (!active && state.gameState.activeEvents.length > 0) {
+        active = state.gameState.activeEvents[0];
+      }
       if (!active || !active.event) return;
 
       const ev: any = active.event;
@@ -3117,11 +3374,51 @@ export const useGameStore = create<GameStore>()(persist(
 
       // 3) 关闭当前事件（从活跃移除），并根据队列决定是否继续显示或恢复游戏
       get().dismissPauseEvent(eventId);
+
+      // 4) 兜底：若没有任何剩余暂停事件，确保恢复游戏并关闭弹窗（防止边缘态卡死）
+      if (get().gameState.activeEvents.length === 0) {
+        get().resumeGame();
+        set((s) => ({
+          uiState: {
+            ...s.uiState,
+            showEventModal: false,
+            currentEvent: undefined
+          }
+        }));
+      }
     },
 
     dismissPauseEvent: (eventId: string) => {
+      // V2桥接：若全局引擎存在且当前有队首事件/当前modal来自V2，则直接转发dismiss并返回
+      const w: any = (typeof window !== 'undefined') ? (window as any) : undefined;
+      const headId = w?.eventsV2?.getHeadId?.();
+      const currentId = (() => { try { return get().uiState?.currentEvent?.id; } catch { return undefined; } })();
+      if (w?.eventsV2 && (headId || currentId)) {
+        try { w.eventsV2.dismiss?.(); } catch {}
+        // 强保险：清空旧队列、关闭弹窗、恢复运行
+        set((st) => ({
+          gameState: { 
+            ...st.gameState, 
+            activeEvents: [], 
+            isPaused: false 
+          },
+          uiState: { 
+            ...st.uiState, 
+            showEventModal: false, 
+            currentEvent: undefined 
+          }
+        }));
+        try { get().resumeGame?.(); } catch {}
+        return;
+      }
+      // 先尝试按ID移除
       set((state) => {
-        const remaining = state.gameState.activeEvents.filter(e => e.event.id !== eventId);
+        const before = state.gameState.activeEvents;
+        let remaining = before.filter(e => e.event.id !== eventId);
+        // 保险：若未移除任何事件且仍有事件滞留，则移除队首
+        if (remaining.length === before.length && before.length > 0) {
+          remaining = before.slice(1);
+        }
         const nextEvent = remaining.length > 0 ? remaining[0].event : undefined;
         return {
           gameState: {
@@ -3140,6 +3437,24 @@ export const useGameStore = create<GameStore>()(persist(
       if (get().gameState.activeEvents.length === 0) {
         get().resumeGame();
       }
+
+      // 微任务级一致性守护：处理竞态，确保UI与暂停状态一致
+      setTimeout(() => {
+        const s = get();
+        const hasActive = Array.isArray(s.gameState.activeEvents) && s.gameState.activeEvents.length > 0;
+        if (!hasActive) {
+          if (s.gameState.isPaused) s.resumeGame();
+          (useGameStore as any).setState((st: any) => ({
+            uiState: { ...st.uiState, showEventModal: false, currentEvent: undefined }
+          }));
+        } else {
+          const first = s.gameState.activeEvents[0]?.event;
+          (useGameStore as any).setState((st: any) => ({
+            uiState: { ...st.uiState, showEventModal: true, currentEvent: first }
+          }));
+          if (!s.gameState.isPaused) s.pauseGame();
+        }
+      }, 0);
     },
 
     clearRecentEvents: () => {
@@ -3918,7 +4233,9 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     calculateEffectTotal: (type: EffectType) => {
-      return (get().getEffectsSystem() as any)?.calculateEffectTotal?.(type) ?? 0;
+      const es: any = get().getEffectsSystem();
+      const fn = es?.calculateTotalEffect || es?.calculateEffectTotal;
+      return typeof fn === 'function' ? fn.call(es, type) : 0;
     },
     
     // 新的科技系统方法实现
@@ -4055,7 +4372,24 @@ export const useGameStore = create<GameStore>()(persist(
             // 建筑解锁通过动态检查实现
             break;
           case 'stability':
-            get().updateStability(effect.value);
+            // 改为临时效果：不即时改当前稳定度
+            try {
+              const { addTemporaryEffect, createTemporaryEffectFromChoice } = require('./temporary-effects');
+              const gs = get().gameState;
+              const ev = (get().uiState?.currentEvent as any) || {};
+              const evId = String(ev.id || `ev_${Date.now()}`);
+              const evName = String(ev.title || ev.name || '事件影响');
+              const te = createTemporaryEffectFromChoice(
+                'choice',
+                evId,
+                evName,
+                'buff',
+                Number(((get().uiState?.currentEvent as any)?.durationDays || (event as any)?.durationDays || 360)),
+                [`stability:${Number(effect.value || 0)}`],
+                gs
+              );
+              if (te) addTemporaryEffect(gs, te);
+            } catch {}
             break;
           case 'corruption':
             get().updateCorruption(effect.value);
@@ -4486,7 +4820,24 @@ export const useGameStore = create<GameStore>()(persist(
             }
             break;
           case 'stability':
-            get().updateStability(-effect.value);
+            // 改为临时效果：不即时改当前稳定度
+            try {
+              const { addTemporaryEffect, createTemporaryEffectFromChoice } = require('./temporary-effects');
+              const gs = get().gameState;
+              const ev = (get().uiState?.currentEvent as any) || {};
+              const evId = String(ev.id || `ev_${Date.now()}`);
+              const evName = String(ev.title || ev.name || '事件影响');
+              const te = createTemporaryEffectFromChoice(
+                'choice',
+                evId,
+                evName,
+                'buff',
+                Number(((get().uiState?.currentEvent as any)?.durationDays || (event as any)?.durationDays || 360)),
+                [`stability:${-Number(effect.value || 0)}`],
+                gs
+              );
+              if (te) addTemporaryEffect(gs, te);
+            } catch {}
             break;
           case 'corruption':
             get().updateCorruption(-effect.value);
@@ -4623,6 +4974,55 @@ export const useGameStore = create<GameStore>()(persist(
     },
 
     // 探索系统方法
+    // 新：把所选部队转换为侦察点并写入状态，用于驱动“冒险节点线”流程
+    startAdventureWithUnits: (units: any[]) => {
+      try {
+        const { getUnitType } = require('./military-data');
+        let sp = 0;
+        (units || []).forEach((u: any) => {
+          const ut = getUnitType(u.typeId);
+          const cnt = Number(u?.count || 0);
+          // 侦察兵=+1/人；冒险家=+2/人；其他探索类（isExplorer）默认+1/人
+          if (u.typeId === 'scout' || (ut && ut.id === 'scout')) sp += cnt * 1;
+          else if (u.typeId === 'adventurer' || (ut && ut.id === 'adventurer')) sp += cnt * 2;
+          else if (ut?.isExplorer) sp += cnt * 1;
+        });
+        if (sp <= 0) {
+          return { started: false, sp: 0 };
+        }
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            exploration: {
+              ...state.gameState.exploration,
+              explorationPoints: (state.gameState.exploration?.explorationPoints || 0) + sp,
+              discoveredLocations: state.gameState.exploration.discoveredLocations,
+              explorationHistory: state.gameState.exploration.explorationHistory
+            }
+          }
+        }));
+        // 提示：仅通知，不写入“暂停事件”，由节点线自己触发暂停弹窗
+        get().addNotification({
+          type: 'info',
+          title: '冒险队已出发',
+          message: '冒险队已出发'
+        });
+        // 触发 V2 冒险事件源：写入一次性启动标记与 SP
+        set((state) => ({
+          gameState: {
+            ...state.gameState,
+            exploration: {
+              ...state.gameState.exploration,
+              adventureV2Start: { sp }
+            }
+          }
+        }));
+        return { started: true, sp };
+      } catch {
+        return { started: false, sp: 0 };
+      }
+    },
+    // 兼容旧接口：保留但不推荐使用（仍执行旧即时结算）
     exploreWithUnits: (units: any[]) => {
       const explorationSystem = new ExplorationSystem();
       const { gameState } = get();
