@@ -59,9 +59,44 @@ export function createGameStoreAdapter(api: {
     hideModal() {
       const dbg = (globalThis as any)?.eventsV2?.debug;
       if (dbg) console.log('[EventsV2][Adapter] hideModal');
+      // 1) 关闭弹窗
       api.setState((st) => ({
         uiState: { ...st.uiState, showEventModal: false, currentEvent: undefined }
       }));
+      // 2) 兜底：若存在“最终节点 pending”，在弹窗关闭瞬间直接结束冒险线
+      try {
+        api.setState((st) => {
+          const ex = st.gameState.exploration || {};
+          const run = ex.adventureV2;
+          if (!run || !Array.isArray(run.nodes)) return st;
+          const hasPendingFinal = run.nodes.some((n: any) => n?.kind === 'final' && n?.pending && !n?.resolved);
+          if (!hasPendingFinal) return st;
+
+          const nodes = run.nodes.map((n: any) => {
+            if (n?.kind === 'final' && n?.pending && !n?.resolved) {
+              return { ...n, resolved: true, pending: false };
+            }
+            return n;
+          });
+
+          if (dbg) console.log('[EventsV2][Adapter] finalize run on hideModal (pending final resolved)');
+          return {
+            gameState: {
+              ...st.gameState,
+              exploration: {
+                ...ex,
+                adventureV2: {
+                  ...run,
+                  nodes,
+                  finished: true
+                }
+              }
+            }
+          };
+        });
+      } catch {
+        // ignore
+      }
     },
     appendHistory(item) {
       api.setState((st) => {
@@ -111,7 +146,8 @@ export function createGameStoreAdapter(api: {
       });
     },
     applyEffects(effects) {
-      if (!effects || !effects.length) return;
+      // 允许 effects 为空：也要推进冒险节点的 resolved/finished
+      if (!effects) effects = [];
       const store = api.getState();
       // 记录当前弹窗事件，用于推进冒险线节点状态
       const currentEv = store.uiState?.currentEvent;
@@ -193,54 +229,74 @@ export function createGameStoreAdapter(api: {
         if (dbg) console.warn('[EventsV2][Adapter] temporary-effects bridge failed:', err);
       }
 
-      // 冒险线运行态推进（仅当当前事件属于冒险线：id形如 run_*_nX 或 *_final）
-      if (currentEv && typeof currentEv.id === 'string') {
-        const evId = String(currentEv.id);
-        const isAdventureNode = evId.includes('_n') || evId.endsWith('_final');
-        if (isAdventureNode) {
-          api.setState((st) => {
-            const ex = st.gameState.exploration || {};
-            const run = ex.adventureV2;
-            if (!run) return st;
+      // 冒险线运行态推进（节点效果→SP与节点状态；兼容 currentEvent 缺失的兜底）
+      {
+        const evIdFromModal = (currentEv && typeof currentEv.id === 'string') ? String(currentEv.id) : undefined;
+        api.setState((st) => {
+          const ex = st.gameState.exploration || {};
+          const run = ex.adventureV2;
+          if (!run) return st;
 
-            // 1) 处理 spDelta 效果
-            let newSP = run.currentSP ?? run.totalSP ?? 0;
-            if (Array.isArray(effects)) {
-              for (const e of effects) {
-                if (e && e.type === 'spDelta') {
-                  const delta = Number(e.payload?.delta || 0);
-                  newSP = Math.max(0, Math.floor((newSP as number) + delta));
+          // 1) 处理 spDelta 效果
+          let newSP = run.currentSP ?? run.totalSP ?? 0;
+          if (Array.isArray(effects)) {
+            for (const e of effects) {
+              if (e && e.type === 'spDelta') {
+                const delta = Number(e.payload?.delta || 0);
+                newSP = Math.max(0, Math.floor((newSP as number) + delta));
+              }
+            }
+          }
+
+          // 2) 解析需标记的节点ID：优先使用弹窗ID；若无则兜底为“final 且 pending”的节点
+          let targetNodeId = evIdFromModal;
+          if (!targetNodeId) {
+            const pendingFinal = Array.isArray(run.nodes) ? run.nodes.find((n: any) => n?.kind === 'final' && n?.pending && !n?.resolved) : undefined;
+            const pendingNode = pendingFinal ?? (Array.isArray(run.nodes) ? run.nodes.find((n: any) => n?.pending && !n?.resolved) : undefined);
+            if (pendingNode?.id) targetNodeId = String(pendingNode.id);
+          }
+
+          // 3) 标记节点 resolved，并清理 pending；若是 final 则 finished=true
+          let finished = !!run.finished;
+          let nodes: any[] | undefined = Array.isArray(run.nodes) ? run.nodes : undefined;
+
+          if (nodes) {
+            if (targetNodeId) {
+              nodes = nodes.map((n: any) => {
+                if (n && n.id === targetNodeId) {
+                  const updatedResolved = { ...n, resolved: true, pending: false };
+                  if (String(targetNodeId).endsWith('_final') || n.kind === 'final') {
+                    finished = true;
+                  }
+                  return updatedResolved;
+                }
+                return n;
+              });
+            } else {
+              // 最强兜底：找最终节点（即使不 pending）直接置 resolved 并结束
+              const finalNode = nodes.find((n: any) => n?.kind === 'final');
+              if (finalNode) {
+                nodes = nodes.map((n: any) => (n && n.id === finalNode.id ? { ...n, resolved: true, pending: false } : n));
+                finished = true;
+              }
+            }
+          }
+
+          return {
+            gameState: {
+              ...st.gameState,
+              exploration: {
+                ...ex,
+                adventureV2: {
+                  ...run,
+                  nodes,
+                  currentSP: newSP,
+                  finished
                 }
               }
             }
-
-            // 2) 标记节点 resolved，并清理 pending；若是 final 则 finished=true
-            const nodes = Array.isArray(run.nodes) ? run.nodes.map((n: any) => {
-              if (n && n.id === evId) {
-                const { pending, ...rest } = n || {};
-                return { ...rest, resolved: true };
-              }
-              return n;
-            }) : run.nodes;
-
-            const finished = evId.endsWith('_final') ? true : !!run.finished;
-
-            return {
-              gameState: {
-                ...st.gameState,
-                exploration: {
-                  ...ex,
-                  adventureV2: {
-                    ...run,
-                    nodes,
-                    currentSP: newSP,
-                    finished
-                  }
-                }
-              }
-            };
-          });
-        }
+          };
+        });
       }
 
       // 发现类效果（最小实现）：写入探索发现，避免依赖复杂外交对象

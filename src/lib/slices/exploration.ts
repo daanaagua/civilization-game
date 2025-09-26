@@ -56,13 +56,17 @@ export function createExplorationSelectors(stateProvider: () => { exploration?: 
     getDungeons: () => safe().discoveredLocations?.dungeons ?? [],
     getCountries: () => safe().discoveredLocations?.countries ?? [],
     getEventPlaces: () => safe().discoveredLocations?.events ?? [],
-    getActiveAdventure: () => safe().activeAdventureRun ?? null,
+    getActiveAdventure: () => {
+      const ex: any = safe();
+      return ex.adventureV2 ?? ex.activeAdventureRun ?? null;
+    },
     getAdventureProgress: () => {
-      const run = safe().activeAdventureRun;
+      const ex: any = safe();
+      const run = ex.adventureV2 ?? ex.activeAdventureRun;
       if (!run) return null;
       const totalNodes = run.nodes?.length ?? 0;
-      const resolved = run.nodes?.filter(n => n.resolved)?.length ?? 0;
-      const finalEta = run.nodes?.find(n => n.kind === 'final')?.etaDay;
+      const resolved = run.nodes?.filter((n: any) => n?.resolved)?.length ?? 0;
+      const finalEta = run.nodes?.find((n: any) => n?.kind === 'final')?.etaDay;
       return { totalNodes, resolved, finalEta };
     }
   };

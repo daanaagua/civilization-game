@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import '@/styles/globals.css';
+import EventsBootstrapper from '@/components/system/EventsBootstrapper';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -24,6 +25,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={inter.className}>
+        {/* 事件系统初始化（客户端组件） */}
+        <EventsBootstrapper />
         {children}
       </body>
     </html>

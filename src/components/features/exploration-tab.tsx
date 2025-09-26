@@ -8,7 +8,6 @@ import { getUnitType } from '../../lib/military-data';
 import { getDungeonById } from '../../lib/dungeon-data';
 import { useGameStore } from '@/lib/game-store';
 import { GlobalEventBus } from '@/lib/event-bus';
-import { runEffects } from '@/lib/events/effect-runner';
 
 interface ExplorationTabProps {
   gameState: {
@@ -134,24 +133,17 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     // 占用1点探险点（本地进行中任务）
     const missionId = `m_${Date.now()}`;
     setOngoingMissions(prev => [...prev, { id: missionId, cost: 1 }]);
-    setIsExploring(true);
+
     // 不再广播 ExploreStarted，避免事件栏显示“开始/结束”等无关卡片
     
     try {
-      // 模拟出发前准备时间
-      await new Promise(resolve => setTimeout(resolve, 2000));
+
 
       // 启动新的冒险线（只增加侦察点，不做即时结算）
       const { started } = startAdventureWithUnits(explorationUnits);
 
-      // 仅右下角 Toast 简短提示；不包含侦察点与时间，不写入事件栏
-      if (started) {
-        addNotification({
-          type: 'info',
-          title: '冒险队已出发',
-          message: ''
-        });
-      } else {
+      // 仅当未能出发时提示；成功出发时由事件源返回通知，避免重复
+      if (!started) {
         addNotification({
           type: 'warning',
           title: '未能出发',
@@ -173,7 +165,7 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     } finally {
       // 释放本地占用的探险点
       setOngoingMissions(prev => prev.filter(m => m.id !== missionId));
-      setIsExploring(false);
+
     }
   };
   
@@ -314,17 +306,19 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
           <div className="flex flex-col justify-center">
             <button
               onClick={handleExplore}
-              disabled={selectedUnits.length === 0 || isExploring || isPaused}
+              disabled={isPaused || (!!(useGameStore.getState().gameState?.exploration?.adventureV2) && !useGameStore.getState().gameState?.exploration?.adventureV2?.finished) || selectedUnits.length === 0}
               title={
                 isPaused
                   ? '暂停时无法进行探索'
-                  : selectedUnits.length === 0
-                    ? '请选择探索单位'
-                    : undefined
+                  : ((!!(useGameStore.getState().gameState?.exploration?.adventureV2) && !useGameStore.getState().gameState?.exploration?.adventureV2?.finished))
+                    ? '本次冒险进行中，待完成后才能再次派遣'
+                    : selectedUnits.length === 0
+                      ? '请选择探索单位'
+                      : undefined
               }
               className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
             >
-              {isExploring ? '探索中...' : '开始探索'}
+              {(!!(useGameStore.getState().gameState?.exploration?.adventureV2) && !useGameStore.getState().gameState?.exploration?.adventureV2?.finished) ? '探索进行中…' : '开始探索'}
             </button>
             
             {recommendedForce.recommended.length > 0 && (
@@ -465,17 +459,24 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
     researchedSet.has('scouting_tech');
 
   // 订阅运行态以触发渲染
-  const activeAdventureRun = useGameStore(state => state.gameState?.exploration?.activeAdventureRun);
-  const currentDay = useGameStore(state => state.gameState?.timeSystem?.currentDay ?? 0);
+  const run = useGameStore(state => state.gameState?.exploration?.adventureV2) || null;
+  const runActive = !!run && !run.finished;
+  const currentDay = useGameStore(state => state.gameState?.timeSystem?.currentDay ?? state.gameState?.timeSystem?.totalDays ?? 0);
 
-  // 进度条渲染
+  // 进度条渲染（按 etaDay 相对位置绘制，区分最终节点，并显示当前时间指示）
   const renderAdventureProgress = () => {
-    if (!activeAdventureRun) return null;
-    const nodes = activeAdventureRun.nodes || [];
+    if (!run) return null;
+    const nodes = (run.nodes || []) as { id: string; kind: 'minor' | 'final'; etaDay: number; resolved?: boolean }[];
     const total = nodes.length;
     const resolved = nodes.filter(n => n.resolved).length;
     const finalNode = nodes.find(n => n.kind === 'final');
     const progress = total > 0 ? (resolved / total) * 100 : 0;
+
+    // 相对时间范围
+    const startDay = Number(run.startedAtDay ?? (nodes[0]?.etaDay ?? currentDay));
+    const endDay = Number(finalNode?.etaDay ?? startDay);
+    const span = Math.max(1, endDay - startDay);
+    const toPercent = (day: number) => Math.min(100, Math.max(0, ((day - startDay) / span) * 100));
 
     return (
       <div className="bg-gray-800 p-4 rounded-lg">
@@ -492,28 +493,33 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
           />
         </div>
-        {/* 节点刻度 */}
+
+        {/* 时间轴与当前日指示 */}
         <div className="relative mt-3">
           <div className="h-0.5 bg-gray-600" />
-          <div className="absolute inset-0 flex justify-between">
-            {nodes.map((n, idx) => {
-              const reached = !!n.resolved || currentDay >= n.etaDay;
-              const isFinal = n.kind === 'final';
-              return (
-                <div key={n.id} className="relative" style={{ width: `${100 / (total - 1 || 1)}%` }}>
-                  <div
-                    className={[
-                      'mx-auto rounded-full',
-                      isFinal ? 'w-5 h-5 border-2' : 'w-3 h-3',
-                      reached ? 'bg-green-400 border-green-300' : 'bg-gray-500 border-gray-400'
-                    ].join(' ')}
-                    title={`${isFinal ? '最终' : '节点'} · 预计第${n.etaDay}天`}
-                  />
-                  <div className="text-xs text-center mt-1 text-gray-300">{isFinal ? '终' : idx + 1}</div>
-                </div>
-              );
-            })}
-          </div>
+          {/* 当前日竖线 */}
+          <div
+            className="absolute top-0 bottom-0 border-l-2 border-blue-400"
+            style={{ left: `${toPercent(currentDay)}%` }}
+            title={`当前：第${currentDay}天`}
+          />
+          {/* 节点标记：小圆为途中节点，最终为大圈 */}
+          {nodes.map((n, idx) => {
+            const x = toPercent(n.etaDay);
+            const reached = !!n.resolved || currentDay >= n.etaDay;
+            const isFinal = n.kind === 'final';
+            const baseClass = isFinal ? 'w-5 h-5 border-2' : 'w-3 h-3';
+            const colorClass = reached ? 'bg-green-400 border-green-300' : 'bg-gray-500 border-gray-400';
+            return (
+              <div key={n.id} className="absolute -translate-x-1/2" style={{ left: `${x}%` }}>
+                <div
+                  className={['rounded-full mx-auto', baseClass, colorClass].join(' ')}
+                  title={`${isFinal ? '最终' : '节点'} · 预计第${n.etaDay}天`}
+                />
+                <div className="text-xs text-center mt-1 text-gray-300">{isFinal ? '终' : idx + 1}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -530,8 +536,8 @@ export function ExplorationTab({ gameState, onUpdateGameState }: ExplorationTabP
         renderExplorationControls()
       )}
       
-      {/* 冒险进度条 */}
-      {renderAdventureProgress()}
+      {/* 冒险进度条：仅在存在运行态时显示 */}
+      {runActive && renderAdventureProgress()}
 
       {/* 已发现位置 */}
       {renderDiscoveredLocations()}

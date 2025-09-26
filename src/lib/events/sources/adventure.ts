@@ -48,6 +48,7 @@ export function createAdventureV2Source(api: {
       if (ex.adventureV2Start && !ex.adventureV2) {
         const { sp = 0 } = ex.adventureV2Start;
         const run = generateRun(nowDay, sp);
+        console.log('[AdventureV2] run initialized:', { id: run.id, totalSP: run.totalSP, nodes: run.nodes.length, startDay: run.startedAtDay });
         api.setState((st: any) => ({
           gameState: {
             ...st.gameState,
@@ -80,6 +81,8 @@ export function createAdventureV2Source(api: {
       }
 
       if (nowDay < next.etaDay) {
+        // 未到达下个节点
+        console.log('[AdventureV2] waiting for node:', { nextId: next.id, etaDay: next.etaDay, nowDay });
         return [];
       }
 
@@ -103,13 +106,23 @@ export function createAdventureV2Source(api: {
         if (!validateEvent(ev as any).ok) {
           return [];
         }
+        console.log('[AdventureV2] minor node triggered:', { id: next.id, etaDay: next.etaDay });
         return [ev];
       } else {
         // 最终判定：使用剩余 SP
         const finalEv = buildFinalEvent(run);
+        // 加“pending”锁，避免轮询期间重复推送（与途中节点一致），使用 next.id 以确保一致
+        api.setState((st: any) => {
+          const ex2 = st.gameState.exploration || {};
+          const r2 = ex2.adventureV2;
+          if (!r2) return st;
+          const nodes2 = (r2.nodes || []).map((n: any) => n.id === next.id ? { ...n, pending: true } : n);
+          return { gameState: { ...st.gameState, exploration: { ...ex2, adventureV2: { ...r2, nodes: nodes2 } } } };
+        });
         if (!validateEvent(finalEv as any).ok) {
           return [];
         }
+        console.log('[AdventureV2] final node triggered:', { id: `${run.id}_final`, sp: run.currentSP ?? run.totalSP });
         return [finalEv];
       }
     }
@@ -117,7 +130,7 @@ export function createAdventureV2Source(api: {
 }
 
 function generateRun(nowDay: number, sp: number): AdventureRunV2 {
-  const rng = getEventEngineV2().random;
+  const rng = () => getEventEngineV2().random();
   const id = `run_${nowDay}_${Math.floor(rng() * 1e6)}`;
   const seed = Math.floor(getEventEngineV2().random() * 1e9);
   const totalSP = Math.max(0, Number(sp) || 0);

@@ -1218,6 +1218,12 @@ export const useGameStore = create<GameStore>()(persist(
       if (daysPassed > 0) {
         get().checkCorruptionEvents();
         get().checkRandomEvents();
+        // 驱动 V2 事件源（如冒险节点线），安全调用
+        try {
+          if (typeof window !== 'undefined') {
+            (window as any).eventsV2?.poll?.();
+          }
+        } catch {}
       }
       
       // 更新研究进度
@@ -1264,6 +1270,9 @@ export const useGameStore = create<GameStore>()(persist(
             ...state.gameState,
             timeSystem: {
               ...state.gameState.timeSystem,
+              // 新增：为事件V2与冒险源提供绝对天数索引
+              totalDays,
+              currentDay: totalDays,
               currentDate: { year, month, day }
             }
           }
@@ -2418,6 +2427,18 @@ export const useGameStore = create<GameStore>()(persist(
           if ((type === 'resource' || type === 'resource_change') && e.payload?.resources) {
             Object.entries(e.payload.resources as Record<string, number>).forEach(([k, v]) => {
               out.push({ type: 'resource_change', target: String(k), value: Number(v) || 0 });
+            });
+            return;
+          }
+          // 新增：支持 payload 直接携带资源键（如 { food:10 }、{ gold:80 }），统一转为 resource_change
+          if (type === 'resource' && e.payload && typeof e.payload === 'object') {
+            Object.entries(e.payload as Record<string, any>).forEach(([k, v]) => {
+              // 跳过明显的非资源字段
+              if (['durationDays', 'delta', 'modifier', 'rate', 'moneyPerMonth'].includes(k)) return;
+              // 仅处理数值型键
+              if (typeof v === 'number' && !isNaN(v)) {
+                out.push({ type: 'resource_change', target: String(k), value: Number(v) || 0 });
+              }
             });
             return;
           }
@@ -5001,12 +5022,7 @@ export const useGameStore = create<GameStore>()(persist(
             }
           }
         }));
-        // 提示：仅通知，不写入“暂停事件”，由节点线自己触发暂停弹窗
-        get().addNotification({
-          type: 'info',
-          title: '冒险队已出发',
-          message: '冒险队已出发'
-        });
+        // 移除：避免与事件源的“冒险队已出发”通知重复
         // 触发 V2 冒险事件源：写入一次性启动标记与 SP
         set((state) => ({
           gameState: {
